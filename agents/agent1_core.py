@@ -4,6 +4,7 @@ from agents.agent1_stock import analyze as analyze_stock
 from agents.agent1_sector import analyze as analyze_sector
 from agents.agent1_market import analyze as analyze_market
 from agents.agent1_commodities import analyze as analyze_commodities
+from agents.agent1_globals import analyze as analyze_globals
 
 # Predefined mapping: stock → sector, index, commodities, global indices
 LAYER_MAP = {
