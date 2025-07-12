@@ -1,7 +1,7 @@
 # agents/agent1_core.py
 
 from agents.agent1_stock import analyze as analyze_stock
-# Future: from agents.agent1_sector import analyze as analyze_sector
+from agents.agent1_sector import analyze as analyze_sector
 # Future: from agents.agent1_market import analyze as analyze_market
 # Future: from agents.agent1_commodities import analyze as analyze_commodities
 
