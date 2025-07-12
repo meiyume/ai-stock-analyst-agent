@@ -1,1 +1,8 @@
-pip install streamlit yfinance pandas numpy plotly
+streamlit
+yfinance
+pandas
+numpy
+plotly
+openai>=1.0.0,<2.0.0
+requests
+serpapi
