@@ -93,5 +93,5 @@ if st.button("🔍 Run Technical Analysis"):
     st.info(results["globals"]["summary"])
 
     # === Final Outlook ===
-    st.markdown("### 📌 Final Technical Outlook Summary")
+    st.markdown(results["final_summary"])
     st.success(results["final_summary"])
