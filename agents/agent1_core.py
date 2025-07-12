@@ -6,34 +6,31 @@ from agents.agent1_market import analyze as analyze_market
 from agents.agent1_commodities import analyze as analyze_commodities
 from agents.agent1_globals import analyze as analyze_globals
 
-# Predefined mapping: stock → sector, index, commodities, global indices
-LAYER_MAP = {
-    "U11.SI": {
-        "sector_peers": ["C6L.SI"],  # SIA Engineering
-        "market_index": "^STI",
-        "commodities": ["BZ=F"],     # Brent Crude
-        "globals": ["^DJI", "^N225", "^HSI"]
-    },
-    # Add more mappings as needed
-}
-
 def run_full_technical_analysis(ticker: str, horizon: str = "7 Days"):
     results = {}
-    
-    # === 1.0 Stock Layer ===
+
+    # === Sub-agent results ===
     stock_summary, stock_df = analyze_stock(ticker, horizon)
     results["stock"] = stock_summary
+    results["sector"] = analyze_sector(ticker, horizon)
+    results["market"] = analyze_market(ticker, horizon)
+    results["commodities"] = analyze_commodities(ticker, horizon)
+    results["globals"] = analyze_globals(ticker, horizon)
 
-    # === Placeholder for future layers ===
-    results["sector"] = {"summary": "Sector analysis not yet implemented."}
-    results["market"] = {"summary": "Market index analysis not yet implemented."}
-    results["commodities"] = {"summary": "Commodity analysis not yet implemented."}
-    results["globals"] = {"summary": "Global indices analysis not yet implemented."}
+    # === Strategic Final Summary ===
+    signals = [
+        ("📈 Stock", stock_summary["sma_trend"]),
+        ("🏭 Sector", results["sector"].get("summary", "")),
+        ("📊 Market", results["market"].get("summary", "")),
+        ("🛢️ Commodities", results["commodities"].get("summary", "")),
+        ("🌍 Global", results["globals"].get("summary", ""))
+    ]
 
-    # === Combined Summary ===
-    results["final_summary"] = (
-        f"Primary stock analysis:\n{stock_summary['summary']}\n\n"
-        "Other layers (sector, market, global) will be integrated in future updates."
-    )
+    combined_summary = f"### 🔎 Final Technical Outlook for {ticker} ({horizon}):\n\n"
+    combined_summary += f"- {stock_summary['summary']}\n"
+    for label, val in signals[1:]:
+        combined_summary += f"- {label}: {val}\n"
 
+    results["final_summary"] = combined_summary
     return results, stock_df
+
