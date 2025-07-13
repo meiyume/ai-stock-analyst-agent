@@ -240,6 +240,45 @@ Volume shows how actively a stock is being traded. Sudden spikes may indicate in
             st.markdown("#### 📊 Composite Risk Evaluation")
             st.markdown(f"**Composite Risk Score**: `{risk_score}`")
             st.markdown(f"**Overall Risk Level**: 🎯 **{risk_level}**")
+        st.markdown("""
+        ### 🧮 How to Interpret the Composite Risk Score
+
+        The **Composite Risk Score** is a weighted calculation of technical indicators, normalized to a range between **0.00 (low risk)** and **1.00 (high risk)**.
+
+        It reflects how many red flags are being raised and how serious those signals are based on:
+
+        - **Strength and direction of trends** (e.g., MACD, ADX)
+        - **Volatility and anomalies** (e.g., RSI spikes, ATR)
+        - **Volume behavior and market sentiment** (e.g., volume spikes, patterns)
+
+        | Score Range | What It Means         |
+        |-------------|------------------------|
+        | **0.00 – 0.33** | ✅ **Low Risk**: Signals are stable or bullish |
+        | **0.34 – 0.66** | ⚠️ **Caution**: Mixed signals; watch carefully |
+        | **0.67 – 1.00** | 🔥 **High Risk**: Multiple red flags detected |
+
+        ### 🎯 What Does the Overall Risk Level Mean?
+
+        This is a **simplified risk tag** derived from the composite score, designed to:
+
+        - Help retail users **make fast decisions**
+        - Allow investors to assess **signal intensity at a glance**
+        - Enable Agent 2 to prioritize predictive efforts on high-alert stocks
+
+        > For example, a stock with `MACD Bearish`, `Overbought RSI`, and a `Volume Spike` might result in a score of `0.72` — tagged as **High Risk**.
+
+        ### ✅ Why It Matters
+
+        This system provides a **quantitative, explainable**, and **repeatable** way to evaluate stock risk. We're not just showing charts — we're **translating technical complexity into clear, actionable insight.**
+
+        ### 🚀 Expandability Built In
+
+        We’ve designed this dashboard to evolve — soon we’ll include:
+        - 📈 SMA trend momentum
+        - 🔄 OBV divergences
+        - 🧠 LLM-enhanced pattern confidence
+        """, unsafe_allow_html=True)
+
 
         st.markdown("✳️ *Additional indicators such as SMA Trend, OBV, and CMF will be integrated soon for a more comprehensive view.*")
         # === Summary Layers ===
