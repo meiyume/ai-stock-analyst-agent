@@ -57,6 +57,7 @@ if df is None or results is None:
     st.stop()
 
 stock_summary = results.get("stock", {}) if "stock" in results else results
+stock_summary["horizon"] = selected_horizon
 
 # --- Anomaly event aggregation ---
 anomaly_events = stock_summary.get("anomaly_events", [])
