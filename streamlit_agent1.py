@@ -1,3 +1,4 @@
+
 # streamlit_agent1.py
 
 import streamlit as st
@@ -47,18 +48,16 @@ if st.button("🔍 Run Technical Analysis"):
         # === Candlestick + SMA + Bollinger Bands ===
         st.subheader("🕯️ Candlestick Chart with SMA & Bollinger Bands")
         st.markdown("""
-Shows price movement (candles), trends (SMA), and volatility (Bollinger Bands).
+This chart combines three key tools for technical traders:
 
-- **Candlestick chart**: Each candle represents a day of trading. A green candle means the stock closed higher than it opened (bullish), while a red candle means it closed lower (bearish). 
-- **SMA (Simple Moving Average)**: SMA5 and SMA10 show short-term trend directions. Traders watch for crossovers (e.g., when SMA5 rises above SMA10) as trend signals.
-- **Bollinger Bands**: These lines represent 2 standard deviations from the SMA10. If price hits or exceeds the upper band, it may suggest the stock is overbought. If it touches or dips below the lower band, it might be oversold.
-        """)
+- **Candlestick Chart**: Visualizes daily price action. A green candle means the stock closed higher than it opened (bullish), while a red candle means it closed lower (bearish). Candlesticks help traders identify reversal patterns, momentum shifts, and support/resistance zones.
+- **SMA (Simple Moving Average)**: SMA5 and SMA10 show short-term trends. When SMA5 crosses **above** SMA10, it may suggest bullish momentum. A cross **below** may signal weakening momentum.
+- **Bollinger Bands**: These expand and contract with price volatility. If the price rises above the upper band, it might signal overbought conditions. If it dips below the lower band, it may be oversold. Bands tightening often precede major price movements.
+""")
 
         fig = go.Figure()
-        fig.add_trace(go.Candlestick(
-            x=df["Date"], open=df["Open"], high=df["High"],
-            low=df["Low"], close=df["Close"], name="Candles"
-        ))
+        fig.add_trace(go.Candlestick(x=df["Date"], open=df["Open"], high=df["High"],
+                                     low=df["Low"], close=df["Close"], name="Candles"))
         fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA5"], mode="lines", name="SMA5"))
         fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA10"], mode="lines", name="SMA10"))
         fig.add_trace(go.Scatter(x=df["Date"], y=df["Upper"], mode="lines", name="Upper BB", line=dict(dash='dot')))
@@ -66,85 +65,86 @@ Shows price movement (candles), trends (SMA), and volatility (Bollinger Bands).
         fig.update_layout(height=500, xaxis_rangeslider_visible=False)
         st.plotly_chart(fig, use_container_width=True)
 
-        # === RSI ===
         if "RSI" in df.columns:
             st.subheader("📉 RSI (Relative Strength Index)")
             st.markdown("""
-RSI measures the speed and magnitude of recent price changes on a 0–100 scale.
+RSI tracks momentum by comparing recent gains to losses.
 
-- If RSI > 70: The stock may be **overbought**, potentially due for a pullback.
-- If RSI < 30: The stock may be **oversold**, potentially due for a rebound.
-            """)
-            rsi_fig = go.Figure()
-            rsi_fig.add_trace(go.Scatter(x=df["Date"], y=df["RSI"], name="RSI"))
-            rsi_fig.update_layout(yaxis_range=[0, 100], height=250)
-            st.plotly_chart(rsi_fig, use_container_width=True)
+- RSI > 70: Stock may be overbought — potential cooling or pullback.
+- RSI < 30: Stock may be oversold — potential bounce or reversal.
+""")
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=df["Date"], y=df["RSI"], name="RSI"))
+            fig.update_layout(yaxis_range=[0, 100], height=250)
+            st.plotly_chart(fig, use_container_width=True)
 
-        # === MACD ===
         if "MACD" in df.columns and "Signal" in df.columns:
             st.subheader("📈 MACD (Moving Average Convergence Divergence)")
             st.markdown("""
-MACD helps identify trend strength and direction.
+MACD shows trend strength and direction by comparing short- and long-term EMAs.
 
-- **MACD Line vs Signal Line**: When the MACD crosses **above** the Signal line, it’s a **bullish signal**. When it crosses **below**, it’s **bearish**.
-            """)
-            macd_fig = go.Figure()
-            macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["MACD"], name="MACD"))
-            macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["Signal"], name="Signal"))
-            st.plotly_chart(macd_fig, use_container_width=True)
+- A **bullish crossover** (MACD crosses above Signal) suggests upward momentum.
+- A **bearish crossover** (MACD below Signal) suggests downward momentum.
+- Widely used to catch trend reversals early.
+""")
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=df["Date"], y=df["MACD"], name="MACD"))
+            fig.add_trace(go.Scatter(x=df["Date"], y=df["Signal"], name="Signal"))
+            st.plotly_chart(fig, use_container_width=True)
 
-        # === Stochastic Oscillator ===
         if "Stochastic_%K" in df.columns:
             st.subheader("⚡ Stochastic Oscillator")
             st.markdown("""
-The Stochastic Oscillator compares a stock’s closing price to its price range over a certain period.
+Compares a stock’s close to its recent trading range.
 
-- **%K Line and %D Line**: When %K crosses above %D and both are below 20, it may signal a **bullish reversal**. If they’re above 80 and %K drops below %D, it could indicate **bearish** pressure.
-            """)
-            stoch_fig = go.Figure()
-            stoch_fig.add_trace(go.Scatter(x=df["Date"], y=df["Stochastic_%K"], name="Stoch %K"))
-            stoch_fig.add_trace(go.Scatter(x=df["Date"], y=df["Stochastic_%D"], name="Stoch %D"))
-            st.plotly_chart(stoch_fig, use_container_width=True)
+- %K above 80: Overbought territory.
+- %K below 20: Oversold territory.
+- Bullish signal when %K crosses above %D in oversold zone. Bearish when it crosses below %D in overbought zone.
+""")
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=df["Date"], y=df["Stochastic_%K"], name="%K"))
+            fig.add_trace(go.Scatter(x=df["Date"], y=df["Stochastic_%D"], name="%D"))
+            st.plotly_chart(fig, use_container_width=True)
 
-        # === CMF ===
         if "CMF" in df.columns:
             st.subheader("💰 Chaikin Money Flow (CMF)")
             st.markdown("""
-CMF measures money flow volume over time to assess buying/selling pressure.
+CMF tracks buying/selling pressure using both price and volume.
 
-- A **positive CMF** suggests accumulation (buying).
-- A **negative CMF** indicates distribution (selling).
-            """)
-            cmf_fig = go.Figure()
-            cmf_fig.add_trace(go.Scatter(x=df["Date"], y=df["CMF"], name="CMF"))
-            st.plotly_chart(cmf_fig, use_container_width=True)
+- Positive CMF: Buying (accumulation) pressure.
+- Negative CMF: Selling (distribution) pressure.
+- Helps detect hidden accumulation/distribution before price reacts.
+""")
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=df["Date"], y=df["CMF"], name="CMF"))
+            st.plotly_chart(fig, use_container_width=True)
 
-        # === OBV ===
         if "OBV" in df.columns:
             st.subheader("🔄 On-Balance Volume (OBV)")
             st.markdown("""
-OBV adds or subtracts volume based on whether the price closes higher or lower.
+OBV adds/subtracts daily volume based on price direction.
 
-- **Rising OBV with rising price** confirms a **bullish trend**.
-- **Falling OBV while price rises** may indicate **bearish divergence** (weak rally).
-            """)
-            obv_fig = go.Figure()
-            obv_fig.add_trace(go.Scatter(x=df["Date"], y=df["OBV"], name="OBV"))
-            st.plotly_chart(obv_fig, use_container_width=True)
+- Rising OBV + Rising Price: Confirmed uptrend.
+- Falling OBV while price rises: Bearish divergence (rally losing strength).
+- OBV can precede price movement — helpful for early signals.
+""")
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=df["Date"], y=df["OBV"], name="OBV"))
+            st.plotly_chart(fig, use_container_width=True)
 
-        # === Volume ===
         if "Volume" in df.columns:
             st.subheader("📊 Volume")
             st.markdown("""
-Volume shows how actively a stock is being traded. Sudden spikes may indicate institutional activity or major news.
-            """)
-            vol_fig = go.Figure()
-            vol_fig.add_trace(go.Bar(x=df["Date"], y=df["Volume"], name="Volume"))
-            st.plotly_chart(vol_fig, use_container_width=True)
+Volume shows trading activity. Spikes often indicate strong interest (news, breakouts).
+
+- Unusual volume can confirm breakout moves or suggest reversal setups.
+""")
+            fig = go.Figure()
+            fig.add_trace(go.Bar(x=df["Date"], y=df["Volume"], name="Volume"))
+            st.plotly_chart(fig, use_container_width=True)
 
         # === Summary Layers ===
         st.subheader("🧠 Technical Summary (Agent 1)")
-
         st.markdown("**📌 Stock-Level Analysis (Agent 1.0):**")
         st.json(results.get("stock", {}))
 
@@ -162,13 +162,13 @@ Volume shows how actively a stock is being traded. Sudden spikes may indicate in
 
         # === Final Outlook ===
         st.markdown("### ✅ Final Technical Outlook")
-        
+
         stock = results.get("stock", {}).get("summary", "")
         sector = results.get("sector", {}).get("summary", "")
         market = results.get("market", {}).get("summary", "")
         commodities = results.get("commodities", {}).get("summary", "")
         globals_ = results.get("globals", {}).get("summary", "")
-        
+
         final_text = (
             f"📌 **Stock:** {stock}  \n"
             f"📊 **Sector:** {sector}  \n"
@@ -176,6 +176,5 @@ Volume shows how actively a stock is being traded. Sudden spikes may indicate in
             f"🛢️ **Commodities:** {commodities}  \n"
             f"🌍 **Global Indices:** {globals_}"
         )
-        
-        st.success(final_text)
 
+        st.success(final_text)
