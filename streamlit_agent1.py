@@ -325,6 +325,28 @@ stock_text = (
 )
 st.markdown(stock_text)
 
+st.subheader("🧠 Technical Summary (Multi-Layer)")
+
+st.markdown("**📌 Stock-Level Technicals:**")
+st.table(pd.DataFrame(stock_metrics, index=["Signal"]))
+
+st.markdown("**📌 Sector Analysis:**")
+sector_summary = results.get("sector", None)
+if sector_summary:
+    st.markdown(sector_summary.get("summary", "No sector insights available."))
+
+st.markdown("**📌 Market Index Analysis:**")
+market_summary = results.get("market", None)
+if market_summary:
+    st.markdown(market_summary.get("summary", "No market index insights available."))
+
+st.markdown("**📌 Commodities & Global Macro:**")
+if commodities_summary:
+    st.markdown(commodities_summary.get("summary", "No commodities insights available."))
+if globals_summary:
+    st.markdown(globals_summary.get("summary", "No global macro insights available."))
+
+
 # === LLM Commentary ===
 api_key = st.secrets["OPENAI_API_KEY"]
 with st.spinner("Agent 1 is generating LLM commentary..."):
