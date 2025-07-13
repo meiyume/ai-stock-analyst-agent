@@ -375,8 +375,10 @@ Based on the following technical signals and anomalies, do the following:
 - First, write a detailed summary for technical readers (using precise, professional terminology and concise reasoning). For each indicator, explain not just the signal, but also why it matters right now. Connect supporting indicators together (e.g., “Rising OBV + bullish MACD reinforces uptrend…”). Summarize the overall risk or opportunity, and recommend what a technical analyst should watch for in the next few sessions. Include actionable insight or a forward-looking caution. Use a confident, objective tone.
 - Then, write a second summary for non-technical readers. Imagine you are explaining it to a grandparent with no finance background:
     - Avoid technical terms and acronyms unless you give a short, simple explanation.
-    - Use analogies and plain language, e.g., “The market looks strong, but maybe too much excitement—like a car going a bit too fast.”
-    - Focus on what a regular person should feel or do: “It’s a good time to be careful,” or “Things look steady for now.”
+    - Use analogies and plain language.
+    - Give gentle, practical advice for someone considering buying or selling for the chosen outlook horizon ({signals.get('horizon', 'the next few days')}). 
+    - Clearly mention if things look good for buying, if caution is advised, or if it might be wise to hold off, and explain why in simple terms.
+    - Focus on helping the reader make a simple decision for the chosen time frame, and always explain the risk in plain language.
     - Make it warm, clear, and friendly.
     - Absolutely no jargon!
 
@@ -393,6 +395,7 @@ ATR: {signals.get('atr_signal')}
 Volume Spike: {signals.get('vol_spike')}
 Candlestick Patterns: {signals.get('patterns')}
 Key Anomalies: {signals.get('anomaly_events')}
+Outlook Horizon: {signals.get('horizon', 'the next few days')}
 
 Write two clearly separated sections, each starting with a clear title:
 - For Technical Readers
