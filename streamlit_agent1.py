@@ -100,8 +100,12 @@ with st.expander("📉 RSI / Relative Strength Index", expanded=False):
         > Oversold (&lt;30): Potential rebound.
         """, unsafe_allow_html=True)
         rsi_fig = go.Figure()
-        rsi_fig.add_trace(go.Scatter(x=df["Date"], y=df["RSI"], name="RSI"))
-        rsi_fig.update_layout(yaxis_range=[0, 100], height=180)
+        rsi_fig.add_trace(go.Scatter(
+            x=df["Date"], y=df["RSI"],
+            name="RSI", line=dict(width=3, color="purple")
+        ))
+        rsi_fig.update_yaxes(range=[0, 100])
+        rsi_fig.update_layout(height=220, margin=dict(t=16, b=8))
         st.plotly_chart(rsi_fig, use_container_width=True)
 
 with st.expander("📈 MACD (Moving Average Convergence Divergence)", expanded=False):
@@ -112,8 +116,9 @@ with st.expander("📈 MACD (Moving Average Convergence Divergence)", expanded=F
         - <b>MACD &lt; Signal</b>: Bearish signal
         """, unsafe_allow_html=True)
         macd_fig = go.Figure()
-        macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["MACD"], name="MACD"))
-        macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["Signal"], name="Signal"))
+        macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["MACD"], name="MACD", line=dict(width=3)))
+        macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["Signal"], name="Signal", line=dict(width=2, dash="dash")))
+        macd_fig.update_layout(height=220, margin=dict(t=16, b=8))
         st.plotly_chart(macd_fig, use_container_width=True)
 
 with st.expander("⚡ Stochastic Oscillator", expanded=False):
@@ -124,8 +129,10 @@ with st.expander("⚡ Stochastic Oscillator", expanded=False):
         - <b>%K &lt; 20</b>: Oversold
         """, unsafe_allow_html=True)
         stoch_fig = go.Figure()
-        stoch_fig.add_trace(go.Scatter(x=df["Date"], y=df["Stochastic_%K"], name="Stoch %K"))
-        stoch_fig.add_trace(go.Scatter(x=df["Date"], y=df["Stochastic_%D"], name="Stoch %D"))
+        stoch_fig.add_trace(go.Scatter(x=df["Date"], y=df["Stochastic_%K"], name="Stoch %K", line=dict(width=3, color="blue")))
+        stoch_fig.add_trace(go.Scatter(x=df["Date"], y=df["Stochastic_%D"], name="Stoch %D", line=dict(width=2, color="green", dash="dash")))
+        stoch_fig.update_yaxes(range=[0, 100])
+        stoch_fig.update_layout(height=220, margin=dict(t=16, b=8))
         st.plotly_chart(stoch_fig, use_container_width=True)
 
 with st.expander("💰 CMF (Chaikin Money Flow)", expanded=False):
@@ -136,7 +143,8 @@ with st.expander("💰 CMF (Chaikin Money Flow)", expanded=False):
         - <b>Negative:</b> Selling pressure
         """, unsafe_allow_html=True)
         cmf_fig = go.Figure()
-        cmf_fig.add_trace(go.Scatter(x=df["Date"], y=df["CMF"], name="CMF"))
+        cmf_fig.add_trace(go.Scatter(x=df["Date"], y=df["CMF"], name="CMF", line=dict(width=3, color="#7b5800")))
+        cmf_fig.update_layout(height=180, margin=dict(t=16, b=8))
         st.plotly_chart(cmf_fig, use_container_width=True)
 
 with st.expander("🔄 OBV (On-Balance Volume)", expanded=False):
@@ -147,7 +155,8 @@ with st.expander("🔄 OBV (On-Balance Volume)", expanded=False):
         - <b>Falling OBV while price rises:</b> Bearish divergence
         """, unsafe_allow_html=True)
         obv_fig = go.Figure()
-        obv_fig.add_trace(go.Scatter(x=df["Date"], y=df["OBV"], name="OBV"))
+        obv_fig.add_trace(go.Scatter(x=df["Date"], y=df["OBV"], name="OBV", line=dict(width=3, color="#3c6e71")))
+        obv_fig.update_layout(height=180, margin=dict(t=16, b=8))
         st.plotly_chart(obv_fig, use_container_width=True)
 
 with st.expander("📊 ADX (Average Directional Index)", expanded=False):
@@ -158,8 +167,9 @@ with st.expander("📊 ADX (Average Directional Index)", expanded=False):
         - <b>ADX &lt; 20</b>: Weak/no trend
         """, unsafe_allow_html=True)
         adx_fig = go.Figure()
-        adx_fig.add_trace(go.Scatter(x=df["Date"], y=df["ADX"], name="ADX"))
-        adx_fig.update_layout(yaxis_range=[0, 100], height=180)
+        adx_fig.add_trace(go.Scatter(x=df["Date"], y=df["ADX"], name="ADX", line=dict(width=3, color='orange')))
+        adx_fig.update_yaxes(range=[0, 100])
+        adx_fig.update_layout(height=220, margin=dict(t=16, b=8))
         st.plotly_chart(adx_fig, use_container_width=True)
 
 with st.expander("📉 ATR (Average True Range)", expanded=False):
@@ -170,15 +180,18 @@ with st.expander("📉 ATR (Average True Range)", expanded=False):
         - <b>Low ATR:</b> Stable price
         """, unsafe_allow_html=True)
         atr_fig = go.Figure()
-        atr_fig.add_trace(go.Scatter(x=df["Date"], y=df["ATR"], name="ATR"))
+        atr_fig.add_trace(go.Scatter(x=df["Date"], y=df["ATR"], name="ATR", line=dict(width=3, color="#a31621")))
+        atr_fig.update_layout(height=180, margin=dict(t=16, b=8))
         st.plotly_chart(atr_fig, use_container_width=True)
 
 with st.expander("📊 Volume", expanded=False):
     if "Volume" in df.columns:
         st.markdown("Volume shows activity. Spikes may mean institutional moves or news.")
         vol_fig = go.Figure()
-        vol_fig.add_trace(go.Bar(x=df["Date"], y=df["Volume"], name="Volume"))
+        vol_fig.add_trace(go.Bar(x=df["Date"], y=df["Volume"], name="Volume", marker_color="#3d5a80"))
+        vol_fig.update_layout(height=180, margin=dict(t=16, b=8))
         st.plotly_chart(vol_fig, use_container_width=True)
+
 
 # === Risk Dashboard ===
 st.markdown("""
