@@ -71,7 +71,7 @@ def compute_atr(df, period=14):
 
 def analyze(ticker: str, horizon: str = "7 Days"):
     stock = yf.Ticker(ticker)
-    df = stock.history(period="30d", interval="1d")
+    df = stock.history(period="90d", interval="1d")  # Increased range for long indicators
 
     if df.empty:
         return {
@@ -106,8 +106,19 @@ def analyze(ticker: str, horizon: str = "7 Days"):
     df = compute_adx(df)
     df = compute_atr(df)
 
-    df = df.dropna()
-    latest = df.iloc[-1]
+    # Keep full data for plotting
+    df_for_plotting = df.copy()
+
+    # Filter out only rows that are fully valid for signal generation
+    df_signals = df.dropna(subset=[
+        "SMA5", "SMA10", "MACD", "Signal", "Upper", "Lower",
+        "RSI", "Stochastic_%K", "Stochastic_%D",
+        "CMF", "OBV", "ADX", "ATR"
+    ])
+    if df_signals.empty:
+        return {"summary": "⚠️ Not enough data to generate signals."}, df_for_plotting
+
+    latest = df_signals.iloc[-1]
 
     # === Signals ===
     sma_trend = "Bullish" if latest["SMA5"] > latest["SMA10"] else "Bearish"
@@ -156,4 +167,4 @@ def analyze(ticker: str, horizon: str = "7 Days"):
         "vol_spike": vol_spike
     }
 
-    return summary, df
+    return summary, df_for_plotting
