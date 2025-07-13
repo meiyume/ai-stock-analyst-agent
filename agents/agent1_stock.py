@@ -4,105 +4,69 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 
-# === Core Indicator Functions ===
-
-def calculate_sma(df, window):
-    return df["Close"].rolling(window=window).mean()
-
-def calculate_ema(df, span):
-    return df["Close"].ewm(span=span, adjust=False).mean()
-
-def calculate_macd(df):
-    ema12 = calculate_ema(df, 12)
-    ema26 = calculate_ema(df, 26)
-    macd = ema12 - ema26
-    signal = macd.ewm(span=9, adjust=False).mean()
-    return macd, signal
-
-def calculate_rsi(df, period=14):
-    delta = df["Close"].diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-    avg_gain = gain.rolling(window=period).mean()
-    avg_loss = loss.rolling(window=period).mean()
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
-
-def calculate_bollinger_bands(df, window=20, num_std=2):
-    sma = calculate_sma(df, window)
-    std = df["Close"].rolling(window).std()
-    upper = sma + (std * num_std)
-    lower = sma - (std * num_std)
-    return upper, lower
-
-def calculate_volume_surge(df, window=10):
-    avg_volume = df["Volume"].rolling(window=window).mean()
-    surge = df["Volume"] / avg_volume
-    return surge
-
-# === Summary Interpreter Functions ===
-
-def interpret_rsi(rsi):
-    if rsi < 30:
-        return "Oversold"
-    elif rsi > 70:
-        return "Overbought"
-    else:
-        return "Neutral"
-
-def interpret_macd(macd, signal):
-    if macd > signal:
-        return "Bullish crossover"
-    elif macd < signal:
-        return "Bearish crossover"
-    else:
-        return "Neutral"
-
-def interpret_bollinger(price, lower, upper):
-    if price >= upper:
-        return "Overbought (touching upper band)"
-    elif price <= lower:
-        return "Oversold (touching lower band)"
-    else:
-        return "Within bands"
-
-# === Agent 1.0 Main Function ===
-
 def analyze(ticker: str, horizon: str = "7 Days"):
-    df = yf.Ticker(ticker).history(period="60d", interval="1d").reset_index()
+    stock = yf.Ticker(ticker)
+    df = stock.history(period="30d", interval="1d")
 
-    df["SMA_5"] = calculate_sma(df, 5)
-    df["SMA_10"] = calculate_sma(df, 10)
-    df["SMA_20"] = calculate_sma(df, 20)
-    df["EMA_12"] = calculate_ema(df, 12)
-    df["EMA_26"] = calculate_ema(df, 26)
-    df["MACD"], df["MACD_Signal"] = calculate_macd(df)
-    df["RSI"] = calculate_rsi(df)
-    df["BB_Upper"], df["BB_Lower"] = calculate_bollinger_bands(df)
-    df["Volume_Surge"] = calculate_volume_surge(df)
+    # ✅ Handle edge case: no data returned
+    if df.empty:
+        return {
+            "summary": f"⚠️ No data available for {ticker}.",
+            "sma_trend": "N/A",
+            "macd_signal": "N/A",
+            "bollinger_signal": "N/A",
+            "rsi_signal": "N/A",
+            "vol_spike": False
+        }, df
+
+    df["SMA5"] = df["Close"].rolling(window=5).mean()
+    df["SMA10"] = df["Close"].rolling(window=10).mean()
+    df["EMA12"] = df["Close"].ewm(span=12, adjust=False).mean()
+    df["EMA26"] = df["Close"].ewm(span=26, adjust=False).mean()
+    df["MACD"] = df["EMA12"] - df["EMA26"]
+    df["Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
+    df["20dSTD"] = df["Close"].rolling(window=20).std()
+    df["Upper"] = df["SMA10"] + (df["20dSTD"] * 2)
+    df["Lower"] = df["SMA10"] - (df["20dSTD"] * 2)
+    df["RSI"] = compute_rsi(df["Close"], 14)
 
     latest = df.iloc[-1]
 
+    sma_trend = "Bullish" if latest["SMA5"] > latest["SMA10"] else "Bearish"
+    macd_signal = "Bullish" if latest["MACD"] > latest["Signal"] else "Bearish"
+    bollinger_signal = (
+        "Above upper band" if latest["Close"] > latest["Upper"]
+        else "Below lower band" if latest["Close"] < latest["Lower"]
+        else "Within band"
+    )
+    rsi_signal = (
+        "Overbought" if latest["RSI"] > 70
+        else "Oversold" if latest["RSI"] < 30
+        else "Neutral"
+    )
+    avg_vol = df["Volume"].rolling(window=5).mean().iloc[-1]
+    vol_spike = latest["Volume"] > 1.5 * avg_vol
+
     summary = {
-        "agent": "1.0",
-        "ticker": ticker,
-        "horizon": horizon,
-        "sma_trend": "Bullish" if latest["SMA_5"] > latest["SMA_10"] else "Bearish",
-        "rsi": interpret_rsi(latest["RSI"]),
-        "macd": interpret_macd(latest["MACD"], latest["MACD_Signal"]),
-        "bollinger": interpret_bollinger(latest["Close"], latest["BB_Lower"], latest["BB_Upper"]),
-        "volume": "Surge" if latest["Volume_Surge"] > 1.5 else "Normal",
-        "summary": ""
+        "summary": f"{sma_trend} SMA, {macd_signal} MACD, {rsi_signal} RSI, {bollinger_signal}",
+        "sma_trend": sma_trend,
+        "macd_signal": macd_signal,
+        "bollinger_signal": bollinger_signal,
+        "rsi_signal": rsi_signal,
+        "vol_spike": vol_spike
     }
 
-    summary["summary"] = (
-        f"For a {horizon.lower()} outlook on {ticker}: "
-        f"SMA shows a {summary['sma_trend']} trend. "
-        f"RSI is {summary['rsi'].lower()}. "
-        f"MACD shows {summary['macd'].lower()}. "
-        f"Bollinger Bands suggest price is {summary['bollinger'].lower()}. "
-        f"Volume is {summary['volume'].lower()}."
-    )
-
     return summary, df
+
+
+def compute_rsi(series, period=14):
+    delta = series.diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+
+    avg_gain = gain.rolling(window=period).mean()
+    avg_loss = loss.rolling(window=period).mean()
+
+    rs = avg_gain / (avg_loss + 1e-10)
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
