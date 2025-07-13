@@ -1,5 +1,3 @@
-# agents/agent1_globals.py
-
 from agents.agent1_stock import analyze as analyze_stock
 
 def analyze(global_index_tickers: list, horizon: str = "7 Days"):
@@ -29,12 +27,11 @@ def analyze(global_index_tickers: list, horizon: str = "7 Days"):
                 "error": str(e)
             })
 
-    if bullish > bearish:
-        trend = "Positive global macro outlook"
-    elif bearish > bullish:
-        trend = "Negative global macro outlook"
-    else:
-        trend = "Neutral global macro outlook"
+    trend = (
+        "Positive global macro outlook" if bullish > bearish else
+        "Negative global macro outlook" if bearish > bullish else
+        "Neutral global macro outlook"
+    )
 
     return {
         "agent": "1.4",

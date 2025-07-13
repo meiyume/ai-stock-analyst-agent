@@ -1,5 +1,3 @@
-# agents/agent1_commodities.py
-
 from agents.agent1_stock import analyze as analyze_stock
 
 def analyze(commodity_tickers: list, horizon: str = "7 Days"):
@@ -16,7 +14,7 @@ def analyze(commodity_tickers: list, horizon: str = "7 Days"):
         try:
             summary, _ = analyze_stock(com, horizon)
             if summary["sma_trend"] == "N/A":
-                continue  # Skip invalid or no-data tickers
+                continue
             summaries.append(summary)
 
             if summary["sma_trend"].lower() == "bullish":
@@ -29,12 +27,11 @@ def analyze(commodity_tickers: list, horizon: str = "7 Days"):
                 "error": str(e)
             })
 
-    if rising > falling:
-        effect = "Negative impact (rising commodity prices)"
-    elif falling > rising:
-        effect = "Positive impact (falling commodity prices)"
-    else:
-        effect = "Neutral impact"
+    effect = (
+        "Negative impact (rising commodity prices)" if rising > falling else
+        "Positive impact (falling commodity prices)" if falling > rising else
+        "Neutral impact"
+    )
 
     return {
         "agent": "1.3",

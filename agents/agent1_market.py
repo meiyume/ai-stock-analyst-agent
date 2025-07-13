@@ -1,5 +1,3 @@
-# agents/agent1_market.py
-
 from agents.agent1_stock import analyze as analyze_stock
 
 def analyze(index_ticker: str, horizon: str = "7 Days"):
@@ -24,4 +22,6 @@ def analyze(index_ticker: str, horizon: str = "7 Days"):
         return {
             "agent": "1.2",
             "target": index_ticker,
-            "summary": f"⚠️ Error analyzing market index {index_ticker}:_
+            "summary": f"⚠️ Error analyzing market index {index_ticker}: {str(e)}",
+            "details": {}
+        }

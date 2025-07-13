@@ -1,5 +1,3 @@
-# agents/agent1_stock.py
-
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -57,7 +55,6 @@ def analyze(ticker: str, horizon: str = "7 Days"):
     }
 
     return summary, df
-
 
 def compute_rsi(series, period=14):
     delta = series.diff()

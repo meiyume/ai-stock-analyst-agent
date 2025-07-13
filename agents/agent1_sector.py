@@ -1,5 +1,3 @@
-# agents/agent1_sector.py
-
 from agents.agent1_stock import analyze as analyze_stock
 
 def analyze(peer_tickers: list, horizon: str = "7 Days"):
@@ -16,7 +14,7 @@ def analyze(peer_tickers: list, horizon: str = "7 Days"):
         try:
             summary, _ = analyze_stock(peer, horizon)
             if summary["sma_trend"] == "N/A":
-                continue  # Skip if no data
+                continue
             summaries.append(summary)
 
             if summary["sma_trend"].lower() == "bullish":
@@ -29,12 +27,7 @@ def analyze(peer_tickers: list, horizon: str = "7 Days"):
                 "error": str(e)
             })
 
-    if bullish > bearish:
-        trend = "Bullish"
-    elif bearish > bullish:
-        trend = "Bearish"
-    else:
-        trend = "Neutral"
+    trend = "Bullish" if bullish > bearish else "Bearish" if bearish > bullish else "Neutral"
 
     return {
         "agent": "1.1",
@@ -42,4 +35,3 @@ def analyze(peer_tickers: list, horizon: str = "7 Days"):
         "summary": f"{trend} sector outlook (Bullish: {bullish}, Bearish: {bearish})",
         "details": summaries
     }
-
