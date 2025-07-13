@@ -6,7 +6,6 @@ import pandas as pd
 
 from agents.agent1_stock import run_full_technical_analysis, enforce_date_column, get_llm_summary
 
-# === Page Config ===
 st.set_page_config(page_title="Agent 1: AI Technical Analyst", layout="wide")
 
 st.title("📊 Agent 1: AI Technical Analyst")
@@ -42,7 +41,6 @@ if st.button("🔍 Run Technical Analysis"):
         results, df = run_full_technical_analysis(ticker, selected_horizon)
         df = enforce_date_column(df)  # Always enforce after analysis!
 
-# Prevent code from breaking if not run
 if df is None or results == {}:
     st.info("Please run the technical analysis to view results.")
     st.stop()
@@ -344,5 +342,5 @@ if st.button("🧠 Generate LLM Analysis"):
     st.subheader("🧠 LLM-Powered Analyst Commentary")
     st.write(llm_summary)
 
-# (You may continue with Sector/Market/Commodities/Global summaries as in your full version)
+
 
