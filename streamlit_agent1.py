@@ -34,7 +34,7 @@ selected_horizon = horizon_map[horizon]
 if st.button("🔍 Run Technical Analysis"):
     with st.spinner("Analyzing..."):
         results, df = run_full_technical_analysis(ticker, selected_horizon)
-if "Date" not in df.columns:
+        df = df.reset_index()
 df = df.reset_index()
 # === Candlestick + SMA + Bollinger Bands ===
 st.subheader("🕯️ Candlestick Chart with SMA & Bollinger Bands")
