@@ -5,10 +5,8 @@ import pandas as pd
 import numpy as np
 import re
 
-# === Intelligent History Selector ===
 def decide_history_period(horizon: str, ticker: str, use_llm: bool = False) -> str:
     if use_llm:
-        # Scaffolded for LLM; fallback to rule-based
         return "60d"
     else:
         map_lookup = {
@@ -19,7 +17,6 @@ def decide_history_period(horizon: str, ticker: str, use_llm: bool = False) -> s
         }
         return map_lookup.get(horizon, "90d")
 
-# === Indicator Functions ===
 def compute_rsi(series, period=14):
     delta = series.diff()
     gain = delta.where(delta > 0, 0)
@@ -81,12 +78,11 @@ def compute_atr(df, period=14):
     df['ATR'] = df['TR'].rolling(window=period).mean()
     return df
 
-# === Candlestick Pattern Detection (simple examples) ===
 def detect_patterns(df):
     patterns = []
     if len(df) < 3:
         return patterns
-    # Example: Detect Hammer (bullish reversal)
+    # Simple Hammer pattern example for last candle
     last = df.iloc[-1]
     body = abs(last['Close'] - last['Open'])
     range_ = last['High'] - last['Low']
@@ -94,51 +90,41 @@ def detect_patterns(df):
     upper_shadow = last['High'] - max(last['Close'], last['Open'])
     if body < range_ * 0.3 and lower_shadow > body * 2 and upper_shadow < body:
         patterns.append("Hammer")
-    # Add other pattern logic here if desired
     return patterns
 
-# === Universal Anomaly Scanner ===
 def scan_all_anomalies(df):
     events = []
     df = df.reset_index()  # Ensure Date column is present
-
     for i in range(1, len(df)):
         date = df["Date"].iloc[i]
 
         # RSI spike
         if abs(df["RSI"].iloc[i] - df["RSI"].iloc[i - 1]) > 15:
             events.append({"date": date, "indicator": "RSI", "event": "Spike"})
-
         # RSI Overbought/Oversold cross
         if df["RSI"].iloc[i] > 70 and df["RSI"].iloc[i - 1] <= 70:
             events.append({"date": date, "indicator": "RSI", "event": "Overbought Cross"})
         if df["RSI"].iloc[i] < 30 and df["RSI"].iloc[i - 1] >= 30:
             events.append({"date": date, "indicator": "RSI", "event": "Oversold Cross"})
-
         # MACD spike
         if abs(df["MACD"].iloc[i] - df["MACD"].iloc[i - 1]) > 0.5:
             events.append({"date": date, "indicator": "MACD", "event": "Spike"})
-
         # MACD Crossover
         if (df["MACD"].iloc[i] > df["Signal"].iloc[i] and df["MACD"].iloc[i - 1] <= df["Signal"].iloc[i - 1]):
             events.append({"date": date, "indicator": "MACD", "event": "Bullish Crossover"})
         if (df["MACD"].iloc[i] < df["Signal"].iloc[i] and df["MACD"].iloc[i - 1] >= df["Signal"].iloc[i - 1]):
             events.append({"date": date, "indicator": "MACD", "event": "Bearish Crossover"})
-
         # Price Gap
         if abs(df["Open"].iloc[i] - df["Close"].iloc[i - 1]) > 0.02 * df["Close"].iloc[i - 1]:
             events.append({"date": date, "indicator": "Price", "event": "Gap"})
-
         # Volume Spike
         avg_vol = df["Volume"].rolling(window=5).mean().iloc[i - 1]
         if avg_vol > 0 and df["Volume"].iloc[i] > 1.5 * avg_vol:
             events.append({"date": date, "indicator": "Volume", "event": "Spike"})
-
         # ATR Spike
         avg_atr = df["ATR"].rolling(window=20).mean().iloc[i - 1]
         if avg_atr > 0 and df["ATR"].iloc[i] > 1.5 * avg_atr:
             events.append({"date": date, "indicator": "ATR", "event": "Spike"})
-
         # Stochastic Overbought/Oversold
         if "Stochastic_%K" in df.columns:
             if df["Stochastic_%K"].iloc[i] > 80 and df["Stochastic_%K"].iloc[i - 1] <= 80:
@@ -147,12 +133,11 @@ def scan_all_anomalies(df):
                 events.append({"date": date, "indicator": "Stochastic", "event": "Oversold Cross"})
     return events
 
-# === Main Analysis ===
 def analyze(ticker: str, horizon: str = "7 Days"):
     history_period = decide_history_period(horizon, ticker, use_llm=False)
     stock = yf.Ticker(ticker)
     df = stock.history(period=history_period, interval="1d")
-
+    df = df.reset_index()
     if df.empty:
         return {
             "summary": f"⚠️ No data available for {ticker}.",
@@ -167,7 +152,8 @@ def analyze(ticker: str, horizon: str = "7 Days"):
             "atr_signal": "N/A",
             "vol_spike": False,
             "patterns": [],
-            "anomaly_events": []
+            "anomaly_events": [],
+            "heatmap_signals": {}
         }, df
 
     df["SMA5"] = df["Close"].rolling(window=5).mean()
@@ -199,8 +185,11 @@ def analyze(ticker: str, horizon: str = "7 Days"):
 
     latest = df_signals.iloc[-1]
 
-    # Stock-level signals
-    sma_trend = "Bullish" if latest["SMA5"] > latest["SMA10"] else "Bearish"
+    sma_trend = (
+        "Bullish" if latest["SMA5"] > latest["SMA10"] else
+        "Bearish" if latest["SMA5"] < latest["SMA10"] else
+        "Neutral"
+    )
     macd_signal = "Bullish" if latest["MACD"] > latest["Signal"] else "Bearish"
     bollinger_signal = (
         "Above upper band" if latest["Close"] > latest["Upper"]
@@ -218,11 +207,15 @@ def analyze(ticker: str, horizon: str = "7 Days"):
         else "Neutral"
     )
     cmf_signal = (
-        "Buying pressure" if latest["CMF"] > 0
-        else "Selling pressure" if latest["CMF"] < 0
+        "Buying" if latest["CMF"] > 0
+        else "Selling" if latest["CMF"] < 0
         else "Neutral"
     )
-    obv_signal = "Rising" if latest["OBV"] > df["OBV"].iloc[-2] else "Falling"
+    obv_signal = (
+        "Rising" if latest["OBV"] > df["OBV"].iloc[-2]
+        else "Falling" if latest["OBV"] < df["OBV"].iloc[-2]
+        else "Flat"
+    )
     adx_signal = "Strong trend" if latest["ADX"] > 25 else "Weak trend"
     atr_mean = df["ATR"].mean()
     atr_signal = "High volatility" if latest["ATR"] > atr_mean else "Low volatility"
@@ -230,103 +223,109 @@ def analyze(ticker: str, horizon: str = "7 Days"):
     avg_vol = df["Volume"].rolling(window=5).mean().iloc[-1]
     vol_spike = latest["Volume"] > 1.5 * avg_vol if avg_vol > 0 else False
 
-    # Patterns
     patterns = detect_patterns(df_signals)
+    anomaly_events = scan_all_anomalies(df_signals)
 
-    # === Heatmap Signal Status (not changed here for brevity) ===
+    # === Comprehensive Heatmap Signal Status ===
     heatmap_signals = {}
-    risk_score = 0
 
-    weights = {
-        "MACD": 0.3,
-        "RSI": 0.2,
-        "Volume": 0.1,
-        "ATR": 0.1,
-        "Pattern": 0.1,
-        "ADX": 0.1,
-        "Stochastic": 0.1,
-    }
+    # SMA Trend
+    heatmap_signals["SMA Trend"] = sma_trend
 
     # MACD
-    if "MACD" in df_signals.columns and "Signal" in df_signals.columns:
-        macd = df_signals["MACD"].iloc[-1]
-        signal = df_signals["Signal"].iloc[-1]
-        if macd > signal:
-            heatmap_signals["MACD"] = "Bullish Crossover"
-            macd_score = 0
-        else:
-            heatmap_signals["MACD"] = "Bearish Crossover"
-            macd_score = 1
-        risk_score += weights["MACD"] * macd_score
+    heatmap_signals["MACD"] = "Bullish Crossover" if macd_signal == "Bullish" else "Bearish Crossover"
 
     # RSI
-    rsi = df_signals["RSI"].iloc[-1]
-    if rsi > 70:
+    if latest["RSI"] > 70:
         heatmap_signals["RSI"] = "Overbought"
-        rsi_score = 1
-    elif rsi < 30:
+    elif latest["RSI"] < 30:
         heatmap_signals["RSI"] = "Oversold"
-        rsi_score = 0
     else:
         heatmap_signals["RSI"] = "Neutral"
-        rsi_score = 0.5
-    risk_score += weights["RSI"] * rsi_score
+
+    # Bollinger
+    heatmap_signals["Bollinger"] = (
+        "Above Upper Band" if latest["Close"] > latest["Upper"]
+        else "Below Lower Band" if latest["Close"] < latest["Lower"]
+        else "Within Band"
+    )
+
+    # Stochastic
+    stoch = latest["Stochastic_%K"]
+    if stoch > 80:
+        heatmap_signals["Stochastic"] = "Overbought"
+    elif stoch < 20:
+        heatmap_signals["Stochastic"] = "Oversold"
+    else:
+        heatmap_signals["Stochastic"] = "Neutral"
+
+    # CMF
+    if latest["CMF"] > 0:
+        heatmap_signals["CMF"] = "Buying"
+    elif latest["CMF"] < 0:
+        heatmap_signals["CMF"] = "Selling"
+    else:
+        heatmap_signals["CMF"] = "Neutral"
+
+    # OBV
+    if latest["OBV"] > df["OBV"].iloc[-2]:
+        heatmap_signals["OBV"] = "Rising"
+    elif latest["OBV"] < df["OBV"].iloc[-2]:
+        heatmap_signals["OBV"] = "Falling"
+    else:
+        heatmap_signals["OBV"] = "Flat"
+
+    # ADX
+    heatmap_signals["ADX"] = "Strong Trend" if latest["ADX"] > 25 else "Weak Trend"
+
+    # ATR
+    heatmap_signals["ATR"] = "High Volatility" if latest["ATR"] > atr_mean else "Stable"
 
     # Volume
     heatmap_signals["Volume"] = "Spike" if vol_spike else "Normal"
-    risk_score += weights["Volume"] * (0.5 if vol_spike else 0)
-
-    # ATR
-    if "ATR" in df_signals.columns:
-        atr = df_signals["ATR"].iloc[-1]
-        atr_avg = df_signals["ATR"].mean()
-        if atr > 1.5 * atr_avg:
-            heatmap_signals["ATR"] = "High Volatility"
-            risk_score += weights["ATR"] * 0.5
-        else:
-            heatmap_signals["ATR"] = "Stable"
 
     # Pattern
-    pattern_count = len(patterns)
-    if pattern_count > 0:
-        heatmap_signals["Pattern"] = patterns[0]
-        risk_score += weights["Pattern"] * 0.3
-    else:
-        heatmap_signals["Pattern"] = "None"
+    heatmap_signals["Pattern"] = patterns[0] if patterns else "None"
 
-    # ADX
-    if "ADX" in df_signals.columns:
-        adx = df_signals["ADX"].iloc[-1]
-        if adx > 25:
-            heatmap_signals["ADX"] = "Strong Trend"
-        else:
-            heatmap_signals["ADX"] = "Weak Trend"
-            risk_score += weights["ADX"] * 0.3
+    # === Composite Risk Score (Weights can be tuned as needed) ===
+    weights = {
+        "SMA Trend": 0.08,
+        "MACD": 0.15,
+        "RSI": 0.10,
+        "Bollinger": 0.07,
+        "Stochastic": 0.10,
+        "CMF": 0.08,
+        "OBV": 0.07,
+        "ADX": 0.10,
+        "ATR": 0.10,
+        "Volume": 0.08,
+        "Pattern": 0.07,
+    }
 
-    # Stochastic
-    if "Stochastic_%K" in df_signals.columns:
-        stoch = df_signals["Stochastic_%K"].iloc[-1]
-        if stoch > 80:
-            heatmap_signals["Stochastic"] = "Overbought"
-            risk_score += weights["Stochastic"] * 0.5
-        elif stoch < 20:
-            heatmap_signals["Stochastic"] = "Oversold"
-        else:
-            heatmap_signals["Stochastic"] = "Neutral"
+    # Risk score: assign "risky" status = 1, neutral = 0.5, healthy = 0
+    risk_score = 0
 
-    # Final Risk Label
+    # Define scoring for each signal (customize further if you want)
+    score_map = {
+        "Bearish": 1, "Bearish Crossover": 1, "Overbought": 1, "Selling": 1,
+        "Falling": 1, "Weak Trend": 1, "High Volatility": 1, "Spike": 1,
+        "Below Lower Band": 1, "Oversold": 0, "Bullish": 0, "Bullish Crossover": 0,
+        "Buying": 0, "Rising": 0, "Strong Trend": 0, "Stable": 0, "Above Upper Band": 1,
+        "Neutral": 0.5, "Normal": 0.5, "Within Band": 0.5, "Flat": 0.5, "None": 0.5,
+    }
+
+    for k, v in heatmap_signals.items():
+        risk_score += weights.get(k, 0) * score_map.get(v, 0.5)
+
     if risk_score >= 0.61:
         risk_level = "High Risk"
-    elif risk_score >= 0.26:
+    elif risk_score >= 0.34:
         risk_level = "Caution"
     else:
         risk_level = "Low Risk"
 
-    # === Anomaly Events ===
-    anomaly_events = scan_all_anomalies(df_signals)
-
     summary = {
-        "summary": f"{sma_trend} SMA, {macd_signal} MACD, {rsi_signal} RSI, {bollinger_signal}, "
+        "summary": f"{sma_trend} SMA, {macd_signal} MACD, {rsi_signal} RSI, {bollinger_signal} Bollinger, "
                    f"{stochastic_signal} Stochastic, {cmf_signal} CMF, {obv_signal} OBV, "
                    f"{adx_signal} ADX, {atr_signal} ATR",
         "sma_trend": sma_trend,
@@ -340,14 +339,14 @@ def analyze(ticker: str, horizon: str = "7 Days"):
         "atr_signal": atr_signal,
         "vol_spike": vol_spike,
         "patterns": patterns,
+        "anomaly_events": anomaly_events,
         "heatmap_signals": heatmap_signals,
         "composite_risk_score": round(risk_score, 2),
-        "risk_level": risk_level,
-        "anomaly_events": anomaly_events
+        "risk_level": risk_level
     }
 
     return summary, df_for_plotting
 
-# Optionally, for Streamlit:
 def run_full_technical_analysis(ticker, horizon):
     return analyze(ticker, horizon)
+
