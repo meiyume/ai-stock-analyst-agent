@@ -64,7 +64,7 @@ if patterns:
         + "These patterns were detected in the last 3 candles."
 )
 else:
-st.info("No recognizable candlestick patterns detected in the last 3 candles.")
+    st.info("No recognizable candlestick patterns detected in the last 3 candles.")
 # === Anomaly Alerts ===
 st.subheader("🚨 Anomaly Alerts (Experimental)")
 anomalies = []
@@ -79,7 +79,7 @@ if anomalies:
 for alert in anomalies:
 st.warning(alert)
 else:
-st.info("No anomalies detected today. 📈")
+    st.info("No anomalies detected today. 📈")
 # === RSI ===
 if "RSI" in df.columns:
 st.subheader("📉 RSI (Relative Strength Index)")
@@ -198,7 +198,7 @@ color = "🟢"
 elif "Neutral" in status or "None" in status:
 color = "⚪"
 else:
-color = "🟡"
+    color = "🟡"
 cols[i].markdown(
 f"<div style='background-color:#ffffff;padding:10px;border-radius:10px;text-align:center;'>"
 f"<b>{indicator}</b><br>{color} {status}</div>",
