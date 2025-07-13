@@ -368,9 +368,19 @@ def run_full_technical_analysis(ticker, horizon):
 
 def get_llm_summary(signals, api_key):
     client = OpenAI(api_key=api_key)
-    prompt = f"""You are an expert technical analyst. Based on the following technical signals and anomalies, first write a summary for technical readers (using correct terminology and concise reasoning). Then, write a second summary for non-technical readers (explain in plain, simple language for someone like a grandparent).
+    prompt = f"""
+You are an expert technical analyst for a leading financial institution.
 
-Signals:
+Based on the following technical signals and anomalies, do the following:
+- First, write a detailed summary for technical readers (using precise, professional terminology and concise reasoning). For each indicator, explain not just the signal, but also why it matters right now. Connect supporting indicators together (e.g., “Rising OBV + bullish MACD reinforces uptrend…”). Summarize the overall risk or opportunity, and recommend what a technical analyst should watch for in the next few sessions. Include actionable insight or a forward-looking caution. Use a confident, objective tone.
+- Then, write a second summary for non-technical readers. Imagine you are explaining it to a grandparent with no finance background:
+    - Avoid technical terms and acronyms unless you give a short, simple explanation.
+    - Use analogies and plain language, e.g., “The market looks strong, but maybe too much excitement—like a car going a bit too fast.”
+    - Focus on what a regular person should feel or do: “It’s a good time to be careful,” or “Things look steady for now.”
+    - Make it warm, clear, and friendly.
+    - Absolutely no jargon!
+
+Here are the signals:
 SMA Trend: {signals.get('sma_trend')}
 MACD: {signals.get('macd_signal')}
 RSI: {signals.get('rsi_signal')}
