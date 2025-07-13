@@ -200,63 +200,99 @@ def analyze(ticker: str, horizon: str = "7 Days"):
 
     
 
-    # === Candlestick Pattern Detection ===
-    candlestick_patterns = []
-    if len(df_signals) >= 3:
-        last = df_signals.iloc[-1]
-        prev = df_signals.iloc[-2]
-        prev2 = df_signals.iloc[-3]
+    # === Heatmap Signal Status ===
+    heatmap_signals = {}
+    risk_score = 0
 
-        # Doji
-        if abs(last['Open'] - last['Close']) / (last['High'] - last['Low'] + 1e-10) < 0.1:
-            candlestick_patterns.append("Doji")
+    # Weights (can be tuned later)
+    weights = {
+        "MACD": 0.3,
+        "RSI": 0.2,
+        "Volume": 0.1,
+        "ATR": 0.1,
+        "Pattern": 0.1,
+        "ADX": 0.1,
+        "Stochastic": 0.1,
+    }
 
-        # Hammer
-        if (last['High'] - last['Low']) > 2 * abs(last['Open'] - last['Close']) and            (last['Close'] - last['Low']) / (last['High'] - last['Low'] + 1e-10) > 0.6:
-            candlestick_patterns.append("Hammer")
+    # MACD
+    if "MACD" in df_signals.columns and "Signal" in df_signals.columns:
+        macd = df_signals["MACD"].iloc[-1]
+        signal = df_signals["Signal"].iloc[-1]
+        if macd > signal:
+            heatmap_signals["MACD"] = "Bullish Crossover"
+            macd_score = 0
+        else:
+            heatmap_signals["MACD"] = "Bearish Crossover"
+            macd_score = 1
+        risk_score += weights["MACD"] * macd_score
 
-        # Engulfing
-        if (last['Close'] > last['Open'] and
-            prev['Close'] < prev['Open'] and
-            last['Close'] > prev['Open'] and
-            last['Open'] < prev['Close']):
-            candlestick_patterns.append("Bullish Engulfing")
+    # RSI
+    rsi = df_signals["RSI"].iloc[-1]
+    if rsi > 70:
+        heatmap_signals["RSI"] = "Overbought"
+        rsi_score = 1
+    elif rsi < 30:
+        heatmap_signals["RSI"] = "Oversold"
+        rsi_score = 0
+    else:
+        heatmap_signals["RSI"] = "Neutral"
+        rsi_score = 0.5
+    risk_score += weights["RSI"] * rsi_score
 
-        elif (last['Close'] < last['Open'] and
-              prev['Close'] > prev['Open'] and
-              last['Open'] > prev['Close'] and
-              last['Close'] < prev['Open']):
-            candlestick_patterns.append("Bearish Engulfing")
+    # Volume
+    vol_spike = summary.get("volume_spike", False)
+    heatmap_signals["Volume"] = "Spike" if vol_spike else "Normal"
+    risk_score += weights["Volume"] * (0.5 if vol_spike else 0)
 
-    # === Anomaly Alerts ===
-    rsi_spike = False
-    price_gap = False
-    macd_spike = False
+    # ATR
+    if "ATR" in df_signals.columns:
+        atr = df_signals["ATR"].iloc[-1]
+        atr_avg = df_signals["ATR"].mean()
+        if atr > 1.5 * atr_avg:
+            heatmap_signals["ATR"] = "High Volatility"
+            risk_score += weights["ATR"] * 0.5
+        else:
+            heatmap_signals["ATR"] = "Stable"
 
-    if "RSI" in df_signals.columns and len(df_signals) > 2:
-        rsi_diff = df_signals["RSI"].iloc[-1] - df_signals["RSI"].iloc[-2]
-        if abs(rsi_diff) > 30:
-            rsi_spike = True
+    # Pattern
+    pattern_count = len(summary.get("patterns", []))
+    if pattern_count > 0:
+        heatmap_signals["Pattern"] = summary["patterns"][0]
+        risk_score += weights["Pattern"] * 0.3
+    else:
+        heatmap_signals["Pattern"] = "None"
 
-    if len(df_signals) > 2:
-        open_today = df_signals["Open"].iloc[-1]
-        close_yesterday = df_signals["Close"].iloc[-2]
-        gap = abs(open_today - close_yesterday) / close_yesterday
-        if gap > 0.03:
-            price_gap = True
+    # ADX
+    if "ADX" in df_signals.columns:
+        adx = df_signals["ADX"].iloc[-1]
+        if adx > 25:
+            heatmap_signals["ADX"] = "Strong Trend"
+        else:
+            heatmap_signals["ADX"] = "Weak Trend"
+            risk_score += weights["ADX"] * 0.3
 
-    if "MACD" in df_signals.columns and "Signal" in df_signals.columns and len(df_signals) > 2:
-        macd_today = df_signals["MACD"].iloc[-1]
-        signal_today = df_signals["Signal"].iloc[-1]
-        macd_prev = df_signals["MACD"].iloc[-2]
-        signal_prev = df_signals["Signal"].iloc[-2]
-        if (macd_prev < signal_prev and macd_today > signal_today) or (macd_prev > signal_prev and macd_today < signal_today):
-            if abs(macd_today - signal_today) > 0.5:
-                macd_spike = True
+    # Stochastic
+    if "Stochastic_K" in df_signals.columns:
+        stoch = df_signals["Stochastic_K"].iloc[-1]
+        if stoch > 80:
+            heatmap_signals["Stochastic"] = "Overbought"
+            risk_score += weights["Stochastic"] * 0.5
+        elif stoch < 20:
+            heatmap_signals["Stochastic"] = "Oversold"
+        else:
+            heatmap_signals["Stochastic"] = "Neutral"
 
-    summary["patterns"] = candlestick_patterns
-    summary["rsi_spike"] = rsi_spike
-    summary["price_gap"] = price_gap
-    summary["macd_spike"] = macd_spike
+    # Final Risk Label
+    if risk_score >= 0.61:
+        risk_level = "High Risk"
+    elif risk_score >= 0.26:
+        risk_level = "Caution"
+    else:
+        risk_level = "Low Risk"
+
+    summary["heatmap_signals"] = heatmap_signals
+    summary["composite_risk_score"] = round(risk_score, 2)
+    summary["risk_level"] = risk_level
 
     return summary, df_for_plotting
