@@ -56,10 +56,10 @@ if st.button("🔍 Run Technical Analysis"):
             close=df["Close"],
             name="Price"
         ))
-        fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA_5"], mode="lines", name="SMA5"))
-        fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA_10"], mode="lines", name="SMA10"))
-        fig.add_trace(go.Scatter(x=df["Date"], y=df["BB_Upper"], mode="lines", name="Upper BB", line=dict(dash='dot')))
-        fig.add_trace(go.Scatter(x=df["Date"], y=df["BB_Lower"], mode="lines", name="Lower BB", line=dict(dash='dot')))
+        fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA5"], mode="lines", name="SMA5"))
+        fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA10"], mode="lines", name="SMA10"))
+        fig.add_trace(go.Scatter(x=df["Date"], y=df["Upper"], mode="lines", name="Upper BB", line=dict(dash='dot')))
+        fig.add_trace(go.Scatter(x=df["Date"], y=df["Lower"], mode="lines", name="Lower BB", line=dict(dash='dot')))
         fig.update_layout(height=500, xaxis_rangeslider_visible=False)
         st.plotly_chart(fig, use_container_width=True)
 
@@ -72,11 +72,11 @@ if st.button("🔍 Run Technical Analysis"):
             st.plotly_chart(rsi_fig, use_container_width=True)
 
         # === MACD ===
-        if "MACD" in df.columns and "MACD_Signal" in df.columns:
+        if "MACD" in df.columns and "Signal" in df.columns:
             st.subheader("📈 MACD (Moving Average Convergence Divergence)")
             macd_fig = go.Figure()
             macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["MACD"], name="MACD"))
-            macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["MACD_Signal"], name="Signal"))
+            macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["Signal"], name="Signal"))
             st.plotly_chart(macd_fig, use_container_width=True)
 
         # === Volume ===
