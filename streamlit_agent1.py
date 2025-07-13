@@ -10,14 +10,20 @@ st.set_page_config(page_title="Agent 1: AI Technical Analyst", layout="wide")
 
 st.title("📊 Agent 1: AI Technical Analyst")
 st.markdown("""
-Welcome to **Agent 1**, your AI-powered technical analyst.<br>
-This agent performs a layered technical analysis using:<br>
-- 📈 Stock indicators (SMA, MACD, RSI, Bollinger Bands, Stochastic, CMF, OBV, ADX, ATR)<br>
-- 🏭 Peer sector comparison<br>
-- 📊 Market index trends<br>
-- 🛢️ Commodity signals (gold, oil)<br>
-- 🌍 Global indices (Dow, Nikkei, HSI)
+🤖 **Agent 1** is your AI-powered market sidekick—giving everyone the expert edge, whether you’re trading millions or just starting out.
+
+🔎 With advanced tools like **SMA Trend**, **OBV**, **CMF**, and **Stochastic**, Agent 1 uncovers hidden trends and smart-money moves you won’t find on ordinary charts.
+
+📊 It fuses classic signals (MACD, RSI, Bollinger Bands, ADX, ATR) with sector, commodities, and global insights for a complete, instant risk check.
+
+💡 But here’s the real magic:  
+Every scan comes with a clear risk score, an AI-written summary, _and_ plain-English explanations for every indicator and dashboard—so you always know exactly what you’re seeing, and why.
+
+---
+
+*Wall Street tools, finally in everyone’s hands—ready to level the playing field.*
 """, unsafe_allow_html=True)
+
 
 # === User Input ===
 ticker = st.text_input("🎯 Enter SGX Stock Ticker (e.g. U11.SI)", value="U11.SI")
@@ -289,33 +295,18 @@ if risk_level is not None:
     st.markdown(f"**Overall Risk Level**: 🎯 **{risk_level}**")
 
 st.markdown("""
-### 🧮 How to Interpret the Composite Risk Score
-The **Composite Risk Score** is a weighted calculation of technical indicators, normalized to a range between **0.00 (low risk)** and **1.00 (high risk)**.
-It reflects how many red flags are being raised and how serious those signals are based on:
-- **Strength and direction of trends** (e.g., MACD, ADX)
-- **Volatility and anomalies** (e.g., RSI spikes, ATR)
-- **Volume behavior and market sentiment** (e.g., volume spikes, patterns)
-| Score Range | What It Means         |
-|-------------|------------------------|
-| **0.00 – 0.33** | ✅ **Low Risk**: Signals are stable or bullish |
-| **0.34 – 0.66** | ⚠️ **Caution**: Mixed signals; watch carefully |
-| **0.67 – 1.00** | 🔥 **High Risk**: Multiple red flags detected |
-### 🎯 What Does the Overall Risk Level Mean?
-This is a **simplified risk tag** derived from the composite score, designed to:
-- Help retail users **make fast decisions**
-- Allow investors to assess **signal intensity at a glance**
-- Enable Agent 2 to prioritize predictive efforts on high-alert stocks
-> For example, a stock with `MACD Bearish`, `Overbought RSI`, and a `Volume Spike` might result in a score of `0.72` — tagged as **High Risk**.
-### ✅ Why It Matters
-This system provides a **quantitative, explainable**, and **repeatable** way to evaluate stock risk. We're not just showing charts — we're **translating technical complexity into clear, actionable insight.**
-### 🚀 Expandability Built In
-We’ve designed this dashboard to evolve — soon we’ll include:
-- 📈 SMA trend momentum
-- 🔄 OBV divergences
-- 🧠 LLM-enhanced pattern confidence
-""", unsafe_allow_html=True)
+### 🧮 How to Read the Composite Risk Score
+This score blends all technical signals into a single, intuitive risk rating:
+- **Low Risk (0.00 – 0.33)**: ✅ Most signals healthy or bullish.
+- **Caution (0.34 – 0.66)**: ⚠️ Mixed or volatile signals—watch closely.
+- **High Risk (0.67 – 1.00)**: 🔥 Multiple bearish or red-flag indicators.
 
-st.markdown("✅ *SMA Trend, OBV, CMF, and Stochastic signals are now integrated into the dashboard for a fuller view of risk.*")
+The overall risk level is a **quick summary**—helping you spot danger or opportunity at a glance.
+
+> Example: Bearish MACD, Overbought RSI, and a Volume Spike could produce a **High Risk** score.
+
+*Composite scoring makes risk transparent, explainable, and actionable—so you don’t just see the chart, you understand it.*
+""", unsafe_allow_html=True)
 
 # === Technical Summary ===
 st.subheader("🧠 Technical Summary (Agent 1)")
@@ -336,11 +327,11 @@ st.markdown(stock_text)
 
 # === LLM Commentary ===
 api_key = st.secrets["OPENAI_API_KEY"]
-if st.button("🧠 Generate LLM Analysis"):
-    with st.spinner("Agent 1 is thinking..."):
-        llm_summary = get_llm_summary(stock_summary, api_key)
-    st.subheader("🧠 LLM-Powered Analyst Commentary")
-    st.write(llm_summary)
+with st.spinner("Agent 1 is generating LLM commentary..."):
+    llm_summary = get_llm_summary(stock_summary, api_key)
+st.subheader("🧠 LLM-Powered Analyst Commentary")
+st.write(llm_summary)
+
 
 
 
