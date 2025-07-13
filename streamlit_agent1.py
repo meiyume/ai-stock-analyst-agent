@@ -3,7 +3,7 @@
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
-from agents.agent1_core import run_full_technical_analysis
+from agent1_stock import run_full_technical_analysis, enforce_date_column
 
 # === Page Config ===
 st.set_page_config(page_title="Agent 1: AI Technical Analyst", layout="wide")
@@ -39,7 +39,7 @@ df = None
 if st.button("🔍 Run Technical Analysis"):
     with st.spinner("Analyzing..."):
         results, df = run_full_technical_analysis(ticker, selected_horizon)
-        df = df.reset_index()
+        df = enforce_date_column(df)  # <-- Always enforce after analysis!
 
 # Prevent code from breaking if not run
 if df is None or results == {}:
@@ -362,3 +362,4 @@ final_text = (
     f"🌍 **Global Indices:** {globals_}"
 )
 st.success(final_text)
+
