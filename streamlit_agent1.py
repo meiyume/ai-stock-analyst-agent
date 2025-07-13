@@ -14,7 +14,9 @@ if st.button("Run Technical Analysis"):
         results, df = run_full_technical_analysis(ticker, selected_horizon)
 
         if df is not None and not df.empty:
-            df = df.reset_index()  # ✅ Fix to ensure 'Date' column exists for Plotly
+            df = df.reset_index()
+            if "index" in df.columns:
+                df.rename(columns={"index": "Date"}, inplace=True)
 
             st.subheader("📈 Price and SMA Trends")
             fig = go.Figure()
