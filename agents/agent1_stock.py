@@ -1,238 +1,270 @@
-import numpy as np
+import yfinance as yf
 import pandas as pd
-from agents.patterns import detect_candlestick_patterns
+import numpy as np
 
-# === Risk weightings for each signal ===
-weights = {
-    "SMA Trend": 0.1,
-    "MACD": 0.15,
-    "RSI": 0.15,
-    "Volume": 0.1,
-    "ATR": 0.1,
-    "Pattern": 0.1,
-    "ADX": 0.1,
-    "Stochastic": 0.1,
-    "CMF": 0.05,
-    "OBV": 0.05,
-}
+# === Indicator Computations (manual, no ta lib) ===
 
-def compute_indicators(df):
-    df = df.copy()
-    # SMA
-    df["SMA5"] = df["Close"].rolling(5).mean()
-    df["SMA10"] = df["Close"].rolling(10).mean()
+def compute_rsi(series, period=14):
+    delta = series.diff()
+    gain = delta.where(delta > 0, 0)
+    loss = -delta.where(delta < 0, 0)
+    avg_gain = gain.rolling(window=period).mean()
+    avg_loss = loss.rolling(window=period).mean()
+    rs = avg_gain / (avg_loss + 1e-10)
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
 
-    # MACD
-    ema12 = df["Close"].ewm(span=12, adjust=False).mean()
-    ema26 = df["Close"].ewm(span=26, adjust=False).mean()
-    df["MACD"] = ema12 - ema26
-    df["Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
+def compute_stochastic(df, k_period=14, d_period=3):
+    low_min = df['Low'].rolling(window=k_period).min()
+    high_max = df['High'].rolling(window=k_period).max()
+    df['Stochastic_%K'] = 100 * ((df['Close'] - low_min) / (high_max - low_min + 1e-10))
+    df['Stochastic_%D'] = df['Stochastic_%K'].rolling(window=d_period).mean()
+    return df
 
-    # RSI
-    delta = df["Close"].diff()
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-    avg_gain = gain.rolling(14).mean()
-    avg_loss = loss.rolling(14).mean()
-    rs = avg_gain / avg_loss
-    df["RSI"] = 100 - (100 / (1 + rs))
+def compute_cmf(df, period=20):
+    mfv = ((df['Close'] - df['Low']) - (df['High'] - df['Close'])) / \
+          (df['High'] - df['Low'] + 1e-10) * df['Volume']
+    df['CMF'] = mfv.rolling(window=period).sum() / df['Volume'].rolling(window=period).sum()
+    return df
 
-    # Bollinger Bands (for display)
-    df["Upper"] = df["SMA10"] + 2 * df["Close"].rolling(10).std()
-    df["Lower"] = df["SMA10"] - 2 * df["Close"].rolling(10).std()
-
-    # ATR
-    high_low = df["High"] - df["Low"]
-    high_close = np.abs(df["High"] - df["Close"].shift())
-    low_close = np.abs(df["Low"] - df["Close"].shift())
-    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-    df["ATR"] = tr.rolling(14).mean()
-
-    # ADX (simple implementation)
-    up_move = df["High"].diff()
-    down_move = -df["Low"].diff()
-    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0)
-    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0)
-    tr = pd.concat([
-        df["High"] - df["Low"],
-        np.abs(df["High"] - df["Close"].shift()),
-        np.abs(df["Low"] - df["Close"].shift())
-    ], axis=1).max(axis=1)
-    atr = tr.rolling(14).mean()
-    plus_di = 100 * pd.Series(plus_dm).rolling(14).sum() / atr
-    minus_di = 100 * pd.Series(minus_dm).rolling(14).sum() / atr
-    dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di)
-    df["ADX"] = dx.rolling(14).mean()
-
-    # Stochastic Oscillator
-    low_min = df["Low"].rolling(14).min()
-    high_max = df["High"].rolling(14).max()
-    df["Stochastic_%K"] = 100 * (df["Close"] - low_min) / (high_max - low_min)
-    df["Stochastic_%D"] = df["Stochastic_%K"].rolling(3).mean()
-
-    # CMF (Chaikin Money Flow)
-    mfv = ((df["Close"] - df["Low"]) - (df["High"] - df["Close"])) / (df["High"] - df["Low"]).replace(0, np.nan)
-    mfv = mfv * df["Volume"]
-    df["CMF"] = mfv.rolling(20).sum() / df["Volume"].rolling(20).sum()
-
-    # OBV
+def compute_obv(df):
     obv = [0]
     for i in range(1, len(df)):
-        if df["Close"].iloc[i] > df["Close"].iloc[i-1]:
-            obv.append(obv[-1] + df["Volume"].iloc[i])
-        elif df["Close"].iloc[i] < df["Close"].iloc[i-1]:
-            obv.append(obv[-1] - df["Volume"].iloc[i])
+        if df['Close'].iloc[i] > df['Close'].iloc[i - 1]:
+            obv.append(obv[-1] + df['Volume'].iloc[i])
+        elif df['Close'].iloc[i] < df['Close'].iloc[i - 1]:
+            obv.append(obv[-1] - df['Volume'].iloc[i])
         else:
             obv.append(obv[-1])
-    df["OBV"] = obv
+    df['OBV'] = obv
+    return df
+
+def compute_adx(df, period=14):
+    df['H-L'] = df['High'] - df['Low']
+    df['H-PC'] = np.abs(df['High'] - df['Close'].shift(1))
+    df['L-PC'] = np.abs(df['Low'] - df['Close'].shift(1))
+    df['TR'] = df[['H-L', 'H-PC', 'L-PC']].max(axis=1)
+
+    df['+DM'] = np.where((df['High'] - df['High'].shift(1)) > (df['Low'].shift(1) - df['Low']),
+                         np.maximum(df['High'] - df['High'].shift(1), 0), 0)
+    df['-DM'] = np.where((df['Low'].shift(1) - df['Low']) > (df['High'] - df['High'].shift(1)),
+                         np.maximum(df['Low'].shift(1) - df['Low'], 0), 0)
+
+    tr_smooth = df['TR'].rolling(window=period).sum()
+    plus_dm_smooth = df['+DM'].rolling(window=period).sum()
+    minus_dm_smooth = df['-DM'].rolling(window=period).sum()
+
+    df['+DI'] = 100 * (plus_dm_smooth / (tr_smooth + 1e-10))
+    df['-DI'] = 100 * (minus_dm_smooth / (tr_smooth + 1e-10))
+    df['DX'] = 100 * (np.abs(df['+DI'] - df['-DI']) / (df['+DI'] + df['-DI'] + 1e-10))
+    df['ADX'] = df['DX'].rolling(window=period).mean()
 
     return df
 
-def run_full_technical_analysis(ticker, outlook_horizon):
-    df = fetch_data(ticker, outlook_horizon)  # You must define fetch_data elsewhere!
-    df = compute_indicators(df)
-    summary = {}
+def compute_atr(df, period=14):
+    df['H-L'] = df['High'] - df['Low']
+    df['H-PC'] = np.abs(df['High'] - df['Close'].shift(1))
+    df['L-PC'] = np.abs(df['Low'] - df['Close'].shift(1))
+    df['TR'] = df[['H-L', 'H-PC', 'L-PC']].max(axis=1)
+    df['ATR'] = df['TR'].rolling(window=period).mean()
+    return df
 
-    # Latest values (last row)
-    latest = df.iloc[-1]
+# === Main Analysis ===
+def analyze(ticker: str, horizon: str = "7 Days"):
+    stock = yf.Ticker(ticker)
+    df = stock.history(period="180d", interval="1d")  # or call your history selector if implemented
 
-    # Patterns
-    patterns = detect_candlestick_patterns(df)
-    summary["patterns"] = patterns
+    if df.empty:
+        return {
+            "summary": f"⚠️ No data available for {ticker}.",
+            "sma_trend": "N/A",
+            "macd_signal": "N/A",
+            "bollinger_signal": "N/A",
+            "rsi_signal": "N/A",
+            "stochastic_signal": "N/A",
+            "cmf_signal": "N/A",
+            "obv_signal": "N/A",
+            "adx_signal": "N/A",
+            "atr_signal": "N/A",
+            "vol_spike": False
+        }, df
 
-    # Volume spike
-    vol_spike = df["Volume"].iloc[-1] > df["Volume"].rolling(20).mean().iloc[-1] * 1.5
-    summary["vol_spike"] = vol_spike
+    df["SMA5"] = df["Close"].rolling(window=5).mean()
+    df["SMA10"] = df["Close"].rolling(window=10).mean()
+    df["EMA12"] = df["Close"].ewm(span=12, adjust=False).mean()
+    df["EMA26"] = df["Close"].ewm(span=26, adjust=False).mean()
+    df["MACD"] = df["EMA12"] - df["EMA26"]
+    df["Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
+    df["20dSTD"] = df["Close"].rolling(window=20).std()
+    df["Upper"] = df["SMA10"] + (df["20dSTD"] * 2)
+    df["Lower"] = df["SMA10"] - (df["20dSTD"] * 2)
+    df["RSI"] = compute_rsi(df["Close"], 14)
 
-    # === Heatmap Signal Status (guaranteed full set) ===
+    df = compute_stochastic(df)
+    df = compute_cmf(df)
+    df = compute_obv(df)
+    df = compute_adx(df)
+    df = compute_atr(df)
+
+    df_for_plotting = df.copy()
+
+    df_signals = df.dropna(subset=[
+        "SMA5", "SMA10", "MACD", "Signal", "Upper", "Lower",
+        "RSI", "Stochastic_%K", "Stochastic_%D",
+        "CMF", "OBV", "ADX", "ATR"
+    ])
+    if df_signals.empty:
+        return {"summary": "⚠️ Not enough data to generate signals."}, df_for_plotting
+
+    latest = df_signals.iloc[-1]
+
+    # === Technical Text Signals for Summary Layer (not used in heatmap) ===
+    sma_trend = "Bullish" if latest["SMA5"] > latest["SMA10"] else "Bearish"
+    macd_signal = "Bullish" if latest["MACD"] > latest["Signal"] else "Bearish"
+    bollinger_signal = (
+        "Above upper band" if latest["Close"] > latest["Upper"]
+        else "Below lower band" if latest["Close"] < latest["Lower"]
+        else "Within band"
+    )
+    rsi_signal = (
+        "Overbought" if latest["RSI"] > 70
+        else "Oversold" if latest["RSI"] < 30
+        else "Neutral"
+    )
+    stochastic_signal = (
+        "Bullish crossover" if latest["Stochastic_%K"] > latest["Stochastic_%D"] and latest["Stochastic_%K"] < 20
+        else "Bearish crossover" if latest["Stochastic_%K"] < latest["Stochastic_%D"] and latest["Stochastic_%K"] > 80
+        else "Neutral"
+    )
+    cmf_signal = (
+        "Buying pressure" if latest["CMF"] > 0
+        else "Selling pressure" if latest["CMF"] < 0
+        else "Neutral"
+    )
+    obv_signal = "Rising" if latest["OBV"] > df["OBV"].iloc[-2] else "Falling"
+    adx_signal = "Strong trend" if latest["ADX"] > 25 else "Weak trend"
+    atr_mean = df["ATR"].mean()
+    atr_signal = "High volatility" if latest["ATR"] > atr_mean else "Low volatility"
+
+    avg_vol = df["Volume"].rolling(window=5).mean().iloc[-1]
+    vol_spike = latest["Volume"] > 1.5 * avg_vol
+
+    summary = {
+        "summary": f"{sma_trend} SMA, {macd_signal} MACD, {rsi_signal} RSI, {bollinger_signal}, "
+                   f"{stochastic_signal} Stochastic, {cmf_signal} CMF, {obv_signal} OBV, "
+                   f"{adx_signal} ADX, {atr_signal} ATR",
+        "sma_trend": sma_trend,
+        "macd_signal": macd_signal,
+        "bollinger_signal": bollinger_signal,
+        "rsi_signal": rsi_signal,
+        "stochastic_signal": stochastic_signal,
+        "cmf_signal": cmf_signal,
+        "obv_signal": obv_signal,
+        "adx_signal": adx_signal,
+        "atr_signal": atr_signal,
+        "vol_spike": vol_spike
+    }
+
+    # === Heatmap Signal Status (all 10 indicators always included) ===
     heatmap_signals = {}
-    risk_score = 0.0
 
     # SMA Trend
-    if "SMA5" in latest and "SMA10" in latest:
-        if latest["SMA5"] > latest["SMA10"]:
-            heatmap_signals["SMA Trend"] = "Bullish"
-        elif latest["SMA5"] < latest["SMA10"]:
-            heatmap_signals["SMA Trend"] = "Bearish"
-        else:
-            heatmap_signals["SMA Trend"] = "Neutral"
-    else:
-        heatmap_signals["SMA Trend"] = "Neutral"
+    heatmap_signals["SMA Trend"] = "Bullish" if latest["SMA5"] > latest["SMA10"] else "Bearish"
 
     # MACD
-    if "MACD" in df.columns and "Signal" in df.columns:
-        macd = df["MACD"].iloc[-1]
-        signal = df["Signal"].iloc[-1]
-        if macd > signal:
-            heatmap_signals["MACD"] = "Bullish Crossover"
-            macd_score = 0
-        else:
-            heatmap_signals["MACD"] = "Bearish Crossover"
-            macd_score = 1
-        risk_score += weights["MACD"] * macd_score
-    else:
-        heatmap_signals["MACD"] = "Neutral"
+    heatmap_signals["MACD"] = "Bullish Crossover" if latest["MACD"] > latest["Signal"] else "Bearish Crossover"
 
     # RSI
-    if "RSI" in latest:
-        rsi = latest["RSI"]
-        if rsi > 70:
-            heatmap_signals["RSI"] = "Overbought"
-            rsi_score = 1
-        elif rsi < 30:
-            heatmap_signals["RSI"] = "Oversold"
-            rsi_score = 0
-        else:
-            heatmap_signals["RSI"] = "Neutral"
-            rsi_score = 0.5
-        risk_score += weights["RSI"] * rsi_score
+    rsi = latest["RSI"]
+    if rsi > 70:
+        heatmap_signals["RSI"] = "Overbought"
+    elif rsi < 30:
+        heatmap_signals["RSI"] = "Oversold"
     else:
         heatmap_signals["RSI"] = "Neutral"
 
     # Volume
     heatmap_signals["Volume"] = "Spike" if vol_spike else "Normal"
-    risk_score += weights["Volume"] * (0.5 if vol_spike else 0)
 
     # ATR
-    if "ATR" in latest:
-        atr = latest["ATR"]
-        atr_avg = df["ATR"].mean()
-        if atr > 1.5 * atr_avg:
-            heatmap_signals["ATR"] = "High Volatility"
-            risk_score += weights["ATR"] * 0.5
-        else:
-            heatmap_signals["ATR"] = "Stable"
-    else:
-        heatmap_signals["ATR"] = "Neutral"
+    atr = latest["ATR"]
+    atr_avg = df["ATR"].mean()
+    heatmap_signals["ATR"] = "High Volatility" if atr > 1.5 * atr_avg else "Stable"
 
     # Pattern
-    pattern_count = len(patterns)
-    if pattern_count > 0:
-        heatmap_signals["Pattern"] = patterns[0]
-        risk_score += weights["Pattern"] * 0.3
-    else:
-        heatmap_signals["Pattern"] = "None"
+    # (Replace with your actual candlestick pattern detection if available)
+    patterns = []  # TODO: integrate detect_candlestick_patterns(df)
+    heatmap_signals["Pattern"] = patterns[0] if patterns else "None"
 
     # ADX
-    if "ADX" in latest:
-        adx = latest["ADX"]
-        if adx > 25:
-            heatmap_signals["ADX"] = "Strong Trend"
-        else:
-            heatmap_signals["ADX"] = "Weak Trend"
-            risk_score += weights["ADX"] * 0.3
-    else:
-        heatmap_signals["ADX"] = "Neutral"
+    heatmap_signals["ADX"] = "Strong Trend" if latest["ADX"] > 25 else "Weak Trend"
 
     # Stochastic
-    if "Stochastic_%K" in latest:
-        stoch = latest["Stochastic_%K"]
-        if stoch > 80:
-            heatmap_signals["Stochastic"] = "Overbought"
-            risk_score += weights["Stochastic"] * 0.5
-        elif stoch < 20:
-            heatmap_signals["Stochastic"] = "Oversold"
-        else:
-            heatmap_signals["Stochastic"] = "Neutral"
+    stoch = latest["Stochastic_%K"]
+    if stoch > 80:
+        heatmap_signals["Stochastic"] = "Overbought"
+    elif stoch < 20:
+        heatmap_signals["Stochastic"] = "Oversold"
     else:
         heatmap_signals["Stochastic"] = "Neutral"
 
     # CMF
-    if "CMF" in latest:
-        cmf = latest["CMF"]
-        if cmf > 0:
-            heatmap_signals["CMF"] = "Buying Pressure"
-        elif cmf < 0:
-            heatmap_signals["CMF"] = "Selling Pressure"
-        else:
-            heatmap_signals["CMF"] = "Neutral"
+    cmf = latest["CMF"]
+    if cmf > 0:
+        heatmap_signals["CMF"] = "Buying Pressure"
+    elif cmf < 0:
+        heatmap_signals["CMF"] = "Selling Pressure"
     else:
         heatmap_signals["CMF"] = "Neutral"
 
     # OBV
-    if "OBV" in latest and len(df) > 1:
-        if latest["OBV"] > df["OBV"].iloc[-2]:
-            heatmap_signals["OBV"] = "Bullish Divergence"
-        elif latest["OBV"] < df["OBV"].iloc[-2]:
-            heatmap_signals["OBV"] = "Bearish Divergence"
-        else:
-            heatmap_signals["OBV"] = "Neutral"
+    if latest["OBV"] > df["OBV"].iloc[-2]:
+        heatmap_signals["OBV"] = "Bullish Divergence"
+    elif latest["OBV"] < df["OBV"].iloc[-2]:
+        heatmap_signals["OBV"] = "Bearish Divergence"
     else:
         heatmap_signals["OBV"] = "Neutral"
 
-    # === Final summary output ===
-    summary["heatmap_signals"] = heatmap_signals
-    summary["composite_risk_score"] = round(risk_score, 2)
-    summary["risk_level"] = (
-        "Low" if risk_score < 0.34 else "Caution" if risk_score < 0.67 else "High"
-    )
-
-    # Attach more analysis as needed (sector, market, etc.)
-    results = {
-        "stock": summary,
-        # Add other analysis blocks here if needed
+    # === Composite Risk Score and Level ===
+    # You may tune these weights as you like for your project
+    weights = {
+        "SMA Trend": 0.1,
+        "MACD": 0.15,
+        "RSI": 0.15,
+        "Volume": 0.1,
+        "ATR": 0.1,
+        "Pattern": 0.1,
+        "ADX": 0.1,
+        "Stochastic": 0.1,
+        "CMF": 0.05,
+        "OBV": 0.05,
     }
-    return results, df
 
-# Reminder: You must implement or import your fetch_data() and patterns module.
+    risk_score = 0
+    # Each indicator can have a numeric mapping for scoring (this is a simple baseline)
+    # For more nuanced scoring, you can expand this mapping or logic per signal
+    risk_mapping = {
+        "Bullish": 0, "Bullish Crossover": 0, "Oversold": 0,
+        "Normal": 0, "Stable": 0, "Strong Trend": 0, "Overbought": 1,
+        "Bearish": 1, "Bearish Crossover": 1, "Spike": 0.5,
+        "Weak Trend": 0.5, "High Volatility": 0.5,
+        "Buying Pressure": 0, "Selling Pressure": 1, "Neutral": 0.5,
+        "Bullish Divergence": 0, "Bearish Divergence": 1,
+        "None": 0.5
+    }
+    for k, v in heatmap_signals.items():
+        risk_score += weights.get(k, 0.1) * risk_mapping.get(v, 0.5)
+    risk_score = round(risk_score, 2)
+    if risk_score < 0.34:
+        risk_level = "Low"
+    elif risk_score < 0.67:
+        risk_level = "Caution"
+    else:
+        risk_level = "High"
+
+    summary["heatmap_signals"] = heatmap_signals
+    summary["composite_risk_score"] = risk_score
+    summary["risk_level"] = risk_level
+
+    return summary, df_for_plotting
 
