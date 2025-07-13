@@ -66,6 +66,15 @@ Shows price movement (candles), trends (SMA), and volatility (Bollinger Bands).
         fig.update_layout(height=500, xaxis_rangeslider_visible=False)
         st.plotly_chart(fig, use_container_width=True)
 
+        # === Pattern Detection ===
+        patterns = results.get("stock", {}).get("patterns", [])
+        if patterns:
+            st.subheader("📌 Detected Candlestick Patterns")
+            st.markdown(
+                ", ".join([f"✅ **{p}**" for p in patterns]) + "\n\n"
+                + "These patterns were detected in the last 3 candles."
+            )
+
         # === RSI ===
         if "RSI" in df.columns:
             st.subheader("📉 RSI (Relative Strength Index)")
@@ -215,6 +224,7 @@ Volume shows how actively a stock is being traded. Sudden spikes may indicate in
             f"🌍 **Global Indices:** {globals_}"
         )
         st.success(final_text)
+
 
 
 
