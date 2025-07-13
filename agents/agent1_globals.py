@@ -13,13 +13,21 @@ def analyze(global_index_tickers: list, horizon: str = "7 Days"):
     bullish, bearish = 0, 0
 
     for idx in global_index_tickers:
-        summary, _ = analyze_stock(idx, horizon)
-        summaries.append(summary)
+        try:
+            summary, _ = analyze_stock(idx, horizon)
+            if summary["sma_trend"] == "N/A":
+                continue
+            summaries.append(summary)
 
-        if summary["sma_trend"].lower() == "bullish":
-            bullish += 1
-        elif summary["sma_trend"].lower() == "bearish":
-            bearish += 1
+            if summary["sma_trend"].lower() == "bullish":
+                bullish += 1
+            elif summary["sma_trend"].lower() == "bearish":
+                bearish += 1
+        except Exception as e:
+            summaries.append({
+                "ticker": idx,
+                "error": str(e)
+            })
 
     if bullish > bearish:
         trend = "Positive global macro outlook"
@@ -34,4 +42,3 @@ def analyze(global_index_tickers: list, horizon: str = "7 Days"):
         "summary": f"{trend} (Bullish: {bullish}, Bearish: {bearish})",
         "details": summaries
     }
-
