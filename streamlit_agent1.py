@@ -3,7 +3,8 @@
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
-from agent1_stock import run_full_technical_analysis, enforce_date_column
+
+from agent1_stock import run_full_technical_analysis, enforce_date_column, get_llm_summary
 
 # === Page Config ===
 st.set_page_config(page_title="Agent 1: AI Technical Analyst", layout="wide")
@@ -39,14 +40,14 @@ df = None
 if st.button("🔍 Run Technical Analysis"):
     with st.spinner("Analyzing..."):
         results, df = run_full_technical_analysis(ticker, selected_horizon)
-        df = enforce_date_column(df)  # <-- Always enforce after analysis!
+        df = enforce_date_column(df)  # Always enforce after analysis!
 
 # Prevent code from breaking if not run
 if df is None or results == {}:
     st.info("Please run the technical analysis to view results.")
     st.stop()
 
-stock_summary = results.get("stock", {})
+stock_summary = results.get("stock", {}) if "stock" in results else results
 
 # === Gather Anomalies for Each Indicator ===
 anomaly_events = stock_summary.get("anomaly_events", [])
@@ -318,7 +319,7 @@ We’ve designed this dashboard to evolve — soon we’ll include:
 
 st.markdown("✅ *SMA Trend, OBV, CMF, and Stochastic signals are now integrated into the dashboard for a fuller view of risk.*")
 
-# === Summary Layers ===
+# === Technical Summary ===
 st.subheader("🧠 Technical Summary (Agent 1)")
 st.markdown("**📌 Stock-Level Analysis (Agent 1.0):**")
 stock_text = (
@@ -335,31 +336,13 @@ stock_text = (
 )
 st.markdown(stock_text)
 
-st.markdown("**🏭 Sector Analysis (Agent 1.1):**")
-st.info(results.get("sector", {}).get("summary", "No data."))
+# === LLM Commentary ===
+api_key = st.secrets["OPENAI_API_KEY"]
+if st.button("🧠 Generate LLM Analysis"):
+    with st.spinner("Agent 1 is thinking..."):
+        llm_summary = get_llm_summary(stock_summary, api_key)
+    st.subheader("🧠 LLM-Powered Analyst Commentary")
+    st.write(llm_summary)
 
-st.markdown("**📊 Market Index (Agent 1.2):**")
-st.info(results.get("market", {}).get("summary", "No data."))
-
-st.markdown("**🛢️ Commodities (Agent 1.3):**")
-st.info(results.get("commodities", {}).get("summary", "No data."))
-
-st.markdown("**🌍 Global Indices (Agent 1.4):**")
-st.info(results.get("globals", {}).get("summary", "No data."))
-
-# === Final Outlook ===
-st.markdown("### ✅ Final Technical Outlook")
-stock = results.get("stock", {}).get("summary", "")
-sector = results.get("sector", {}).get("summary", "")
-market = results.get("market", {}).get("summary", "")
-commodities = results.get("commodities", {}).get("summary", "")
-globals_ = results.get("globals", {}).get("summary", "")
-final_text = (
-    f"📌 **Stock:** {stock}  \n"
-    f"📊 **Sector:** {sector}  \n"
-    f"📈 **Market Index:** {market}  \n"
-    f"🛢️ **Commodities:** {commodities}  \n"
-    f"🌍 **Global Indices:** {globals_}"
-)
-st.success(final_text)
+# (You may continue with Sector/Market/Commodities/Global summaries as in your full version)
 
