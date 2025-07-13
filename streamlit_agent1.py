@@ -2,7 +2,8 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 
-from agents.agent1_stock import run_full_technical_analysis, enforce_date_column, get_llm_summary
+from agents.agent1_core import run_full_technical_analysis
+from agents.agent1_stock import enforce_date_column, get_llm_summary
 
 st.set_page_config(page_title="Agent 1: AI Technical Analyst", layout="wide")
 
