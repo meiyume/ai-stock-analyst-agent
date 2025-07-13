@@ -15,17 +15,25 @@ if st.button("Run Technical Analysis"):
 
         if df is not None and not df.empty:
             df = df.reset_index()
-            if "Date" not in df.columns:
-                df.columns.values[0] = "Date"  # ✅ force the first column to be 'Date'
 
-            st.subheader("📈 Price and SMA Trends")
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=df["Date"], y=df["Close"], mode="lines", name="Close"))
-            if "SMA5" in df.columns:
-                fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA5"], mode="lines", name="SMA5"))
-            if "SMA10" in df.columns:
-                fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA10"], mode="lines", name="SMA10"))
-            st.plotly_chart(fig, use_container_width=True)
+            if "Date" not in df.columns:
+                original_columns = df.columns.tolist()
+                df.columns = ["Date"] + original_columns[1:]
+                st.warning(f"⚠️ Renamed columns for plotting: {original_columns} → {df.columns.tolist()}")
+
+            if "Date" in df.columns:
+                st.subheader("📈 Candlestick Chart with SMA & Bollinger Bands")
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=df["Date"], y=df["Close"], mode="lines", name="Close"))
+                if "SMA5" in df.columns:
+                    fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA5"], mode="lines", name="SMA5"))
+                if "SMA10" in df.columns:
+                    fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA10"], mode="lines", name="SMA10"))
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.error("❌ 'Date' column still missing. Columns available: " + str(df.columns.tolist()))
+        else:
+            st.warning("⚠️ No data returned for the selected ticker and horizon.")
 
         st.subheader("🧠 Technical Summary (Agent 1)")
         st.json(results)
