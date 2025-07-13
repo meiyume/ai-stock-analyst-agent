@@ -59,9 +59,9 @@ st.plotly_chart(fig, use_container_width=True)
 patterns = results.get("stock", {}).get("patterns", [])
 st.subheader("📌 Detected Candlestick Patterns")
 if patterns:
-st.markdown(
-", ".join([f"✅ **{p}**" for p in patterns]) + "\n\n"
-+ "These patterns were detected in the last 3 candles."
+    st.markdown(
+        ", ".join([f"✅ **{p}**" for p in patterns]) + "\n\n"
+        + "These patterns were detected in the last 3 candles."
 )
 else:
 st.info("No recognizable candlestick patterns detected in the last 3 candles.")
