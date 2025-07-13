@@ -219,25 +219,29 @@ Volume shows how actively a stock is being traded. Sudden spikes may indicate in
         risk_score = stock_summary.get("composite_risk_score", None)
         risk_level = stock_summary.get("risk_level", None)
 
-        if heatmap:
-            st.markdown("#### 🔍 Current Signal Status")
-            cols = st.columns(len(heatmap))
-            for i, (indicator, status) in enumerate(heatmap.items()):
-                color = "🟢"
-                if "Overbought" in status or "Bearish" in status:
-                    color = "🔴"
-                elif "Spike" in status or "High" in status:
-                    color = "🟠"
-                elif "Oversold" in status or "Bullish" in status:
-                    color = "🟢"
-                elif "Weak" in status:
-                    color = "🟡"
-                elif "None" in status:
-                    color = "⚪"
-                cols[i].markdown(f"<div style='background-color:#ffffff;padding:10px;border-radius:10px;text-align:center;'><b>{indicator}</b><br>{color} {status}</div>", unsafe_allow_html=True)
+        
+if heatmap:
+    st.markdown("#### 🔍 Current Signal Status")
+    cols = st.columns(len(heatmap))
+    for i, (indicator, status) in enumerate(heatmap.items()):
+        if "Overbought" in status or "Bearish" in status or "Selling" in status or "Divergence" in status:
+            color = "🔴"
+        elif "Spike" in status or "High" in status or "Oversold" in status:
+            color = "🟠"
+        elif "Bullish" in status or "Buying" in status or "Strong" in status:
+            color = "🟢"
+        elif "Neutral" in status or "None" in status:
+            color = "⚪"
+        else:
+            color = "🟡"
 
-        if risk_score is not None and risk_level is not None:
-            st.markdown("#### 📊 Composite Risk Evaluation")
+        cols[i].markdown(
+            f"<div style='background-color:#ffffff;padding:10px;border-radius:10px;text-align:center;'>"
+            f"<b>{indicator}</b><br>{color} {status}</div>",
+            unsafe_allow_html=True
+        )
+
+    
             st.markdown(f"**Composite Risk Score**: `{risk_score}`")
             st.markdown(f"**Overall Risk Level**: 🎯 **{risk_level}**")
         st.markdown("""
@@ -280,7 +284,7 @@ Volume shows how actively a stock is being traded. Sudden spikes may indicate in
         """, unsafe_allow_html=True)
 
 
-        st.markdown("✳️ *Additional indicators such as SMA Trend, OBV, and CMF will be integrated soon for a more comprehensive view.*")
+        st.markdown("✅ *SMA Trend, OBV, CMF, and Stochastic signals are now integrated into the dashboard for a fuller view of risk.*")
         # === Summary Layers ===
         st.subheader("🧠 Technical Summary (Agent 1)")
 
