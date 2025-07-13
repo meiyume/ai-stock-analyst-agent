@@ -162,5 +162,20 @@ Volume shows how actively a stock is being traded. Sudden spikes may indicate in
 
         # === Final Outlook ===
         st.markdown("### ✅ Final Technical Outlook")
-        st.success(results.get("final_summary", "No summary available."))
+        
+        stock = results.get("stock", {}).get("summary", "")
+        sector = results.get("sector", {}).get("summary", "")
+        market = results.get("market", {}).get("summary", "")
+        commodities = results.get("commodities", {}).get("summary", "")
+        globals_ = results.get("globals", {}).get("summary", "")
+        
+        final_text = (
+            f"📌 **Stock:** {stock}  \n"
+            f"📊 **Sector:** {sector}  \n"
+            f"📈 **Market Index:** {market}  \n"
+            f"🛢️ **Commodities:** {commodities}  \n"
+            f"🌍 **Global Indices:** {globals_}"
+        )
+        
+        st.success(final_text)
 
