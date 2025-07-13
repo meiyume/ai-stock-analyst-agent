@@ -70,19 +70,19 @@ st.subheader("🚨 Anomaly Alerts (Experimental)")
 anomalies = []
 stock_summary = results.get("stock", {})
 if stock_summary.get("rsi_spike"):
-anomalies.append("⚠️ **RSI Spike** detected — large momentum shift.")
+    anomalies.append("⚠️ **RSI Spike** detected — large momentum shift.")
 if stock_summary.get("price_gap"):
-anomalies.append("⚠️ **Price Gap** between yesterday's close and today's open.")
+    anomalies.append("⚠️ **Price Gap** between yesterday's close and today's open.")
 if stock_summary.get("macd_spike"):
-anomalies.append("⚠️ **MACD Crossover Spike** — potential trend reversal.")
+    anomalies.append("⚠️ **MACD Crossover Spike** — potential trend reversal.")
 if anomalies:
-for alert in anomalies:
+    for alert in anomalies:
 st.warning(alert)
 else:
     st.info("No anomalies detected today. 📈")
 # === RSI ===
 if "RSI" in df.columns:
-st.subheader("📉 RSI (Relative Strength Index)")
+    st.subheader("📉 RSI (Relative Strength Index)")
 st.markdown("""
 RSI measures the speed and magnitude of recent price changes on a 0–100 scale.
 - If RSI > 70: The stock may be **overbought**, potentially due for a pullback.
@@ -94,7 +94,7 @@ rsi_fig.update_layout(yaxis_range=[0, 100], height=250)
 st.plotly_chart(rsi_fig, use_container_width=True)
 # === MACD ===
 if "MACD" in df.columns and "Signal" in df.columns:
-st.subheader("📈 MACD (Moving Average Convergence Divergence)")
+    st.subheader("📈 MACD (Moving Average Convergence Divergence)")
 st.markdown("""
 MACD helps identify trend strength and direction.
 - **MACD Line vs Signal Line**: When the MACD crosses **above** the Signal line, it’s a **bullish signal**. When it crosses **below**, it’s **bearish**.
@@ -105,7 +105,7 @@ macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["Signal"], name="Signal"))
 st.plotly_chart(macd_fig, use_container_width=True)
 # === Stochastic Oscillator ===
 if "Stochastic_%K" in df.columns:
-st.subheader("⚡ Stochastic Oscillator")
+    st.subheader("⚡ Stochastic Oscillator")
 st.markdown("""
 The Stochastic Oscillator compares a stock’s closing price to its price range over a certain period.
 - **%K Line and %D Line**: When %K crosses above %D and both are below 20, it may signal a **bullish reversal**. If they’re above 80 and %K drops below %D, it could indicate **bearish** pressure.
@@ -116,7 +116,7 @@ stoch_fig.add_trace(go.Scatter(x=df["Date"], y=df["Stochastic_%D"], name="Stoch 
 st.plotly_chart(stoch_fig, use_container_width=True)
 # === CMF ===
 if "CMF" in df.columns:
-st.subheader("💰 Chaikin Money Flow (CMF)")
+    st.subheader("💰 Chaikin Money Flow (CMF)")
 st.markdown("""
 CMF measures money flow volume over time to assess buying/selling pressure.
 - A **positive CMF** suggests accumulation (buying).
@@ -127,7 +127,7 @@ cmf_fig.add_trace(go.Scatter(x=df["Date"], y=df["CMF"], name="CMF"))
 st.plotly_chart(cmf_fig, use_container_width=True)
 # === OBV ===
 if "OBV" in df.columns:
-st.subheader("🔄 On-Balance Volume (OBV)")
+    st.subheader("🔄 On-Balance Volume (OBV)")
 st.markdown("""
 OBV adds or subtracts volume based on whether the price closes higher or lower.
 - **Rising OBV with rising price** confirms a **bullish trend**.
@@ -138,7 +138,7 @@ obv_fig.add_trace(go.Scatter(x=df["Date"], y=df["OBV"], name="OBV"))
 st.plotly_chart(obv_fig, use_container_width=True)
 # === ADX ===
 if "ADX" in df.columns:
-st.subheader("📊 ADX (Average Directional Index)")
+    st.subheader("📊 ADX (Average Directional Index)")
 st.markdown("""
 ADX measures the **strength** of a trend, regardless of direction. 
 - **ADX > 25**: A strong trend is present (bull or bear).
@@ -150,7 +150,7 @@ adx_fig.update_layout(yaxis_range=[0, 100], height=250)
 st.plotly_chart(adx_fig, use_container_width=True)
 # === ATR ===
 if "ATR" in df.columns:
-st.subheader("📉 ATR (Average True Range)")
+    st.subheader("📉 ATR (Average True Range)")
 st.markdown("""
 ATR measures **volatility** — how much a stock moves day to day.
 - High ATR: Stock is making big moves (can be risky or offer opportunity).
@@ -161,7 +161,7 @@ atr_fig.add_trace(go.Scatter(x=df["Date"], y=df["ATR"], name="ATR"))
 st.plotly_chart(atr_fig, use_container_width=True)
 # === Volume ===
 if "Volume" in df.columns:
-st.subheader("📊 Volume")
+    st.subheader("📊 Volume")
 st.markdown("""
 Volume shows how actively a stock is being traded. Sudden spikes may indicate institutional activity or major news.
 """)
@@ -186,11 +186,11 @@ heatmap = stock_summary.get("heatmap_signals", {})
 risk_score = stock_summary.get("composite_risk_score", None)
 risk_level = stock_summary.get("risk_level", None)
 if heatmap:
-st.markdown("#### 🔍 Current Signal Status")
+    st.markdown("#### 🔍 Current Signal Status")
 cols = st.columns(len(heatmap))
 for i, (indicator, status) in enumerate(heatmap.items()):
 if "Overbought" in status or "Bearish" in status or "Selling" in status or "Divergence" in status:
-color = "🔴"
+    color = "🔴"
 elif "Spike" in status or "High" in status or "Oversold" in status:
 color = "🟠"
 elif "Bullish" in status or "Buying" in status or "Strong" in status:
