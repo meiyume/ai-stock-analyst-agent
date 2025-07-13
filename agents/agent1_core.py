@@ -1,33 +1,91 @@
-# agents/agent1_core.py
+# agent1_core.py
 
-import yfinance as yf
-from llm_config_agent import generate_meta_config
 from agents.agent1_stock import analyze as analyze_stock
 from agents.agent1_sector import analyze as analyze_sector
 from agents.agent1_market import analyze as analyze_market
 from agents.agent1_commodities import analyze as analyze_commodities
 from agents.agent1_globals import analyze as analyze_globals
+from llm_config_agent import generate_meta_config
 
 def run_full_technical_analysis(ticker: str, horizon: str = "7 Days"):
-    company_name = yf.Ticker(ticker).info.get("longName", ticker)
-    meta = generate_meta_config(ticker, company_name)
+    config = generate_meta_config(ticker)
 
-    results = {}
-    stock_summary, stock_df = analyze_stock(ticker, horizon)
-    results["stock"] = stock_summary
+    # === Agent 1.0: Stock-Level Technical Analysis ===
+    stock_summary, df = analyze_stock(ticker, horizon)
 
-    results["sector"] = analyze_sector(meta.get("sector_peers", []), horizon)
-    results["market"] = analyze_market(meta.get("market_index", "^STI"), horizon)
-    results["commodities"] = analyze_commodities(meta.get("commodities", []), horizon)
-    results["globals"] = analyze_globals(meta.get("globals", []), horizon)
+    # === Agent 1.1: Sector Peers ===
+    sector_summary = {
+        "agent": "1.1",
+        "tickers": config["sector"],
+        "summary": "N/A",
+        "details": []
+    }
+    bullish, bearish = 0, 0
+    for peer in config["sector"]:
+        result, _ = analyze_stock(peer, horizon)
+        if result["sma_trend"] == "Bullish":
+            bullish += 1
+        elif result["sma_trend"] == "Bearish":
+            bearish += 1
+        sector_summary["details"].append(result)
+    sector_summary["summary"] = f"Bullish sector outlook (Bullish: {bullish}, Bearish: {bearish})"
 
-    # === Final summary string
-    combined_summary = f"### 🔎 Final Technical Outlook for {ticker} ({horizon}):\n\n"
-    combined_summary += f"- 📈 Stock: {stock_summary['summary']}\n"
-    combined_summary += f"- 🏭 Sector: {results['sector'].get('summary')}\n"
-    combined_summary += f"- 📊 Market: {results['market'].get('summary')}\n"
-    combined_summary += f"- 🛢️ Commodities: {results['commodities'].get('summary')}\n"
-    combined_summary += f"- 🌍 Global: {results['globals'].get('summary')}\n"
+    # === Agent 1.2: Market Index ===
+    market_summary, _ = analyze_market(config["market"], horizon)
 
-    results["final_summary"] = combined_summary
-    return results, stock_df
+    # === Agent 1.3: Commodities ===
+    commodity_summary = {
+        "agent": "1.3",
+        "tickers": config["commodities"],
+        "summary": "N/A",
+        "details": []
+    }
+    bull, bear = 0, 0
+    for com in config["commodities"]:
+        result, _ = analyze_stock(com, horizon)
+        if result["sma_trend"] == "Bullish":
+            bull += 1
+        elif result["sma_trend"] == "Bearish":
+            bear += 1
+        commodity_summary["details"].append(result)
+    commodity_summary["summary"] = f"Neutral impact. (Bullish: {bull}, Bearish: {bear})"
+
+    # === Agent 1.4: Global Indices ===
+    global_summary = {
+        "agent": "1.4",
+        "tickers": config["globals"],
+        "summary": "N/A",
+        "details": []
+    }
+    bull, bear = 0, 0
+    for idx in config["globals"]:
+        result, _ = analyze_stock(idx, horizon)
+        if result["sma_trend"] == "Bullish":
+            bull += 1
+        elif result["sma_trend"] == "Bearish":
+            bear += 1
+        global_summary["details"].append(result)
+    global_summary["summary"] = f"Negative global macro outlook (Bullish: {bull}, Bearish: {bear})"
+
+    # === Final Layered Summary ===
+    final_summary = f"""### 🔎 Final Technical Outlook for {ticker} ({horizon}):
+- 📈 Stock: {stock_summary['summary']}
+- 🏭 Sector: {sector_summary['summary']}
+- 📊 Market: {market_summary['summary']}
+- 🛢️ Commodities: {commodity_summary['summary']}
+- 🌍 Global: {global_summary['summary']}
+"""
+
+    return {
+        "stock": stock_summary,
+        "sector": sector_summary,
+        "market": {
+            "agent": "1.2",
+            "target": config["market"],
+            "summary": market_summary["summary"],
+            "details": market_summary
+        },
+        "commodities": commodity_summary,
+        "globals": global_summary,
+        "final_summary": final_summary
+    }, df
