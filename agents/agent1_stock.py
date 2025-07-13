@@ -375,11 +375,13 @@ Based on the following technical signals and anomalies, do the following:
 - First, write a detailed summary for technical readers (using precise, professional terminology and concise reasoning). For each indicator, explain not just the signal, but also why it matters right now. Connect supporting indicators together (e.g., “Rising OBV + bullish MACD reinforces uptrend…”). Summarize the overall risk or opportunity, and recommend what a technical analyst should watch for in the next few sessions. Include actionable insight or a forward-looking caution. Use a confident, objective tone. 
 - Explicitly frame all your conclusions and recommendations in terms of the provided outlook horizon: {signals.get('horizon', 'the next few days')}.
 - Then, write a second summary for non-technical readers. Imagine you are explaining it to a grandparent with no finance background:
+    - Start your summary with this phrase (customized for the horizon): "If you are looking at this stock outlook over {signals.get('horizon', 'the next few days')}, here’s what you should know:"
     - Avoid technical terms and acronyms unless you give a short, simple explanation.
     - Use analogies and plain language.
     - Give gentle, practical advice for someone considering buying or selling for the chosen outlook horizon ({signals.get('horizon', 'the next few days')}).
     - Clearly mention if things look good for buying, if caution is advised, or if it might be wise to hold off, and explain why in simple terms.
-    - Focus on helping the reader make a simple decision for the chosen time frame, and always explain the risk in plain language.
+    - Focus on helping the reader make a simple decision for the chosen time frame, but let them decide if they want to buy or sell based on their own needs and comfort.
+    - Always explain the risk in plain language.
     - Make it warm, clear, and friendly.
     - Absolutely no jargon!
     - Be sure your advice is specific to the provided outlook horizon.
