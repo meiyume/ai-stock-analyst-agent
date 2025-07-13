@@ -5,6 +5,21 @@ import pandas as pd
 import numpy as np
 import re
 
+def enforce_date_column(df):
+    """
+    Ensures DataFrame has a 'Date' column of dtype datetime64[ns], sorted, and unique.
+    """
+    if 'Date' not in df.columns:
+        df = df.reset_index()
+        possible = [col for col in df.columns if 'date' in col.lower() or 'time' in col.lower()]
+        if possible and possible[0] != 'Date':
+            df.rename(columns={possible[0]: 'Date'}, inplace=True)
+        elif 'Date' not in df.columns:
+            df['Date'] = pd.to_datetime(df.index)
+    df['Date'] = pd.to_datetime(df['Date'])
+    df = df.sort_values('Date').drop_duplicates('Date').reset_index(drop=True)
+    return df
+
 def decide_history_period(horizon: str, ticker: str, use_llm: bool = False) -> str:
     if use_llm:
         return "60d"
@@ -94,7 +109,7 @@ def detect_patterns(df):
 
 def scan_all_anomalies(df):
     events = []
-    df = df.reset_index()  # Ensure Date column is present
+    df = enforce_date_column(df)
     for i in range(1, len(df)):
         date = df["Date"].iloc[i]
 
@@ -137,7 +152,7 @@ def analyze(ticker: str, horizon: str = "7 Days"):
     history_period = decide_history_period(horizon, ticker, use_llm=False)
     stock = yf.Ticker(ticker)
     df = stock.history(period=history_period, interval="1d")
-    df = df.reset_index()
+    df = enforce_date_column(df)
     if df.empty:
         return {
             "summary": f"⚠️ No data available for {ticker}.",
@@ -349,4 +364,3 @@ def analyze(ticker: str, horizon: str = "7 Days"):
 
 def run_full_technical_analysis(ticker, horizon):
     return analyze(ticker, horizon)
-
