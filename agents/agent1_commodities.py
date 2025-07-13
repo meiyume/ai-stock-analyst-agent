@@ -13,13 +13,21 @@ def analyze(commodity_tickers: list, horizon: str = "7 Days"):
     rising, falling = 0, 0
 
     for com in commodity_tickers:
-        summary, _ = analyze_stock(com, horizon)
-        summaries.append(summary)
+        try:
+            summary, _ = analyze_stock(com, horizon)
+            if summary["sma_trend"] == "N/A":
+                continue  # Skip invalid or no-data tickers
+            summaries.append(summary)
 
-        if summary["sma_trend"].lower() == "bullish":
-            rising += 1
-        elif summary["sma_trend"].lower() == "bearish":
-            falling += 1
+            if summary["sma_trend"].lower() == "bullish":
+                rising += 1
+            elif summary["sma_trend"].lower() == "bearish":
+                falling += 1
+        except Exception as e:
+            summaries.append({
+                "ticker": com,
+                "error": str(e)
+            })
 
     if rising > falling:
         effect = "Negative impact (rising commodity prices)"
