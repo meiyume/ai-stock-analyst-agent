@@ -69,10 +69,53 @@ def compute_atr(df, period=14):
     df['ATR'] = df['TR'].rolling(window=period).mean()
     return df
 
+# === Candlestick Pattern Detection ===
+def detect_candlestick_patterns(df):
+    patterns = []
+    if len(df) < 2:
+        return patterns
+    last = df.iloc[-1]
+    prev = df.iloc[-2]
+
+    # Doji
+    body = abs(last['Open'] - last['Close'])
+    candle_range = last['High'] - last['Low']
+    if candle_range > 0 and body / candle_range < 0.1:
+        patterns.append("Doji")
+
+    # Bullish Engulfing
+    if (last['Close'] > last['Open']) and (prev['Close'] < prev['Open']) and \
+       (last['Open'] < prev['Close']) and (last['Close'] > prev['Open']):
+        patterns.append("Bullish Engulfing")
+
+    # Bearish Engulfing
+    if (last['Close'] < last['Open']) and (prev['Close'] > prev['Open']) and \
+       (last['Open'] > prev['Close']) and (last['Close'] < prev['Open']):
+        patterns.append("Bearish Engulfing")
+
+    # Add more as desired!
+    return patterns
+
+# === Anomaly Detection ===
+def detect_anomalies(df):
+    anomalies = []
+    if len(df) < 2:
+        return anomalies
+    # RSI Spike
+    if abs(df['RSI'].iloc[-1] - df['RSI'].iloc[-2]) > 15:
+        anomalies.append("RSI Spike")
+    # MACD Spike
+    if abs(df['MACD'].iloc[-1] - df['MACD'].iloc[-2]) > 0.5:
+        anomalies.append("MACD Spike")
+    # Price Gap
+    if abs(df['Open'].iloc[-1] - df['Close'].iloc[-2]) > 0.02 * df['Close'].iloc[-2]:
+        anomalies.append("Price Gap")
+    return anomalies
+
 # === Main Analysis ===
 def analyze(ticker: str, horizon: str = "7 Days"):
     stock = yf.Ticker(ticker)
-    df = stock.history(period="180d", interval="1d")  # or call your history selector if implemented
+    df = stock.history(period="180d", interval="1d")
 
     if df.empty:
         return {
@@ -86,7 +129,9 @@ def analyze(ticker: str, horizon: str = "7 Days"):
             "obv_signal": "N/A",
             "adx_signal": "N/A",
             "atr_signal": "N/A",
-            "vol_spike": False
+            "vol_spike": False,
+            "patterns": [],
+            "anomalies": []
         }, df
 
     df["SMA5"] = df["Close"].rolling(window=5).mean()
@@ -149,6 +194,10 @@ def analyze(ticker: str, horizon: str = "7 Days"):
     avg_vol = df["Volume"].rolling(window=5).mean().iloc[-1]
     vol_spike = latest["Volume"] > 1.5 * avg_vol
 
+    # === Pattern and Anomaly Detection ===
+    patterns = detect_candlestick_patterns(df_signals)
+    anomalies = detect_anomalies(df_signals)
+
     summary = {
         "summary": f"{sma_trend} SMA, {macd_signal} MACD, {rsi_signal} RSI, {bollinger_signal}, "
                    f"{stochastic_signal} Stochastic, {cmf_signal} CMF, {obv_signal} OBV, "
@@ -162,7 +211,9 @@ def analyze(ticker: str, horizon: str = "7 Days"):
         "obv_signal": obv_signal,
         "adx_signal": adx_signal,
         "atr_signal": atr_signal,
-        "vol_spike": vol_spike
+        "vol_spike": vol_spike,
+        "patterns": patterns,
+        "anomalies": anomalies
     }
 
     # === Heatmap Signal Status (all 10 indicators always included) ===
@@ -192,8 +243,6 @@ def analyze(ticker: str, horizon: str = "7 Days"):
     heatmap_signals["ATR"] = "High Volatility" if atr > 1.5 * atr_avg else "Stable"
 
     # Pattern
-    # (Replace with your actual candlestick pattern detection if available)
-    patterns = []  # TODO: integrate detect_candlestick_patterns(df)
     heatmap_signals["Pattern"] = patterns[0] if patterns else "None"
 
     # ADX
@@ -226,7 +275,6 @@ def analyze(ticker: str, horizon: str = "7 Days"):
         heatmap_signals["OBV"] = "Neutral"
 
     # === Composite Risk Score and Level ===
-    # You may tune these weights as you like for your project
     weights = {
         "SMA Trend": 0.1,
         "MACD": 0.15,
@@ -241,8 +289,6 @@ def analyze(ticker: str, horizon: str = "7 Days"):
     }
 
     risk_score = 0
-    # Each indicator can have a numeric mapping for scoring (this is a simple baseline)
-    # For more nuanced scoring, you can expand this mapping or logic per signal
     risk_mapping = {
         "Bullish": 0, "Bullish Crossover": 0, "Oversold": 0,
         "Normal": 0, "Stable": 0, "Strong Trend": 0, "Overbought": 1,
@@ -267,4 +313,5 @@ def analyze(ticker: str, horizon: str = "7 Days"):
     summary["risk_level"] = risk_level
 
     return summary, df_for_plotting
+
 
