@@ -368,7 +368,7 @@ def run_full_technical_analysis(ticker, horizon):
 
 def get_llm_summary(signals, api_key):
     client = OpenAI(api_key=api_key)
-    prompt = f"""You are an expert technical analyst. Based on the following technical signals and anomalies, explain the overall risk and key factors for this stock in clear, professional, but plain language. Highlight any urgent red flags or bullish factors.
+    prompt = f"""You are an expert technical analyst. Based on the following technical signals and anomalies, first write a summary for technical readers (using correct terminology and concise reasoning). Then, write a second summary for non-technical readers (explain in plain, simple language for someone like a grandparent).
 
 Signals:
 SMA Trend: {signals.get('sma_trend')}
@@ -384,11 +384,14 @@ Volume Spike: {signals.get('vol_spike')}
 Candlestick Patterns: {signals.get('patterns')}
 Key Anomalies: {signals.get('anomaly_events')}
 
-Summary:"""
+Write two separate sections, clearly labeled:
+1. For Technical Readers
+2. For Grandmas and Grandpas
+"""
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=300,
+        max_tokens=400,
         temperature=0.6,
     )
     return response.choices[0].message.content.strip()
