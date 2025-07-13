@@ -12,13 +12,11 @@ import re
 # === Intelligent History Selector ===
 def decide_history_period(horizon: str, ticker: str, use_llm: bool = False) -> str:
     if use_llm:
-        # Simulated LLM response logic
         prompt = f"""
         You are Agent 1, a technical analysis expert. Agent 2 has requested a stock forecast for the next {horizon}.
         How many days of historical data would you like to compute relevant indicators (e.g. MACD, RSI, ADX)?
         Reply only with a single number like: 60
         """
-        # Placeholder: Replace with actual LLM call
         print("🔮 Using LLM to decide historical lookback...")
         simulated_response = "60"
         try:
@@ -27,7 +25,6 @@ def decide_history_period(horizon: str, ticker: str, use_llm: bool = False) -> s
         except:
             return "90d"
     else:
-        # Fallback rule-based map
         map_lookup = {
             "1 Day": "30d",
             "3 Days": "45d",
@@ -102,7 +99,42 @@ def compute_atr(df, period=14):
     df['ATR'] = df['TR'].rolling(window=period).mean()
     return df
 
-# === Main Analysis ===
+# === Candlestick Pattern Detection ===
+def detect_candlestick_patterns(df):
+    patterns = []
+    lookback = df.tail(3).copy()
+
+    for i in range(1, len(lookback)):
+        today = lookback.iloc[i]
+        prev = lookback.iloc[i - 1]
+
+        open_ = today["Open"]
+        close = today["Close"]
+        high = today["High"]
+        low = today["Low"]
+        body = abs(close - open_)
+        range_ = high - low
+        upper_wick = high - max(open_, close)
+        lower_wick = min(open_, close) - low
+
+        if body < 0.1 * range_:
+            patterns.append("Doji")
+
+        if body > 0 and lower_wick > 2 * body and upper_wick < body:
+            patterns.append("Hammer")
+
+        if body > 0 and upper_wick > 2 * body and lower_wick < body:
+            patterns.append("Shooting Star")
+
+        if prev["Close"] < prev["Open"] and close > open_ and close > prev["Open"] and open_ < prev["Close"]:
+            patterns.append("Bullish Engulfing")
+
+        if prev["Close"] > prev["Open"] and close < open_ and open_ > prev["Close"] and close < prev["Open"]:
+            patterns.append("Bearish Engulfing")
+
+    return list(set(patterns))
+
+# === Main Agent 1 Logic ===
 def analyze(ticker: str, horizon: str = "7 Days"):
     history_period = decide_history_period(horizon, ticker, use_llm=False)
     stock = yf.Ticker(ticker)
@@ -120,7 +152,8 @@ def analyze(ticker: str, horizon: str = "7 Days"):
             "obv_signal": "N/A",
             "adx_signal": "N/A",
             "atr_signal": "N/A",
-            "vol_spike": False
+            "vol_spike": False,
+            "patterns": []
         }, df
 
     df["SMA5"] = df["Close"].rolling(window=5).mean()
@@ -182,6 +215,8 @@ def analyze(ticker: str, horizon: str = "7 Days"):
     avg_vol = df["Volume"].rolling(window=5).mean().iloc[-1]
     vol_spike = latest["Volume"] > 1.5 * avg_vol
 
+    candlestick_patterns = detect_candlestick_patterns(df_signals)
+
     summary = {
         "summary": f"{sma_trend} SMA, {macd_signal} MACD, {rsi_signal} RSI, {bollinger_signal}, "
                    f"{stochastic_signal} Stochastic, {cmf_signal} CMF, {obv_signal} OBV, "
@@ -195,7 +230,8 @@ def analyze(ticker: str, horizon: str = "7 Days"):
         "obv_signal": obv_signal,
         "adx_signal": adx_signal,
         "atr_signal": atr_signal,
-        "vol_spike": vol_spike
+        "vol_spike": vol_spike,
+        "patterns": candlestick_patterns
     }
 
     return summary, df_for_plotting
