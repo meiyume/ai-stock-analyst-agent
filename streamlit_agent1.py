@@ -53,8 +53,8 @@ if st.button("🔍 Run Technical Analysis"):
         The Bollinger Bands are two dotted lines that expand and contract around the price: They measure volatility, or how wildly the price is moving. The middle line is usually 
         the 20-day average; the upper and lower bands are 2 standard deviations away. If prices move close to or above the upper band, it might signal the stock is overbought (too expensive).
         If they touch or drop below the lower band, it may mean the stock is oversold (possibly undervalued).
-        Together, this chart helps you see trend direction, market sentiment, volatility and extremes to make smarter decisions on when to buy or sell.                   
-                   ")
+        Together, this chart helps you see trend direction, market sentiment, volatility and extremes to make smarter decisions on when to buy or sell. 
+        ")
         fig = go.Figure()
         fig.add_trace(go.Candlestick(
             x=df["Date"],
