@@ -220,7 +220,7 @@ Volume shows how actively a stock is being traded. Sudden spikes may indicate in
                     color = "🟡"
                 elif "None" in status:
                     color = "⚪"
-                cols[i].markdown(f"**{indicator}**  \n{color} {status}")  
+                cols[i].markdown(f"**{indicator}**  
 {color} {status}")
 
         if risk_score is not None and risk_level is not None:
