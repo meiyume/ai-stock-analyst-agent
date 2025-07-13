@@ -2,18 +2,17 @@
 
 from agents.agent1_stock import analyze as analyze_stock
 
-# === Default global indices per stock ===
-GLOBAL_INDICES_MAP = {
-    "U11.SI": ["^DJI", "^N225", "^HSI"],  # Dow, Nikkei, Hang Seng
-    # Add more stock → global index maps if needed
-}
+def analyze(global_index_tickers: list, horizon: str = "7 Days"):
+    if not global_index_tickers:
+        return {
+            "agent": "1.4",
+            "summary": "No global indices provided."
+        }
 
-def analyze(ticker: str, horizon: str = "7 Days"):
-    indices = GLOBAL_INDICES_MAP.get(ticker, ["^DJI", "^N225", "^HSI"])
     summaries = []
     bullish, bearish = 0, 0
 
-    for idx in indices:
+    for idx in global_index_tickers:
         summary, _ = analyze_stock(idx, horizon)
         summaries.append(summary)
 
@@ -23,20 +22,16 @@ def analyze(ticker: str, horizon: str = "7 Days"):
             bearish += 1
 
     if bullish > bearish:
-        sentiment = "Global macro sentiment is positive"
+        trend = "Positive global macro outlook"
     elif bearish > bullish:
-        sentiment = "Global macro sentiment is negative"
+        trend = "Negative global macro outlook"
     else:
-        sentiment = "Global macro sentiment is neutral"
-
-    summary_text = (
-        f"Analyzed {len(indices)} major global indices. "
-        f"{sentiment} (Bullish: {bullish}, Bearish: {bearish})"
-    )
+        trend = "Neutral global macro outlook"
 
     return {
         "agent": "1.4",
-        "target_indices": indices,
-        "summary": summary_text,
+        "tickers": global_index_tickers,
+        "summary": f"{trend} (Bullish: {bullish}, Bearish: {bearish})",
         "details": summaries
     }
+
