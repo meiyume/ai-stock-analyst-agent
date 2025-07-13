@@ -4,6 +4,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import re
+from openai import OpenAI  # <-- Modern OpenAI SDK v1 import
 
 def enforce_date_column(df):
     """
@@ -364,3 +365,37 @@ def analyze(ticker: str, horizon: str = "7 Days"):
 
 def run_full_technical_analysis(ticker, horizon):
     return analyze(ticker, horizon)
+
+# === LLM Summary using OpenAI GPT-3.5-turbo ===
+
+def get_llm_summary(signals, api_key):
+    client = OpenAI(api_key=api_key)
+    prompt = f"""You are an expert technical analyst. Based on the following technical signals and anomalies, explain the overall risk and key factors for this stock in clear, professional, but plain language. Highlight any urgent red flags or bullish factors.
+
+Signals:
+SMA Trend: {signals.get('sma_trend')}
+MACD: {signals.get('macd_signal')}
+RSI: {signals.get('rsi_signal')}
+Bollinger Bands: {signals.get('bollinger_signal')}
+Stochastic: {signals.get('stochastic_signal')}
+CMF: {signals.get('cmf_signal')}
+OBV: {signals.get('obv_signal')}
+ADX: {signals.get('adx_signal')}
+ATR: {signals.get('atr_signal')}
+Volume Spike: {signals.get('vol_spike')}
+Candlestick Patterns: {signals.get('patterns')}
+Key Anomalies: {signals.get('anomaly_events')}
+
+Summary:"""
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=300,
+        temperature=0.6,
+    )
+    return response.choices[0].message.content.strip()
+
+
+
+
+
