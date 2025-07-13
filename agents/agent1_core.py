@@ -4,7 +4,7 @@ from agents.agent1_stock import analyze as analyze_stock
 from agents.agent1_sector import analyze as analyze_sector
 from agents.agent1_market import analyze as analyze_market
 from agents.agent1_commodities import analyze as analyze_commodities
-from agents.agent1_globals import analyze as analyze_globals
+from agents.agent1_globals import analyze as analyze_global
 
 def run_full_technical_analysis(ticker: str, horizon: str):
     # Directly pass ticker and horizon
