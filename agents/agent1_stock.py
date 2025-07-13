@@ -1,10 +1,10 @@
-# agent1_stock.py
+# agents/agent1_stock.py
 
 import yfinance as yf
 import pandas as pd
 import numpy as np
 import re
-from openai import OpenAI  # <-- Modern OpenAI SDK v1 import
+from openai import OpenAI  # Modern SDK v1 import
 
 def enforce_date_column(df):
     """
@@ -318,10 +318,8 @@ def analyze(ticker: str, horizon: str = "7 Days"):
         "Pattern": 0.07,
     }
 
-    # Risk score: assign "risky" status = 1, neutral = 0.5, healthy = 0
     risk_score = 0
 
-    # Define scoring for each signal (customize further if you want)
     score_map = {
         "Bearish": 1, "Bearish Crossover": 1, "Overbought": 1, "Selling": 1,
         "Falling": 1, "Weak Trend": 1, "High Volatility": 1, "Spike": 1,
