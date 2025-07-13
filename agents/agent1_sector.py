@@ -13,13 +13,21 @@ def analyze(peer_tickers: list, horizon: str = "7 Days"):
     bullish, bearish = 0, 0
 
     for peer in peer_tickers:
-        summary, _ = analyze_stock(peer, horizon)
-        summaries.append(summary)
+        try:
+            summary, _ = analyze_stock(peer, horizon)
+            if summary["sma_trend"] == "N/A":
+                continue  # Skip if no data
+            summaries.append(summary)
 
-        if summary["sma_trend"].lower() == "bullish":
-            bullish += 1
-        elif summary["sma_trend"].lower() == "bearish":
-            bearish += 1
+            if summary["sma_trend"].lower() == "bullish":
+                bullish += 1
+            elif summary["sma_trend"].lower() == "bearish":
+                bearish += 1
+        except Exception as e:
+            summaries.append({
+                "ticker": peer,
+                "error": str(e)
+            })
 
     if bullish > bearish:
         trend = "Bullish"
