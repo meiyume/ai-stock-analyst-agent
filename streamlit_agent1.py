@@ -330,8 +330,19 @@ if globals_summary:
 api_key = st.secrets["OPENAI_API_KEY"]
 with st.spinner("Agent 1 is generating LLM commentary..."):
     llm_summary = get_llm_summary(stock_summary, api_key)
-st.subheader("🧠 LLM-Powered Analyst Commentary")
-st.write(llm_summary)
+
+# Split the LLM response if you want, or just display as two sections:
+if "For Technical Readers" in llm_summary and "For Grandmas and Grandpas" in llm_summary:
+    technical, grandma = llm_summary.split("For Grandmas and Grandpas", 1)
+    st.subheader("🧠 LLM-Powered Analyst Commentary")
+    st.markdown("### 👔 For Technical Readers")
+    st.write(technical.replace("For Technical Readers", "").strip())
+    st.markdown("### 👵 For Grandmas and Grandpas")
+    st.write(grandma.strip())
+else:
+    # fallback if split not found
+    st.subheader("🧠 LLM-Powered Analyst Commentary")
+    st.write(llm_summary)
 
 
 
