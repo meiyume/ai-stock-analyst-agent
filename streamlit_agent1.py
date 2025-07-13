@@ -199,14 +199,28 @@ Volume shows how actively a stock is being traded. Sudden spikes may indicate in
 
         
 
+
         # === Risk Dashboard ===
-        st.subheader("🛡️ Risk Dashboard")
+        st.markdown("## 🛡️ Risk Dashboard")
+        st.markdown("""
+        <div style='background-color:#f8f9fa; padding: 20px; border-radius: 10px;'>
+        <h5 style='margin-bottom: 10px;'>🧠 Interpreting Risk Signals</h5>
+        <p>This dashboard summarizes multiple technical signals using intuitive color-coded cues.</p>
+        <ul>
+          <li><b>🟢 Bullish / Healthy</b>: Indicator shows strength or stability</li>
+          <li><b>🟠 Volatile / Watch</b>: Caution advised – indicator signals instability</li>
+          <li><b>🔴 Bearish / Risky</b>: Indicator shows weakness or negative pressure</li>
+          <li><b>⚪ Neutral / No Signal</b>: No actionable signal detected</li>
+        </ul>
+        </div>
+        """, unsafe_allow_html=True)
 
         heatmap = stock_summary.get("heatmap_signals", {})
         risk_score = stock_summary.get("composite_risk_score", None)
         risk_level = stock_summary.get("risk_level", None)
 
         if heatmap:
+            st.markdown("#### 🔍 Current Signal Status")
             cols = st.columns(len(heatmap))
             for i, (indicator, status) in enumerate(heatmap.items()):
                 color = "🟢"
@@ -220,13 +234,14 @@ Volume shows how actively a stock is being traded. Sudden spikes may indicate in
                     color = "🟡"
                 elif "None" in status:
                     color = "⚪"
-                cols[i].markdown(f"**{indicator}**  \n{color} {status}")
+                cols[i].markdown(f"<div style='background-color:#ffffff;padding:10px;border-radius:10px;text-align:center;'><b>{indicator}</b><br>{color} {status}</div>", unsafe_allow_html=True)
 
         if risk_score is not None and risk_level is not None:
+            st.markdown("#### 📊 Composite Risk Evaluation")
             st.markdown(f"**Composite Risk Score**: `{risk_score}`")
             st.markdown(f"**Overall Risk Level**: 🎯 **{risk_level}**")
 
-
+        st.markdown("✳️ *Additional indicators such as SMA Trend, OBV, and CMF will be integrated soon for a more comprehensive view.*")
         # === Summary Layers ===
         st.subheader("🧠 Technical Summary (Agent 1)")
 
