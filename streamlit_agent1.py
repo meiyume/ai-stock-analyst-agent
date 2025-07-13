@@ -1,5 +1,3 @@
-# streamlit_agent1.py
-
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
@@ -8,6 +6,7 @@ from agents.agent1_stock import run_full_technical_analysis, enforce_date_column
 
 st.set_page_config(page_title="Agent 1: AI Technical Analyst", layout="wide")
 
+# -- Premium, inclusive intro (Wall Street version) --
 st.title("📊 Agent 1: AI Technical Analyst")
 st.markdown("""
 🤖 **Agent 1** is your AI-powered market sidekick—giving everyone the expert edge, whether you’re trading millions or just starting out.
@@ -24,8 +23,7 @@ Every scan comes with a clear risk score, an AI-written summary, _and_ plain-Eng
 *Wall Street tools, finally in everyone’s hands—ready to level the playing field.*
 """, unsafe_allow_html=True)
 
-
-# === User Input ===
+# --- User Input ---
 ticker = st.text_input("🎯 Enter SGX Stock Ticker (e.g. U11.SI)", value="U11.SI")
 horizon = st.selectbox("📅 Select Outlook Horizon", [
     "Next Day (1D)", "3 Days", "7 Days", "30 Days (1M)"
@@ -38,22 +36,29 @@ horizon_map = {
 }
 selected_horizon = horizon_map[horizon]
 
-results = {}
-df = None
+# --- Session State for seamless UX ---
+if "results" not in st.session_state:
+    st.session_state["results"] = None
+if "df" not in st.session_state:
+    st.session_state["df"] = None
 
-# === Run Analysis ===
 if st.button("🔍 Run Technical Analysis"):
     with st.spinner("Analyzing..."):
         results, df = run_full_technical_analysis(ticker, selected_horizon)
-        df = enforce_date_column(df)  # Always enforce after analysis!
+        df = enforce_date_column(df)
+        st.session_state["results"] = results
+        st.session_state["df"] = df
 
-if df is None or results == {}:
+results = st.session_state["results"]
+df = st.session_state["df"]
+
+if df is None or results is None:
     st.info("Please run the technical analysis to view results.")
     st.stop()
 
 stock_summary = results.get("stock", {}) if "stock" in results else results
 
-# === Gather Anomalies for Each Indicator ===
+# --- Anomaly event aggregation ---
 anomaly_events = stock_summary.get("anomaly_events", [])
 anomaly_by_indicator = {}
 for event in anomaly_events:
@@ -64,9 +69,6 @@ for event in anomaly_events:
 
 # === Candlestick + SMA + Bollinger Bands ===
 st.subheader("🕯️ Candlestick Chart with SMA & Bollinger Bands")
-st.markdown("""
-Shows price movement (candles), trends (SMA), and volatility (Bollinger Bands).
-""")
 fig = go.Figure()
 fig.add_trace(go.Candlestick(
     x=df["Date"], open=df["Open"], high=df["High"],
@@ -90,18 +92,14 @@ if patterns:
 else:
     st.info("No recognizable candlestick patterns detected in the last 3 candles.")
 
-# === RSI Chart with Anomaly Markers ===
+# === RSI Chart ===
 if "RSI" in df.columns:
     st.subheader("📉 RSI (Relative Strength Index)")
-    st.markdown("""
-    RSI (0–100). Overbought (&gt;70): Pullback risk. Oversold (&lt;30): Rebound potential.
-    """, unsafe_allow_html=True)
     rsi_fig = go.Figure()
     rsi_fig.add_trace(go.Scatter(
         x=df["Date"], y=df["RSI"],
         name="RSI", line=dict(width=3, color="purple")
     ))
-    # Add anomaly markers for RSI
     for date, event in anomaly_by_indicator.get("RSI", []):
         y_val = df.loc[df["Date"] == date, "RSI"].values
         if len(y_val) > 0:
@@ -116,17 +114,12 @@ if "RSI" in df.columns:
     rsi_fig.update_layout(height=220, margin=dict(t=16, b=8))
     st.plotly_chart(rsi_fig, use_container_width=True)
 
-# === MACD Chart with Anomaly Markers ===
+# === MACD Chart ===
 if "MACD" in df.columns and "Signal" in df.columns:
     st.subheader("📈 MACD (Moving Average Convergence Divergence)")
-    st.markdown("""
-    MACD helps identify trend strength/direction.<br>
-    MACD &gt; Signal: Bullish. MACD &lt; Signal: Bearish.
-    """, unsafe_allow_html=True)
     macd_fig = go.Figure()
     macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["MACD"], name="MACD", line=dict(width=3)))
     macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["Signal"], name="Signal", line=dict(width=2, dash="dash")))
-    # Add anomaly markers for MACD
     for date, event in anomaly_by_indicator.get("MACD", []):
         y_val = df.loc[df["Date"] == date, "MACD"].values
         if len(y_val) > 0:
@@ -140,13 +133,11 @@ if "MACD" in df.columns and "Signal" in df.columns:
     macd_fig.update_layout(height=220, margin=dict(t=16, b=8))
     st.plotly_chart(macd_fig, use_container_width=True)
 
-# === Volume Chart with Anomaly Markers ===
+# === Volume Chart ===
 if "Volume" in df.columns:
     st.subheader("📊 Volume")
-    st.markdown("Volume shows trading activity. Spikes may mean institutional moves/news.")
     vol_fig = go.Figure()
     vol_fig.add_trace(go.Bar(x=df["Date"], y=df["Volume"], name="Volume", marker_color="#3d5a80"))
-    # Add anomaly markers for Volume
     for date, event in anomaly_by_indicator.get("Volume", []):
         y_val = df.loc[df["Date"] == date, "Volume"].values
         if len(y_val) > 0:
@@ -160,12 +151,9 @@ if "Volume" in df.columns:
     vol_fig.update_layout(height=180, margin=dict(t=16, b=8))
     st.plotly_chart(vol_fig, use_container_width=True)
 
-# === ATR Chart with Anomaly Markers ===
+# === ATR Chart ===
 if "ATR" in df.columns:
     st.subheader("📉 ATR (Average True Range)")
-    st.markdown("""
-    ATR measures volatility. High ATR: Big moves. Low ATR: Stable.
-    """, unsafe_allow_html=True)
     atr_fig = go.Figure()
     atr_fig.add_trace(go.Scatter(x=df["Date"], y=df["ATR"], name="ATR", line=dict(width=3, color="#a31621")))
     for date, event in anomaly_by_indicator.get("ATR", []):
@@ -181,12 +169,9 @@ if "ATR" in df.columns:
     atr_fig.update_layout(height=180, margin=dict(t=16, b=8))
     st.plotly_chart(atr_fig, use_container_width=True)
 
-# === Stochastic Oscillator with Anomaly Markers ===
+# === Stochastic Chart ===
 if "Stochastic_%K" in df.columns:
     st.subheader("⚡ Stochastic Oscillator")
-    st.markdown("""
-    Stochastic compares close to recent range. %K &gt; 80: Overbought. %K &lt; 20: Oversold.
-    """, unsafe_allow_html=True)
     stoch_fig = go.Figure()
     stoch_fig.add_trace(go.Scatter(x=df["Date"], y=df["Stochastic_%K"], name="Stoch %K", line=dict(width=3, color="blue")))
     stoch_fig.add_trace(go.Scatter(x=df["Date"], y=df["Stochastic_%D"], name="Stoch %D", line=dict(width=2, color="green", dash="dash")))
@@ -204,12 +189,9 @@ if "Stochastic_%K" in df.columns:
     stoch_fig.update_layout(height=220, margin=dict(t=16, b=8))
     st.plotly_chart(stoch_fig, use_container_width=True)
 
-# === CMF, OBV, ADX Charts (no anomalies for these unless you add) ===
+# === CMF, OBV, ADX Charts ===
 if "CMF" in df.columns:
     st.subheader("💰 CMF (Chaikin Money Flow)")
-    st.markdown("""
-    Money flow over time. Positive: Buying pressure. Negative: Selling pressure.
-    """, unsafe_allow_html=True)
     cmf_fig = go.Figure()
     cmf_fig.add_trace(go.Scatter(x=df["Date"], y=df["CMF"], name="CMF", line=dict(width=3, color="#7b5800")))
     cmf_fig.update_layout(height=180, margin=dict(t=16, b=8))
@@ -217,9 +199,6 @@ if "CMF" in df.columns:
 
 if "OBV" in df.columns:
     st.subheader("🔄 On-Balance Volume (OBV)")
-    st.markdown("""
-    OBV tracks accumulation/distribution. Rising OBV + rising price: Bullish.
-    """, unsafe_allow_html=True)
     obv_fig = go.Figure()
     obv_fig.add_trace(go.Scatter(x=df["Date"], y=df["OBV"], name="OBV", line=dict(width=3, color="#3c6e71")))
     obv_fig.update_layout(height=180, margin=dict(t=16, b=8))
@@ -227,9 +206,6 @@ if "OBV" in df.columns:
 
 if "ADX" in df.columns:
     st.subheader("📊 ADX (Average Directional Index)")
-    st.markdown("""
-    ADX measures trend strength (not direction). ADX &gt; 25: Strong trend.
-    """, unsafe_allow_html=True)
     adx_fig = go.Figure()
     adx_fig.add_trace(go.Scatter(x=df["Date"], y=df["ADX"], name="ADX", line=dict(width=3, color='orange')))
     adx_fig.update_yaxes(range=[0, 100])
@@ -255,16 +231,17 @@ with st.expander("🕰️ Historical Anomaly Events", expanded=False):
 # === Risk Dashboard ===
 st.markdown("## 🛡️ Risk Dashboard")
 st.markdown("""
-<div style='background-color:#f8f9fa; padding: 20px; border-radius: 10px;'>
-<h5 style='margin-bottom: 10px;'>🧠 Interpreting Risk Signals</h5>
-<p>This dashboard summarizes multiple technical signals using intuitive color-coded cues.</p>
-<ul>
-<li><b>🟢 Bullish / Healthy</b>: Indicator shows strength or stability</li>
-<li><b>🟠 Volatile / Watch</b>: Caution advised – indicator signals instability</li>
-<li><b>🔴 Bearish / Risky</b>: Indicator shows weakness or negative pressure</li>
-<li><b>⚪ Neutral / No Signal</b>: No actionable signal detected</li>
-</ul>
-</div>
+### 🧮 How to Read the Composite Risk Score
+This score blends all technical signals into a single, intuitive risk rating:
+- **Low Risk (0.00 – 0.33)**: ✅ Most signals healthy or bullish.
+- **Caution (0.34 – 0.66)**: ⚠️ Mixed or volatile signals—watch closely.
+- **High Risk (0.67 – 1.00)**: 🔥 Multiple bearish or red-flag indicators.
+
+The overall risk level is a **quick summary**—helping you spot danger or opportunity at a glance.
+
+> Example: Bearish MACD, Overbought RSI, and a Volume Spike could produce a **High Risk** score.
+
+*Composite scoring makes risk transparent, explainable, and actionable—so you don’t just see the chart, you understand it.*
 """, unsafe_allow_html=True)
 
 heatmap = stock_summary.get("heatmap_signals", {})
@@ -294,22 +271,10 @@ if risk_score is not None:
 if risk_level is not None:
     st.markdown(f"**Overall Risk Level**: 🎯 **{risk_level}**")
 
-st.markdown("""
-### 🧮 How to Read the Composite Risk Score
-This score blends all technical signals into a single, intuitive risk rating:
-- **Low Risk (0.00 – 0.33)**: ✅ Most signals healthy or bullish.
-- **Caution (0.34 – 0.66)**: ⚠️ Mixed or volatile signals—watch closely.
-- **High Risk (0.67 – 1.00)**: 🔥 Multiple bearish or red-flag indicators.
-
-The overall risk level is a **quick summary**—helping you spot danger or opportunity at a glance.
-
-> Example: Bearish MACD, Overbought RSI, and a Volume Spike could produce a **High Risk** score.
-
-*Composite scoring makes risk transparent, explainable, and actionable—so you don’t just see the chart, you understand it.*
-""", unsafe_allow_html=True)
-
-# === Technical Summary ===
+# === Technical Summary (Markdown + Table + Multi-Layer) ===
 st.subheader("🧠 Technical Summary (Agent 1)")
+
+# -- Stock-Level Markdown Block --
 st.markdown("**📌 Stock-Level Analysis (Agent 1.0):**")
 stock_text = (
     f"• **SMA Trend**: {stock_summary.get('sma_trend')}  \n"
@@ -325,11 +290,24 @@ stock_text = (
 )
 st.markdown(stock_text)
 
+# -- Stock-Level Table (optional wow factor) --
 st.subheader("🧠 Technical Summary (Multi-Layer)")
-
 st.markdown("**📌 Stock-Level Technicals:**")
+stock_metrics = {
+    "SMA Trend": stock_summary.get('sma_trend'),
+    "MACD": stock_summary.get('macd_signal'),
+    "RSI": stock_summary.get('rsi_signal'),
+    "Bollinger": stock_summary.get('bollinger_signal'),
+    "Stochastic": stock_summary.get('stochastic_signal', 'N/A'),
+    "CMF": stock_summary.get('cmf_signal', 'N/A'),
+    "OBV": stock_summary.get('obv_signal', 'N/A'),
+    "ADX": stock_summary.get('adx_signal', 'N/A'),
+    "ATR": stock_summary.get('atr_signal', 'N/A'),
+    "Volume Spike": stock_summary.get('vol_spike')
+}
 st.table(pd.DataFrame(stock_metrics, index=["Signal"]))
 
+# -- Multi-Layer Context: Sector, Market, Commodities, Global --
 st.markdown("**📌 Sector Analysis:**")
 sector_summary = results.get("sector", None)
 if sector_summary:
@@ -341,18 +319,20 @@ if market_summary:
     st.markdown(market_summary.get("summary", "No market index insights available."))
 
 st.markdown("**📌 Commodities & Global Macro:**")
+commodities_summary = results.get("commodities", None)
+globals_summary = results.get("globals", None)
 if commodities_summary:
     st.markdown(commodities_summary.get("summary", "No commodities insights available."))
 if globals_summary:
     st.markdown(globals_summary.get("summary", "No global macro insights available."))
 
-
-# === LLM Commentary ===
+# === LLM Commentary (auto-generated, always visible) ===
 api_key = st.secrets["OPENAI_API_KEY"]
 with st.spinner("Agent 1 is generating LLM commentary..."):
     llm_summary = get_llm_summary(stock_summary, api_key)
 st.subheader("🧠 LLM-Powered Analyst Commentary")
 st.write(llm_summary)
+
 
 
 
