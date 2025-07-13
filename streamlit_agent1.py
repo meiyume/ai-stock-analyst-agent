@@ -197,6 +197,37 @@ Volume shows how actively a stock is being traded. Sudden spikes may indicate in
             vol_fig.add_trace(go.Bar(x=df["Date"], y=df["Volume"], name="Volume"))
             st.plotly_chart(vol_fig, use_container_width=True)
 
+        
+
+        # === Risk Dashboard ===
+        st.subheader("🛡️ Risk Dashboard")
+
+        heatmap = stock_summary.get("heatmap_signals", {})
+        risk_score = stock_summary.get("composite_risk_score", None)
+        risk_level = stock_summary.get("risk_level", None)
+
+        if heatmap:
+            cols = st.columns(len(heatmap))
+            for i, (indicator, status) in enumerate(heatmap.items()):
+                color = "🟢"
+                if "Overbought" in status or "Bearish" in status:
+                    color = "🔴"
+                elif "Spike" in status or "High" in status:
+                    color = "🟠"
+                elif "Oversold" in status or "Bullish" in status:
+                    color = "🟢"
+                elif "Weak" in status:
+                    color = "🟡"
+                elif "None" in status:
+                    color = "⚪"
+                cols[i].markdown(f"**{indicator}**  
+{color} {status}")
+
+        if risk_score is not None and risk_level is not None:
+            st.markdown(f"**Composite Risk Score**: `{risk_score}`")
+            st.markdown(f"**Overall Risk Level**: 🎯 **{risk_level}**")
+
+
         # === Summary Layers ===
         st.subheader("🧠 Technical Summary (Agent 1)")
 
