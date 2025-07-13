@@ -12,7 +12,7 @@ st.markdown("""
 Welcome to **Agent 1**, your AI-powered technical analyst.
 
 This agent performs a layered technical analysis using:
-- 📈 Stock indicators (SMA, MACD, RSI, Bollinger Bands, Stochastic, CMF, OBV)
+- 📈 Stock indicators (SMA, MACD, RSI, Bollinger Bands, Stochastic, CMF, OBV, ADX, ATR)
 - 🏭 Peer sector comparison
 - 📊 Market index trends
 - 🛢️ Commodity signals (gold, oil)
@@ -132,6 +132,33 @@ OBV adds or subtracts volume based on whether the price closes higher or lower.
             obv_fig.add_trace(go.Scatter(x=df["Date"], y=df["OBV"], name="OBV"))
             st.plotly_chart(obv_fig, use_container_width=True)
 
+        # === ADX ===
+        if "ADX" in df.columns:
+            st.subheader("📊 ADX (Average Directional Index)")
+            st.markdown("""
+ADX measures the **strength** of a trend, regardless of direction. 
+
+- **ADX > 25**: A strong trend is present (bull or bear).
+- **ADX < 20**: Market is ranging or lacks direction.
+            """)
+            adx_fig = go.Figure()
+            adx_fig.add_trace(go.Scatter(x=df["Date"], y=df["ADX"], name="ADX"))
+            adx_fig.update_layout(yaxis_range=[0, 100], height=250)
+            st.plotly_chart(adx_fig, use_container_width=True)
+
+        # === ATR ===
+        if "ATR" in df.columns:
+            st.subheader("📉 ATR (Average True Range)")
+            st.markdown("""
+ATR measures **volatility** — how much a stock moves day to day.
+
+- High ATR: Stock is making big moves (can be risky or offer opportunity).
+- Low ATR: Price is stable, small daily swings.
+            """)
+            atr_fig = go.Figure()
+            atr_fig.add_trace(go.Scatter(x=df["Date"], y=df["ATR"], name="ATR"))
+            st.plotly_chart(atr_fig, use_container_width=True)
+
         # === Volume ===
         if "Volume" in df.columns:
             st.subheader("📊 Volume")
@@ -155,6 +182,8 @@ Volume shows how actively a stock is being traded. Sudden spikes may indicate in
             f"• **Stochastic**: {stock_summary.get('stochastic_signal', 'N/A')}  \n"
             f"• **CMF Signal**: {stock_summary.get('cmf_signal', 'N/A')}  \n"
             f"• **OBV Signal**: {stock_summary.get('obv_signal', 'N/A')}  \n"
+            f"• **ADX Signal**: {stock_summary.get('adx_signal', 'N/A')}  \n"
+            f"• **ATR Signal**: {stock_summary.get('atr_signal', 'N/A')}  \n"
             f"• **Volume Spike**: {stock_summary.get('vol_spike')}"
         )
         st.markdown(stock_text)
@@ -186,5 +215,6 @@ Volume shows how actively a stock is being traded. Sudden spikes may indicate in
             f"🌍 **Global Indices:** {globals_}"
         )
         st.success(final_text)
+
 
 
