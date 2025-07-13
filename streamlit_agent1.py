@@ -41,12 +41,16 @@ if st.button("🔍 Run Technical Analysis"):
     with st.spinner("Analyzing..."):
         results, df = run_full_technical_analysis(ticker, selected_horizon)
 
-        # Fix missing 'Date' column if index is datetime
         if "Date" not in df.columns:
             df = df.reset_index()
 
         # === Candlestick + SMA + BB ===
         st.subheader("🕯️ Candlestick Chart with SMA & Bollinger Bands")
+        st.markdown("""
+This chart shows the stock's daily price movement using candles — green means up, red means down.
+- **SMA (Simple Moving Average)** smooths out prices to reveal trends.
+- **Bollinger Bands** are like rubber bands showing how volatile the price is — when price moves outside the bands, something big might be coming.
+""")
         fig = go.Figure()
         fig.add_trace(go.Candlestick(
             x=df["Date"],
@@ -66,6 +70,11 @@ if st.button("🔍 Run Technical Analysis"):
         # === RSI ===
         if "RSI" in df.columns:
             st.subheader("📉 RSI (Relative Strength Index)")
+            st.markdown("""
+RSI tells us if a stock is **overbought** (too many people buying) or **oversold** (too many selling).
+- Values **above 70** suggest price might fall soon.
+- Values **below 30** suggest a bounce back might happen.
+""")
             rsi_fig = go.Figure()
             rsi_fig.add_trace(go.Scatter(x=df["Date"], y=df["RSI"], name="RSI"))
             rsi_fig.update_layout(yaxis_range=[0, 100], height=250)
@@ -74,6 +83,11 @@ if st.button("🔍 Run Technical Analysis"):
         # === MACD ===
         if "MACD" in df.columns and "Signal" in df.columns:
             st.subheader("📈 MACD (Moving Average Convergence Divergence)")
+            st.markdown("""
+MACD helps us spot **momentum changes** — when trends may be starting or ending.
+- When the MACD line crosses above the signal line, it could mean an **uptrend** is starting.
+- When it crosses below, it might signal a **downtrend** ahead.
+""")
             macd_fig = go.Figure()
             macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["MACD"], name="MACD"))
             macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["Signal"], name="Signal"))
@@ -82,6 +96,10 @@ if st.button("🔍 Run Technical Analysis"):
         # === Volume ===
         if "Volume" in df.columns:
             st.subheader("📊 Volume")
+            st.markdown("""
+Volume shows how many shares were traded.
+- A **spike in volume** often means big players (institutions) are making moves — which can lead to big price changes.
+""")
             vol_fig = go.Figure()
             vol_fig.add_trace(go.Bar(x=df["Date"], y=df["Volume"], name="Volume"))
             st.plotly_chart(vol_fig, use_container_width=True)
@@ -107,3 +125,4 @@ if st.button("🔍 Run Technical Analysis"):
         # === Final Outlook ===
         st.markdown("### ✅ Final Technical Outlook")
         st.success(results.get("final_summary", "No summary available."))
+
