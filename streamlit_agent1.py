@@ -12,7 +12,7 @@ st.markdown("""
 Welcome to **Agent 1**, your AI-powered technical analyst.
 
 This agent performs a layered technical analysis using:
-- Stock indicators (SMA, MACD, RSI, Bollinger Bands)
+- Stock indicators (SMA, MACD, RSI, Bollinger Bands, Volume, OBV, CMF, Stochastic)
 - Peer sector comparison
 - Market index trends
 - Commodity signals (e.g. gold, oil)
@@ -47,18 +47,13 @@ if st.button("🔍 Run Technical Analysis"):
         # === Candlestick + SMA + BB ===
         st.subheader("🕯️ Candlestick Chart with SMA & Bollinger Bands")
         st.markdown("""
-This chart shows the stock's daily price movement using candles — green means up, red means down.
-- **SMA (Simple Moving Average)** smooths out prices to reveal trends.
-- **Bollinger Bands** are like rubber bands showing how volatile the price is — when price moves outside the bands, something big might be coming.
+This chart shows daily price movement.
+- **SMA** smooths out noise to show trends.
+- **Bollinger Bands** reflect volatility — prices near the edges might be extreme.
 """)
         fig = go.Figure()
         fig.add_trace(go.Candlestick(
-            x=df["Date"],
-            open=df["Open"],
-            high=df["High"],
-            low=df["Low"],
-            close=df["Close"],
-            name="Price"
+            x=df["Date"], open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"], name="Price"
         ))
         fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA5"], mode="lines", name="SMA5"))
         fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA10"], mode="lines", name="SMA10"))
@@ -71,9 +66,9 @@ This chart shows the stock's daily price movement using candles — green means 
         if "RSI" in df.columns:
             st.subheader("📉 RSI (Relative Strength Index)")
             st.markdown("""
-RSI tells us if a stock is **overbought** (too many people buying) or **oversold** (too many selling).
-- Values **above 70** suggest price might fall soon.
-- Values **below 30** suggest a bounce back might happen.
+RSI shows if a stock is **overbought** or **oversold**.
+- **>70**: Might be overbought (due for pullback)
+- **<30**: Might be oversold (due for bounce)
 """)
             rsi_fig = go.Figure()
             rsi_fig.add_trace(go.Scatter(x=df["Date"], y=df["RSI"], name="RSI"))
@@ -84,21 +79,57 @@ RSI tells us if a stock is **overbought** (too many people buying) or **oversold
         if "MACD" in df.columns and "Signal" in df.columns:
             st.subheader("📈 MACD (Moving Average Convergence Divergence)")
             st.markdown("""
-MACD helps us spot **momentum changes** — when trends may be starting or ending.
-- When the MACD line crosses above the signal line, it could mean an **uptrend** is starting.
-- When it crosses below, it might signal a **downtrend** ahead.
+MACD helps detect **momentum** and **trend reversals**.
+- MACD crossing **above** Signal → Bullish
+- MACD crossing **below** Signal → Bearish
 """)
             macd_fig = go.Figure()
             macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["MACD"], name="MACD"))
             macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["Signal"], name="Signal"))
             st.plotly_chart(macd_fig, use_container_width=True)
 
+        # === Stochastic Oscillator ===
+        if "Stoch_%K" in df.columns and "Stoch_%D" in df.columns:
+            st.subheader("📊 Stochastic Oscillator")
+            st.markdown("""
+Stochastic shows how the price is doing relative to its recent highs/lows.
+- **>80** = overbought
+- **<20** = oversold
+""")
+            stoch_fig = go.Figure()
+            stoch_fig.add_trace(go.Scatter(x=df["Date"], y=df["Stoch_%K"], name="%K"))
+            stoch_fig.add_trace(go.Scatter(x=df["Date"], y=df["Stoch_%D"], name="%D"))
+            stoch_fig.update_layout(yaxis_range=[0, 100], height=250)
+            st.plotly_chart(stoch_fig, use_container_width=True)
+
+        # === CMF ===
+        if "CMF" in df.columns:
+            st.subheader("💰 Chaikin Money Flow (CMF)")
+            st.markdown("""
+CMF helps track **buying vs selling pressure**.
+- Positive = buying pressure
+- Negative = selling pressure
+""")
+            cmf_fig = go.Figure()
+            cmf_fig.add_trace(go.Scatter(x=df["Date"], y=df["CMF"], name="CMF"))
+            st.plotly_chart(cmf_fig, use_container_width=True)
+
+        # === OBV ===
+        if "OBV" in df.columns:
+            st.subheader("🔄 On-Balance Volume (OBV)")
+            st.markdown("""
+OBV tracks whether volume is flowing in (buying) or out (selling).
+- Rising OBV → demand is increasing
+""")
+            obv_fig = go.Figure()
+            obv_fig.add_trace(go.Scatter(x=df["Date"], y=df["OBV"], name="OBV"))
+            st.plotly_chart(obv_fig, use_container_width=True)
+
         # === Volume ===
         if "Volume" in df.columns:
             st.subheader("📊 Volume")
             st.markdown("""
-Volume shows how many shares were traded.
-- A **spike in volume** often means big players (institutions) are making moves — which can lead to big price changes.
+Volume shows total shares traded. Spikes often indicate large moves ahead.
 """)
             vol_fig = go.Figure()
             vol_fig.add_trace(go.Bar(x=df["Date"], y=df["Volume"], name="Volume"))
@@ -122,7 +153,5 @@ Volume shows how many shares were traded.
         st.markdown("**🌍 Global Indices (Agent 1.4):**")
         st.info(results.get("globals", {}).get("summary", "No data."))
 
-        # === Final Outlook ===
         st.markdown("### ✅ Final Technical Outlook")
         st.success(results.get("final_summary", "No summary available."))
-
