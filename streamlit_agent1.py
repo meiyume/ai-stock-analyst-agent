@@ -243,7 +243,7 @@ if heatmap:
 
     
 st.markdown(f"**Composite Risk Score**: `{risk_score}`")
-            st.markdown(f"**Overall Risk Level**: 🎯 **{risk_level}**")
+st.markdown(f"**Overall Risk Level**: 🎯 **{risk_level}**")
         st.markdown("""
         ### 🧮 How to Interpret the Composite Risk Score
 
