@@ -1,4 +1,3 @@
-
 # streamlit_agent1.py
 
 import streamlit as st
@@ -19,7 +18,7 @@ This agent performs a layered technical analysis using:
 - 🛢️ Commodity signals (gold, oil)
 - 🌍 Global indices (Dow, Nikkei, HSI)
 
---- 
+---
 """)
 
 # === User Input ===
@@ -67,6 +66,7 @@ Shows price movement (candles), trends (SMA), and volatility (Bollinger Bands).
         fig.update_layout(height=500, xaxis_rangeslider_visible=False)
         st.plotly_chart(fig, use_container_width=True)
 
+        
         # === Pattern Detection ===
         patterns = results.get("stock", {}).get("patterns", [])
         st.subheader("📌 Detected Candlestick Patterns")
@@ -93,3 +93,156 @@ Shows price movement (candles), trends (SMA), and volatility (Bollinger Bands).
                 st.warning(alert)
         else:
             st.info("No anomalies detected today. 📈")
+
+        # === RSI ===
+        if "RSI" in df.columns:
+            st.subheader("📉 RSI (Relative Strength Index)")
+            st.markdown("""
+RSI measures the speed and magnitude of recent price changes on a 0–100 scale.
+
+- If RSI > 70: The stock may be **overbought**, potentially due for a pullback.
+- If RSI < 30: The stock may be **oversold**, potentially due for a rebound.
+            """)
+            rsi_fig = go.Figure()
+            rsi_fig.add_trace(go.Scatter(x=df["Date"], y=df["RSI"], name="RSI"))
+            rsi_fig.update_layout(yaxis_range=[0, 100], height=250)
+            st.plotly_chart(rsi_fig, use_container_width=True)
+
+        # === MACD ===
+        if "MACD" in df.columns and "Signal" in df.columns:
+            st.subheader("📈 MACD (Moving Average Convergence Divergence)")
+            st.markdown("""
+MACD helps identify trend strength and direction.
+
+- **MACD Line vs Signal Line**: When the MACD crosses **above** the Signal line, it’s a **bullish signal**. When it crosses **below**, it’s **bearish**.
+            """)
+            macd_fig = go.Figure()
+            macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["MACD"], name="MACD"))
+            macd_fig.add_trace(go.Scatter(x=df["Date"], y=df["Signal"], name="Signal"))
+            st.plotly_chart(macd_fig, use_container_width=True)
+
+        # === Stochastic Oscillator ===
+        if "Stochastic_%K" in df.columns:
+            st.subheader("⚡ Stochastic Oscillator")
+            st.markdown("""
+The Stochastic Oscillator compares a stock’s closing price to its price range over a certain period.
+
+- **%K Line and %D Line**: When %K crosses above %D and both are below 20, it may signal a **bullish reversal**. If they’re above 80 and %K drops below %D, it could indicate **bearish** pressure.
+            """)
+            stoch_fig = go.Figure()
+            stoch_fig.add_trace(go.Scatter(x=df["Date"], y=df["Stochastic_%K"], name="Stoch %K"))
+            stoch_fig.add_trace(go.Scatter(x=df["Date"], y=df["Stochastic_%D"], name="Stoch %D"))
+            st.plotly_chart(stoch_fig, use_container_width=True)
+
+        # === CMF ===
+        if "CMF" in df.columns:
+            st.subheader("💰 Chaikin Money Flow (CMF)")
+            st.markdown("""
+CMF measures money flow volume over time to assess buying/selling pressure.
+
+- A **positive CMF** suggests accumulation (buying).
+- A **negative CMF** indicates distribution (selling).
+            """)
+            cmf_fig = go.Figure()
+            cmf_fig.add_trace(go.Scatter(x=df["Date"], y=df["CMF"], name="CMF"))
+            st.plotly_chart(cmf_fig, use_container_width=True)
+
+        # === OBV ===
+        if "OBV" in df.columns:
+            st.subheader("🔄 On-Balance Volume (OBV)")
+            st.markdown("""
+OBV adds or subtracts volume based on whether the price closes higher or lower.
+
+- **Rising OBV with rising price** confirms a **bullish trend**.
+- **Falling OBV while price rises** may indicate **bearish divergence** (weak rally).
+            """)
+            obv_fig = go.Figure()
+            obv_fig.add_trace(go.Scatter(x=df["Date"], y=df["OBV"], name="OBV"))
+            st.plotly_chart(obv_fig, use_container_width=True)
+
+        # === ADX ===
+        if "ADX" in df.columns:
+            st.subheader("📊 ADX (Average Directional Index)")
+            st.markdown("""
+ADX measures the **strength** of a trend, regardless of direction. 
+
+- **ADX > 25**: A strong trend is present (bull or bear).
+- **ADX < 20**: Market is ranging or lacks direction.
+            """)
+            adx_fig = go.Figure()
+            adx_fig.add_trace(go.Scatter(x=df["Date"], y=df["ADX"], name="ADX"))
+            adx_fig.update_layout(yaxis_range=[0, 100], height=250)
+            st.plotly_chart(adx_fig, use_container_width=True)
+
+        # === ATR ===
+        if "ATR" in df.columns:
+            st.subheader("📉 ATR (Average True Range)")
+            st.markdown("""
+ATR measures **volatility** — how much a stock moves day to day.
+
+- High ATR: Stock is making big moves (can be risky or offer opportunity).
+- Low ATR: Price is stable, small daily swings.
+            """)
+            atr_fig = go.Figure()
+            atr_fig.add_trace(go.Scatter(x=df["Date"], y=df["ATR"], name="ATR"))
+            st.plotly_chart(atr_fig, use_container_width=True)
+
+        # === Volume ===
+        if "Volume" in df.columns:
+            st.subheader("📊 Volume")
+            st.markdown("""
+Volume shows how actively a stock is being traded. Sudden spikes may indicate institutional activity or major news.
+            """)
+            vol_fig = go.Figure()
+            vol_fig.add_trace(go.Bar(x=df["Date"], y=df["Volume"], name="Volume"))
+            st.plotly_chart(vol_fig, use_container_width=True)
+
+        # === Summary Layers ===
+        st.subheader("🧠 Technical Summary (Agent 1)")
+
+        st.markdown("**📌 Stock-Level Analysis (Agent 1.0):**")
+        stock_summary = results.get("stock", {})
+        stock_text = (
+            f"• **SMA Trend**: {stock_summary.get('sma_trend')}  \n"
+            f"• **MACD Signal**: {stock_summary.get('macd_signal')}  \n"
+            f"• **RSI Signal**: {stock_summary.get('rsi_signal')}  \n"
+            f"• **Bollinger Signal**: {stock_summary.get('bollinger_signal')}  \n"
+            f"• **Stochastic**: {stock_summary.get('stochastic_signal', 'N/A')}  \n"
+            f"• **CMF Signal**: {stock_summary.get('cmf_signal', 'N/A')}  \n"
+            f"• **OBV Signal**: {stock_summary.get('obv_signal', 'N/A')}  \n"
+            f"• **ADX Signal**: {stock_summary.get('adx_signal', 'N/A')}  \n"
+            f"• **ATR Signal**: {stock_summary.get('atr_signal', 'N/A')}  \n"
+            f"• **Volume Spike**: {stock_summary.get('vol_spike')}"
+        )
+        st.markdown(stock_text)
+
+        st.markdown("**🏭 Sector Analysis (Agent 1.1):**")
+        st.info(results.get("sector", {}).get("summary", "No data."))
+
+        st.markdown("**📊 Market Index (Agent 1.2):**")
+        st.info(results.get("market", {}).get("summary", "No data."))
+
+        st.markdown("**🛢️ Commodities (Agent 1.3):**")
+        st.info(results.get("commodities", {}).get("summary", "No data."))
+
+        st.markdown("**🌍 Global Indices (Agent 1.4):**")
+        st.info(results.get("globals", {}).get("summary", "No data."))
+
+        # === Final Outlook ===
+        st.markdown("### ✅ Final Technical Outlook")
+        stock = results.get("stock", {}).get("summary", "")
+        sector = results.get("sector", {}).get("summary", "")
+        market = results.get("market", {}).get("summary", "")
+        commodities = results.get("commodities", {}).get("summary", "")
+        globals_ = results.get("globals", {}).get("summary", "")
+        final_text = (
+            f"📌 **Stock:** {stock}  \n"
+            f"📊 **Sector:** {sector}  \n"
+            f"📈 **Market Index:** {market}  \n"
+            f"🛢️ **Commodities:** {commodities}  \n"
+            f"🌍 **Global Indices:** {globals_}"
+        )
+        st.success(final_text)
+
+
+
