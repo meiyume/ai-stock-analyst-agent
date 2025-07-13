@@ -15,8 +15,8 @@ if st.button("Run Technical Analysis"):
 
         if df is not None and not df.empty:
             df = df.reset_index()
-            if "index" in df.columns:
-                df.rename(columns={"index": "Date"}, inplace=True)
+            if "Date" not in df.columns:
+                df.columns.values[0] = "Date"  # ✅ force the first column to be 'Date'
 
             st.subheader("📈 Price and SMA Trends")
             fig = go.Figure()
