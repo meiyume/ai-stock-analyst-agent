@@ -384,9 +384,12 @@ Volume Spike: {signals.get('vol_spike')}
 Candlestick Patterns: {signals.get('patterns')}
 Key Anomalies: {signals.get('anomaly_events')}
 
-Write two separate sections, clearly labeled:
-1. For Technical Readers
-2. For Grandmas and Grandpas
+Write two clearly separated sections, each starting with a clear title:
+- For Technical Readers
+- For Grandmas and Grandpas
+
+Do not number or prefix the titles with any numbers or colons.
+Just start each section with the title on its own line.
 """
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
