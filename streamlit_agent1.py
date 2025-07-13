@@ -46,9 +46,15 @@ if st.button("🔍 Run Technical Analysis"):
 
         # === Candlestick + SMA + Bollinger Bands ===
         st.subheader("🕯️ Candlestick Chart with SMA & Bollinger Bands")
-        st.caption("Shows price movement (candles), trends (SMA), and volatility (Bollinger Bands). "
-                   "If prices touch or move beyond the upper band, it may signal overbought. "
-                   "If they fall below the lower band, it may indicate oversold conditions.")
+        st.caption("Candlesticks are colored bars that show price movement for each day. A green candle means the stock closed higher than it opened (price went up). 
+        A red candle means it closed lower than it opened (price went down). Each candle also shows the day's high and low, giving a full picture of price action. 
+        The SMA (Simple Moving Averages) are smooth lines overlaid on the chart: SMA5 is the average closing price of the last 5 days. SMA10 is the average over the last 10 days.
+        These help identify short-term trends—when SMA5 is above SMA10, it's often a bullish sign. 
+        The Bollinger Bands are two dotted lines that expand and contract around the price: They measure volatility, or how wildly the price is moving. The middle line is usually 
+        the 20-day average; the upper and lower bands are 2 standard deviations away. If prices move close to or above the upper band, it might signal the stock is overbought (too expensive).
+        If they touch or drop below the lower band, it may mean the stock is oversold (possibly undervalued).
+        Together, this chart helps you see trend direction, market sentiment, volatility and extremes to make smarter decisions on when to buy or sell.                   
+                   ")
         fig = go.Figure()
         fig.add_trace(go.Candlestick(
             x=df["Date"],
