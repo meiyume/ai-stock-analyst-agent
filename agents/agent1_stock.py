@@ -3,7 +3,40 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import re
 
+# === Optional OpenAI LLM import (scaffolded) ===
+# from openai import OpenAI  # Uncomment if integrating
+# client = OpenAI(api_key="your-key-here")
+
+# === Intelligent History Selector ===
+def decide_history_period(horizon: str, ticker: str, use_llm: bool = False) -> str:
+    if use_llm:
+        # Simulated LLM response logic
+        prompt = f"""
+        You are Agent 1, a technical analysis expert. Agent 2 has requested a stock forecast for the next {horizon}.
+        How many days of historical data would you like to compute relevant indicators (e.g. MACD, RSI, ADX)?
+        Reply only with a single number like: 60
+        """
+        # Placeholder: Replace with actual LLM call
+        print("🔮 Using LLM to decide historical lookback...")
+        simulated_response = "60"
+        try:
+            days = int(re.findall(r"\d+", simulated_response)[0])
+            return f"{days}d"
+        except:
+            return "90d"
+    else:
+        # Fallback rule-based map
+        map_lookup = {
+            "1 Day": "30d",
+            "3 Days": "45d",
+            "7 Days": "90d",
+            "30 Days": "180d"
+        }
+        return map_lookup.get(horizon, "90d")
+
+# === Indicator Functions ===
 def compute_rsi(series, period=14):
     delta = series.diff()
     gain = delta.where(delta > 0, 0)
@@ -69,9 +102,11 @@ def compute_atr(df, period=14):
     df['ATR'] = df['TR'].rolling(window=period).mean()
     return df
 
+# === Main Analysis ===
 def analyze(ticker: str, horizon: str = "7 Days"):
+    history_period = decide_history_period(horizon, ticker, use_llm=False)
     stock = yf.Ticker(ticker)
-    df = stock.history(period="90d", interval="1d")  # Increased range for long indicators
+    df = stock.history(period=history_period, interval="1d")
 
     if df.empty:
         return {
@@ -88,7 +123,6 @@ def analyze(ticker: str, horizon: str = "7 Days"):
             "vol_spike": False
         }, df
 
-    # === Indicators ===
     df["SMA5"] = df["Close"].rolling(window=5).mean()
     df["SMA10"] = df["Close"].rolling(window=10).mean()
     df["EMA12"] = df["Close"].ewm(span=12, adjust=False).mean()
@@ -106,10 +140,8 @@ def analyze(ticker: str, horizon: str = "7 Days"):
     df = compute_adx(df)
     df = compute_atr(df)
 
-    # Keep full data for plotting
     df_for_plotting = df.copy()
 
-    # Filter out only rows that are fully valid for signal generation
     df_signals = df.dropna(subset=[
         "SMA5", "SMA10", "MACD", "Signal", "Upper", "Lower",
         "RSI", "Stochastic_%K", "Stochastic_%D",
@@ -120,7 +152,6 @@ def analyze(ticker: str, horizon: str = "7 Days"):
 
     latest = df_signals.iloc[-1]
 
-    # === Signals ===
     sma_trend = "Bullish" if latest["SMA5"] > latest["SMA10"] else "Bearish"
     macd_signal = "Bullish" if latest["MACD"] > latest["Signal"] else "Bearish"
     bollinger_signal = (
