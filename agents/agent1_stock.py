@@ -2,6 +2,8 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from openai import OpenAI
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
 
 def fetch_data(ticker, lookback_days=30, interval="1d"):
     end_date = pd.Timestamp.today()
@@ -15,7 +17,7 @@ def fetch_data(ticker, lookback_days=30, interval="1d"):
     )
     data = data.reset_index()
 
-    # --- Flatten MultiIndex columns ---
+    # Flatten MultiIndex columns
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = [
             '_'.join(filter(None, map(str, col))).replace(f"_{ticker}", "") 
@@ -140,7 +142,6 @@ Do not number or prefix the titles with any numbers or colons.
         max_tokens=800,
         temperature=0.6,
     )
-    # Split response by titles
     output = response.choices[0].message.content.strip()
     tech, plain = "", ""
     if "Technical Summary" in output and "Plain-English Summary" in output:
@@ -159,17 +160,13 @@ def analyze(
     lookback_days=None,
     api_key=None
 ):
-    # --- Dynamic lookback ---
     if lookback_days is None:
         lookback_days = decide_lookback_days(horizon)
 
     df = fetch_data(ticker, lookback_days=lookback_days)
     df = enforce_date_column(df)
-
-    # Calculate technicals
     df = calculate_indicators(df)
 
-    # --- Ensure all indicator columns exist ---
     indicator_cols = [
         "Open", "High", "Low", "Close", "SMA5", "SMA10", "Upper", "Lower",
         "RSI", "MACD", "Signal", "Volume", "ATR", "Stochastic_%K",
@@ -179,13 +176,11 @@ def analyze(
         if col not in df.columns:
             df[col] = np.nan
 
-    # Only use columns that actually exist (no KeyError even with missing columns)
     existing_cols = [col for col in indicator_cols if col in df.columns]
     remaining_cols = [c for c in df.columns if c not in existing_cols]
     cols_to_use = [col for col in existing_cols + remaining_cols if col in df.columns]
     df = df[cols_to_use]
 
-    # --- Handle empty data case ---
     if df.empty or df["Close"].isna().all():
         summary = {
             "summary": f"⚠️ No data available for {ticker}.",
@@ -210,7 +205,6 @@ def analyze(
             "llm_plain_summary": "No LLM report (no data available).",
             "df": df
         }
-        # Ensure chart and LLM summary keys always exist
         summary["llm_summary"] = summary["llm_technical_summary"]
         summary["chart"] = None
         return summary
@@ -237,13 +231,10 @@ def analyze(
     obv_signal = "Up" if df['OBV'].iloc[-1] > df['OBV'].iloc[-10] else "Down"
     adx_signal = "Strong Trend" if df['ADX'].iloc[-1] > 25 else "Weak/No Trend"
     atr_signal = "High Volatility" if df['ATR'].iloc[-1] > df['ATR'].rolling(window=30).mean().iloc[-1] else "Normal"
-
-    # Example volume spike/anomaly (stub)
     vol_spike = bool(df['Volume'].iloc[-1] > df['Volume'].rolling(window=30).mean().iloc[-1] * 1.5)
     patterns = []
     anomaly_events = []
 
-    # Compose signals for LLM
     summary = {
         "summary": f"{sma_trend} SMA, {macd_signal} MACD, {rsi_signal} RSI, {bollinger_signal} Bollinger, "
                    f"{stochastic_signal} Stochastic, {cmf_signal} CMF, {obv_signal} OBV, "
@@ -260,15 +251,15 @@ def analyze(
         "vol_spike": vol_spike,
         "patterns": patterns,
         "anomaly_events": anomaly_events,
-        "heatmap_signals": {},  # Add if you compute
-        "composite_risk_score": 0.5,  # Placeholder, update with logic
-        "risk_level": "Caution",      # Placeholder, update with logic
+        "heatmap_signals": {},
+        "composite_risk_score": 0.5,
+        "risk_level": "Caution",
         "lookback_days": lookback_days,
         "horizon": horizon,
-        "df": df  # Always include DataFrame in dict
+        "df": df
     }
 
-    # --- LLM Dual Summary (for both technical & non-technical) ---
+    # LLM Dual Summary (technical & non-technical)
     if api_key:
         try:
             tech, plain = get_llm_dual_summary(summary, api_key)
@@ -281,72 +272,74 @@ def analyze(
         summary["llm_technical_summary"] = "No API key provided for LLM summary."
         summary["llm_plain_summary"] = "No API key provided for LLM summary."
 
-    # Make sure summary always has 'llm_summary' (for orchestrator and Streamlit)
     summary["llm_summary"] = summary.get("llm_technical_summary", summary["summary"])
 
-        # --- Example chart: candlestick with overlays ---
-    
-            from plotly.subplots import make_subplots
-            import plotly.graph_objects as go
-            
-            fig = make_subplots(
-                rows=2, cols=1, 
-                shared_xaxes=True, 
-                vertical_spacing=0.08,
-                row_heights=[0.7, 0.3],
-                subplot_titles=("Candlestick, SMA, Bollinger Bands", "Volume")
-            )
-            
-        # --- Candlestick and overlays (Row 1) ---
-        fig.add_trace(go.Candlestick(
-            x=df['Date'],
-            open=df['Open'],
-            high=df['High'],
-            low=df['Low'],
-            close=df['Close'],
-            name='Candlestick'
-        ), row=1, col=1)
-        fig.add_trace(go.Scatter(
-            x=df['Date'],
-            y=df['SMA5'],
-            mode='lines',
-            name='SMA5'
-        ), row=1, col=1)
-        fig.add_trace(go.Scatter(
-            x=df['Date'],
-            y=df['SMA10'],
-            mode='lines',
-            name='SMA10'
-        ), row=1, col=1)
-        fig.add_trace(go.Scatter(
-            x=df['Date'],
-            y=df['Upper'],
-            mode='lines',
-            line=dict(dash='dot'),
-            name='Upper Bollinger'
-        ), row=1, col=1)
-        fig.add_trace(go.Scatter(
-            x=df['Date'],
-            y=df['Lower'],
-            mode='lines',
-            line=dict(dash='dot'),
-            name='Lower Bollinger'
-        ), row=1, col=1)
-        
-        # --- Volume bar chart (Row 2) ---
-        fig.add_trace(go.Bar(
-            x=df['Date'],
-            y=df['Volume'],
-            marker_color='rgba(0,100,255,0.4)',
-            name='Volume'
-        ), row=2, col=1)
-        
-        fig.update_layout(
-            xaxis_rangeslider_visible=False,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            margin=dict(l=15, r=15, t=40, b=15)
-        )
-        fig.update_yaxes(title_text="Price", row=1, col=1)
-        fig.update_yaxes(title_text="Volume", row=2, col=1)
-        
-        summary["chart"] = fig
+    # --- Chart: Candlestick + SMA + Bollinger + Volume below ---
+    fig = make_subplots(
+        rows=2, cols=1, 
+        shared_xaxes=True, 
+        vertical_spacing=0.08,
+        row_heights=[0.7, 0.3],
+        subplot_titles=("Candlestick, SMA, Bollinger Bands", "Volume")
+    )
+
+    # Row 1: Candlestick and overlays
+    fig.add_trace(go.Candlestick(
+        x=df['Date'],
+        open=df['Open'],
+        high=df['High'],
+        low=df['Low'],
+        close=df['Close'],
+        name='Candlestick'
+    ), row=1, col=1)
+    fig.add_trace(go.Scatter(
+        x=df['Date'],
+        y=df['SMA5'],
+        mode='lines',
+        name='SMA5'
+    ), row=1, col=1)
+    fig.add_trace(go.Scatter(
+        x=df['Date'],
+        y=df['SMA10'],
+        mode='lines',
+        name='SMA10'
+    ), row=1, col=1)
+    fig.add_trace(go.Scatter(
+        x=df['Date'],
+        y=df['Upper'],
+        mode='lines',
+        line=dict(dash='dot'),
+        name='Upper Bollinger'
+    ), row=1, col=1)
+    fig.add_trace(go.Scatter(
+        x=df['Date'],
+        y=df['Lower'],
+        mode='lines',
+        line=dict(dash='dot'),
+        name='Lower Bollinger'
+    ), row=1, col=1)
+
+    # Row 2: Volume
+    fig.add_trace(go.Bar(
+        x=df['Date'],
+        y=df['Volume'],
+        marker_color='rgba(0,100,255,0.4)',
+        name='Volume'
+    ), row=2, col=1)
+
+    fig.update_layout(
+        xaxis_rangeslider_visible=False,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=15, r=15, t=40, b=15)
+    )
+    fig.update_yaxes(title_text="Price", row=1, col=1)
+    fig.update_yaxes(title_text="Volume", row=2, col=1)
+
+    summary["chart"] = fig
+
+    return summary
+
+
+
+
+
