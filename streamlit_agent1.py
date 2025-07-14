@@ -1,114 +1,124 @@
 import streamlit as st
-import pandas as pd
 import plotly.graph_objects as go
+from agents.chief_orchestrator import analyze as chief_analyze
+from agents.agent1_stock import analyze as stock_analyze
+from agents.agent1_sector import analyze as sector_analyze
+from agents.agent1_market import analyze as market_analyze
+from agents.agent1_commodities import analyze as commodities_analyze
+from agents.agent1_globals import analyze as globals_analyze
 
-from agents.agent1_core import run_full_technical_analysis
+# --- User Inputs ---
+st.set_page_config(page_title="AI Stock Analyst", page_icon="📊", layout="wide")
+st.sidebar.title("Stock Selection")
+ticker = st.sidebar.text_input("Ticker", value="A17U.SI")
+horizon = st.sidebar.selectbox("Forecast Horizon", ["1 Day", "3 Days", "7 Days", "30 Days"])
+lookback_days = st.sidebar.number_input("Lookback Days (override, optional)", min_value=7, max_value=365, value=60)
+openai_api_key = st.secrets.get("OPENAI_API_KEY", None)
+st.sidebar.markdown("---")
+st.sidebar.caption("Built by AI | [About](#)")
 
-st.set_page_config(page_title="AI Technical Analyst", page_icon=":bar_chart:")
+# --- Fetch Company Name Utility ---
+def get_company_name_from_ticker(ticker):
+    try:
+        import yfinance as yf
+        info = yf.Ticker(ticker).info
+        return info.get("longName", ticker)
+    except Exception:
+        return ticker
 
-st.title("🦾 AI-Powered Technical Analyst: Multi-Agent Stock Intelligence")
-st.write("Welcome! Get expert, explainable outlooks on any stock, sector, market, and more—by your modular team of digital analysts.")
+company_name = get_company_name_from_ticker(ticker)
 
-# --- Sidebar user inputs ---
-st.sidebar.header("Stock Analysis Input")
-ticker = st.sidebar.text_input("Enter SGX ticker symbol (e.g., UOB.SI, OCBC.SI)", value="UOB.SI")
-horizon = st.sidebar.selectbox("Select Outlook Horizon", ["1 Day", "3 Days", "7 Days", "30 Days", "90 Days"])
-
-api_key = st.secrets["OPENAI_API_KEY"]
-
-# --- Helper for clean LLM summary tabs ---
-def display_llm_summaries(agent_name, summary):
-    st.subheader(f"🧠 LLM-Powered {agent_name} Analyst Report")
-    tab1, tab2 = st.tabs(["Technical Summary", "For Grandmas and Grandpas"])
-    with tab1:
-        st.markdown(
-            "<span style='font-size:1.1em;font-weight:600;'>🧑‍💼 Technical Summary</span>",
-            unsafe_allow_html=True
+# --- Chief Analyst Grand Outlook ---
+with st.spinner("Analyzing overall outlook..."):
+    try:
+        chief_result = chief_analyze(
+            ticker,
+            company_name=company_name,
+            horizon=horizon,
+            lookback_days=lookback_days,
+            api_key=openai_api_key
         )
-        st.write(summary.get("llm_technical_summary", "No technical summary available."))
-    with tab2:
-        st.markdown(
-            "<span style='font-size:1.1em;font-weight:600;'>👵 Plain-English Summary</span>",
-            unsafe_allow_html=True
-        )
-        st.write(summary.get("llm_plain_summary", "No plain-English summary available."))
+        chief_outlook = chief_result.get("llm_summary", "No summary.")
+        composite_risk_score = chief_result.get("composite_risk_score", 50)
+        composite_risk_level = chief_result.get("risk_level", "Moderate")
+    except Exception as e:
+        chief_outlook = f"(Error: {e})"
+        composite_risk_score = 50
+        composite_risk_level = "Moderate"
 
-# --- Orchestrator: Run all agents in one go ---
-st.info("Running multi-agent team. This may take up to a minute for full AI analysis...")
+# --- Agent Analyzer Calls ---
+AGENT_CONFIG = [
+    ("Stock", stock_analyze),
+    ("Sector", sector_analyze),
+    ("Market", market_analyze),
+    ("Commodities", commodities_analyze),
+    ("Globals", globals_analyze)
+]
 
-with st.spinner("AI Team is analyzing..."):
-    results = run_full_technical_analysis(ticker, horizon=horizon, api_key=api_key)
+agent_reports = {}
+for agent_name, analyze_fn in AGENT_CONFIG:
+    with st.spinner(f"Analyzing with {agent_name} agent..."):
+        try:
+            res = analyze_fn(
+                ticker,
+                company_name=company_name,
+                horizon=horizon,
+                lookback_days=lookback_days,
+                api_key=openai_api_key
+            )
+            agent_reports[agent_name] = {
+                "summary": res.get("llm_summary", "No summary."),
+                "risk": res.get("risk_level", "N/A"),
+                "plot": res.get("chart", go.Figure()),
+                "raw": res
+            }
+        except Exception as e:
+            agent_reports[agent_name] = {
+                "summary": f"(Agent failed: {e})",
+                "risk": "N/A",
+                "plot": go.Figure(),
+                "raw": {}
+            }
 
-stock_summary = results["stock"]
-sector_summary = results["sector"]
-market_summary = results["market"]
-commodities_summary = results["commodities"]
-globals_summary = results["globals"]
-stock_df = results["stock_df"]
+# --- Header Section ---
+st.markdown(f"# {company_name} ({ticker.upper()})")
+st.markdown(f"### Forecast Horizon: **{horizon}**")
 
-# --- Chief/Grand Outlook (example - expand logic as you build Chief LLM) ---
-st.header("🎩 Chief AI Analyst Grand Outlook (BETA)")
-st.write("**Here’s what your Chief AI Analyst sees at a glance, after reviewing the team's reports:**")
-# Placeholder: display the stock technical summary as the 'grand outlook' for now
-st.success(stock_summary.get("llm_technical_summary", "No technical summary available."))
-
-# --- Show each agent's dual LLM summary in tabs ---
-st.divider()
-display_llm_summaries("Stock", stock_summary)
-st.divider()
-display_llm_summaries("Sector", sector_summary)
-st.divider()
-display_llm_summaries("Market", market_summary)
-st.divider()
-display_llm_summaries("Commodities", commodities_summary)
-st.divider()
-display_llm_summaries("Global", globals_summary)
-
-# --- Example: Plot chart for stock (can expand for sector/market etc.) ---
-st.header(f"📈 {ticker} Candlestick Chart with SMA & Bollinger Bands")
-if not stock_df.empty:
-    fig = go.Figure(
-        data=[
-            go.Candlestick(
-                x=stock_df["Date"],
-                open=stock_df["Open"],
-                high=stock_df["High"],
-                low=stock_df["Low"],
-                close=stock_df["Close"],
-                name="Candlestick",
-            ),
-            go.Scatter(
-                x=stock_df["Date"], y=stock_df["SMA5"], mode="lines", name="SMA5"
-            ),
-            go.Scatter(
-                x=stock_df["Date"], y=stock_df["SMA10"], mode="lines", name="SMA10"
-            ),
-            go.Scatter(
-                x=stock_df["Date"], y=stock_df["Upper"], mode="lines", name="Bollinger Upper", line=dict(dash="dot")
-            ),
-            go.Scatter(
-                x=stock_df["Date"], y=stock_df["Lower"], mode="lines", name="Bollinger Lower", line=dict(dash="dot")
-            ),
-        ]
+# --- Chief Analyst Grand Outlook (Top Section) ---
+with st.container():
+    st.markdown("## 🦾 Chief Analyst Grand Outlook")
+    st.markdown(f"**Summary:** {chief_outlook}")
+    st.metric("Composite Risk Score", f"{composite_risk_score}/100")
+    st.progress(composite_risk_score)
+    emoji = (
+        "🔴" if composite_risk_level.lower() == "high"
+        else "🟠" if composite_risk_level.lower() == "moderate"
+        else "🟢"
     )
-    fig.update_layout(height=500, xaxis_rangeslider_visible=False)
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.warning("No price data to plot for this ticker/horizon.")
+    st.markdown(f"**Risk Level:** {emoji} {composite_risk_level}")
 
-# --- Display composite risk and risk dashboard ---
-st.header("🚦 Composite Risk Dashboard")
-st.write(f"**Composite Risk Score:** {stock_summary.get('composite_risk_score', 'N/A')}")
-st.write(f"**Risk Level:** {stock_summary.get('risk_level', 'N/A')}")
+st.divider()
 
-# --- Show technical indicator mini-dashboard for Stock agent ---
-with st.expander("Show All Stock Technical Indicators (Raw Output)"):
-    st.dataframe(stock_df)
+# --- Agent Tabs ---
+tab_names = list(agent_reports.keys())
+tabs = st.tabs(tab_names)
+for i, agent in enumerate(tab_names):
+    with tabs[i]:
+        st.markdown(f"### {agent} Analyst Report")
+        st.plotly_chart(agent_reports[agent]["plot"], use_container_width=True)
+        st.markdown(f"**AI Summary:** {agent_reports[agent]['summary']}")
+        st.markdown(f"**Risk Level:** {agent_reports[agent]['risk']}")
+        with st.expander("Show technical details / raw data"):
+            st.write(agent_reports[agent]["raw"])
+        st.download_button(
+            "Download Agent Report",
+            agent_reports[agent]["summary"],
+            file_name=f"{ticker}_{agent}_report.md"
+        )
 
-# You can further add dashboards for other agents as needed (sector_df, etc.)
-
-
-
+# --- Footer ---
+st.markdown("---")
+st.caption("For educational use only. AI Multi-Agent Analyst © 2025 | v1.0")
 
 
 
