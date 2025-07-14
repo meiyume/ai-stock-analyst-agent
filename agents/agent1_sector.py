@@ -1,4 +1,4 @@
-import agent1_stock
+from agents.agent1_stock import analyze as analyze_stock
 from openai import OpenAI
 
 def get_llm_dual_summary(signals, api_key):
