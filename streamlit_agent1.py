@@ -1,13 +1,8 @@
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
 
-from agents.agent1_core import (
-    analyze_stock,
-    analyze_sector,
-    analyze_market,
-    analyze_commodities,
-    analyze_globals,
-)
+from agents.agent1_core import run_full_technical_analysis
 
 st.set_page_config(page_title="AI Technical Analyst", page_icon=":bar_chart:")
 
@@ -38,24 +33,21 @@ def display_llm_summaries(agent_name, summary):
         )
         st.write(summary.get("llm_plain_summary", "No plain-English summary available."))
 
-# --- Orchestrator: Run all agents ---
+# --- Orchestrator: Run all agents in one go ---
 st.info("Running multi-agent team. This may take up to a minute for full AI analysis...")
 
-with st.spinner("Agent 1 Stock analyzing..."):
-    stock_summary, stock_df = analyze_stock(ticker, horizon, api_key=api_key)
-with st.spinner("Agent 1 Sector analyzing..."):
-    sector_summary, sector_df = analyze_sector(ticker, horizon, api_key=api_key)
-with st.spinner("Agent 1 Market analyzing..."):
-    market_summary, market_df = analyze_market(ticker, horizon, api_key=api_key)
-with st.spinner("Agent 1 Commodities analyzing..."):
-    commodities_summary, commodities_df = analyze_commodities(ticker, horizon, api_key=api_key)
-with st.spinner("Agent 1 Global analyzing..."):
-    globals_summary, globals_df = analyze_globals(ticker, horizon, api_key=api_key)
+with st.spinner("AI Team is analyzing..."):
+    results = run_full_technical_analysis(ticker, horizon=horizon, api_key=api_key)
 
-# --- Chief/Grand Outlook (example - can expand logic here) ---
+stock_summary = results["stock"]
+sector_summary = results["sector"]
+market_summary = results["market"]
+commodities_summary = results["commodities"]
+globals_summary = results["globals"]
+stock_df = results["stock_df"]
+
+# --- Chief/Grand Outlook (example - expand logic as you build Chief LLM) ---
 st.header("🎩 Chief AI Analyst Grand Outlook (BETA)")
-# You could call another synthesis LLM function here for the ultimate "orchestra" summary.
-
 st.write("**Here’s what your Chief AI Analyst sees at a glance, after reviewing the team's reports:**")
 # Placeholder: display the stock technical summary as the 'grand outlook' for now
 st.success(stock_summary.get("llm_technical_summary", "No technical summary available."))
@@ -73,8 +65,6 @@ st.divider()
 display_llm_summaries("Global", globals_summary)
 
 # --- Example: Plot chart for stock (can expand for sector/market etc.) ---
-import plotly.graph_objects as go
-
 st.header(f"📈 {ticker} Candlestick Chart with SMA & Bollinger Bands")
 if not stock_df.empty:
     fig = go.Figure(
@@ -116,6 +106,7 @@ with st.expander("Show All Stock Technical Indicators (Raw Output)"):
     st.dataframe(stock_df)
 
 # You can further add dashboards for other agents as needed (sector_df, etc.)
+
 
 
 
