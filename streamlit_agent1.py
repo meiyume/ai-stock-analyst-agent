@@ -45,13 +45,22 @@ if "df" not in st.session_state:
 
 if st.button("🔍 Run Technical Analysis"):
     with st.spinner("Analyzing..."):
-        results, df = run_full_technical_analysis(ticker, selected_horizon)
-        df = enforce_date_column(df)
+        # Use orchestrator, returns only results dict (not tuple)
+        results = run_full_technical_analysis(
+            ticker,
+            None,  # company_name auto-fetched!
+            selected_horizon,
+            api_key=st.secrets["OPENAI_API_KEY"]
+        )
+        df = results.get("stock_df", None)
+        if df is not None:
+            df = enforce_date_column(df)
         st.session_state["results"] = results
         st.session_state["df"] = df
 
 results = st.session_state["results"]
 df = st.session_state["df"]
+
 
 if df is None or results is None:
     st.info("Please run the technical analysis to view results.")
