@@ -154,10 +154,11 @@ Do not number or prefix the titles with any numbers or colons.
     return tech, plain
 
 def analyze(
-    ticker: str,
-    horizon: str = "7 Days",
-    lookback_days: int = None,
-    api_key: str = None
+    ticker,
+    company_name=None,
+    horizon="7 Days",
+    lookback_days=None,
+    api_key=None
 ):
     # --- Dynamic lookback ---
     if lookback_days is None:
