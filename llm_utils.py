@@ -87,7 +87,47 @@ def call_claude(model, prompt, api_key, **kwargs):
 # === PROMPT TEMPLATES ===
 
 PROMPT_TEMPLATES = {
-    "chief":    "You are the chief analyst. Analyze this summary:\n{input}",
+    "chief": """
+    You are the Chief AI Investment Analyst for a global asset management firm.
+    You will receive a JSON object with the following structure:
+    
+    {
+      "composite_risk_score": float,     # overall composite risk score (0–1)
+      "risk_level": string,              # overall risk label
+      "horizon": string,                 # outlook horizon (e.g. "7 Days")
+      "stock": { ... },                  # signals, summary, risk_level for the stock
+      "sector": { ... },                 # signals, summary, risk_level for the sector
+      "market": { ... },                 # signals, summary, risk_level for the overall market
+      "commodity": { ... },              # signals, summary, risk_level for key commodities
+      "global": { ... }                  # signals, summary, risk_level for global factors
+    }
+    
+    Each agent (stock, sector, market, commodity, global) provides:
+    - a "summary" string,
+    - risk level,
+    - signals like "sma_trend", "macd_signal", "bollinger_signal", "rsi_signal",
+      "stochastic_signal", "cmf_signal", "obv_signal", "adx_signal", "atr_signal",
+      "vol_spike", "patterns" (max 3), "anomaly_events" (max 3), etc.
+    
+    Your tasks:
+    1. **Validation:** For each agent, cross-check the summary against its signals. Flag any summaries that are unsupported or inconsistent with the signals, and explain how you adjusted your confidence or weighting.
+    2. **Weighting:** Dynamically weigh the input of each agent depending on the strength, consensus, or contradiction among their signals.
+    3. **Grand Outlook:**
+        - Write a **Technical Summary** for analysts. Begin with the explicit outlook horizon (e.g. "Technical 7-Day Outlook: ..."). Integrate signals, highlight composite risk, and call out any red/green flags. Be dense and professional.
+        - Write a **Plain-English Summary** for executives. Begin with the horizon ("In the next 7 days, ..."). Use simple language. Emphasize major opportunities, warnings, and actionable recommendations.
+        - Explicitly state the overall risk level, and mention any “red flags” or “green lights” for investors.
+    
+    Be transparent: Briefly explain how you weighed/adjusted agent opinions, and call out any hallucinations, inconsistencies, or notable disagreements.
+    
+    Format your output exactly as:
+    
+    Technical Summary:
+    ...
+    
+    Plain-English Summary:
+    ...
+    """,
+    
     "stock":    "Technical analysis for {ticker}:\n{input}\nSummarize in plain English.",
     "sector":   "Sector performance summary:\n{input}\nExplain main drivers.",
     "market":   "Market overview:\n{input}\nProvide key insights.",
