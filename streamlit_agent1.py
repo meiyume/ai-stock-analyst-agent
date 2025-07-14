@@ -25,17 +25,29 @@ Every scan comes with a clear risk score, an AI-written summary, _and_ plain-Eng
 """, unsafe_allow_html=True)
 
 # --- User Input ---
-ticker = st.text_input("🎯 Enter SGX Stock Ticker (e.g. U11.SI)", value="U11.SI")
-horizon = st.selectbox("📅 Select Outlook Horizon", [
-    "Next Day (1D)", "3 Days", "7 Days", "30 Days (1M)"
-], index=2)
-horizon_map = {
-    "Next Day (1D)": "1 Day",
-    "3 Days": "3 Days",
-    "7 Days": "7 Days",
-    "30 Days (1M)": "30 Days"
-}
-selected_horizon = horizon_map[horizon]
+def auto_format_ticker(ticker):
+    t = ticker.strip().upper()
+    # Only append '.SI' if no exchange is specified
+    if '.' not in t:
+        return t + ".SI"
+    return t
+
+st.subheader("Step 1: Enter SGX/US Stock Ticker")
+user_input = st.text_input("🎯 Ticker (e.g. U11.SI, UOB, AAPL, TSLA)", value="U11.SI")
+ticker = auto_format_ticker(user_input)
+
+# --- Horizon selection (Hybrid style) ---
+st.subheader("Step 2: Select Outlook Horizon")
+horizon_options = [
+    "1 Day", "3 Days", "5 Days", "7 Days", "14 Days",
+    "30 Days", "60 Days", "90 Days", "180 Days", "360 Days", "Custom..."
+]
+horizon_choice = st.selectbox("Prediction Horizon", horizon_options, index=3)
+if horizon_choice == "Custom...":
+    custom_days = st.number_input("Custom Horizon (days)", min_value=1, max_value=360, value=7)
+    selected_horizon = f"{custom_days} Days"
+else:
+    selected_horizon = horizon_choice
 
 # --- Session State for seamless UX ---
 if "results" not in st.session_state:
@@ -45,7 +57,6 @@ if "df" not in st.session_state:
 
 if st.button("🔍 Run Technical Analysis"):
     with st.spinner("Analyzing..."):
-        # Use orchestrator, returns only results dict (not tuple)
         results = run_full_technical_analysis(
             ticker,
             None,  # company_name auto-fetched!
@@ -60,7 +71,6 @@ if st.button("🔍 Run Technical Analysis"):
 
 results = st.session_state["results"]
 df = st.session_state["df"]
-
 
 if df is None or results is None:
     st.info("Please run the technical analysis to view results.")
@@ -327,56 +337,7 @@ if sector_summary:
 st.markdown("**📌 Market Index Analysis:**")
 market_summary = results.get("market", None)
 if market_summary:
-    st.markdown(market_summary.get("summary", "No market index insights available."))
-
-st.markdown("**📌 Commodities & Global Macro:**")
-commodities_summary = results.get("commodities", None)
-globals_summary = results.get("globals", None)
-if commodities_summary:
-    st.markdown(commodities_summary.get("summary", "No commodities insights available."))
-if globals_summary:
-    st.markdown(globals_summary.get("summary", "No global macro insights available."))
-
-st.markdown("## 🧠 LLM-Powered Analyst Summaries (All Layers)")
-layer_titles = [
-    ("💹 Stock", "stock"),
-    ("🏭 Sector", "sector"),
-    ("📈 Market", "market"),
-    ("🛢️ Commodities", "commodities"),
-    ("🌏 Global Macro", "globals")
-]
-cols = st.columns(5)
-for (label, key), col in zip(layer_titles, cols):
-    llm_text = results.get(key, {}).get("llm_summary", None)
-    if llm_text:
-        col.markdown(f"### {label}")
-        col.markdown(llm_text, unsafe_allow_html=True)
-    else:
-        col.markdown(f"### {label}")
-        col.info("No summary.")
-
-# === LLM Commentary (auto-generated, always visible) ===
-api_key = st.secrets["OPENAI_API_KEY"]
-with st.spinner("Agent 1 is generating LLM commentary..."):
-    llm_summary = get_llm_summary(stock_summary, api_key)
-
-# Split the LLM response:
-if "For Technical Readers" in llm_summary and "For Grandmas and Grandpas" in llm_summary:
-    technical, grandma = llm_summary.split("For Grandmas and Grandpas", 1)
-    st.subheader("🧠 LLM-Powered Analyst Commentary")
-    st.markdown(
-        "<span style='font-size:1.3em;font-weight:600;'>🧑‍💼 For Technical Readers</span>",
-        unsafe_allow_html=True
-    )
-    st.write(technical.replace("For Technical Readers", "").replace("Summary:", "").strip())
-    st.markdown(
-        "<span style='font-size:1.3em;font-weight:600;'>👵 For Grandmas and Grandpas</span>",
-        unsafe_allow_html=True
-    )
-    st.write(grandma.replace("Summary:", "").strip())
-else:
-    st.subheader("🧠 LLM-Powered Analyst Commentary")
-    st.write(llm_summary)
+    st.markdown(market_summary.get("summary", "No market index
 
 
 
