@@ -1,9 +1,9 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
-from openai import OpenAI
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
+from llm_utils import call_llm  # <<<<<< CENTRALIZED LLM UTILITY
 
 def fetch_data(ticker, lookback_days=30, interval="1d"):
     end_date = pd.Timestamp.today()
@@ -16,11 +16,9 @@ def fetch_data(ticker, lookback_days=30, interval="1d"):
         progress=False
     )
     data = data.reset_index()
-
-    # Flatten MultiIndex columns
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = [
-            '_'.join(filter(None, map(str, col))).replace(f"_{ticker}", "") 
+            '_'.join(filter(None, map(str, col))).replace(f"_{ticker}", "")
             for col in data.columns.values
         ]
     return data 
@@ -47,15 +45,10 @@ def decide_lookback_days(horizon: str):
     return lookback_days
 
 def calculate_indicators(df):
-    # SMA
     df['SMA5'] = df['Close'].rolling(window=5).mean()
     df['SMA10'] = df['Close'].rolling(window=10).mean()
-
-    # Bollinger Bands
     df['Upper'] = df['SMA10'] + 2 * df['Close'].rolling(window=10).std()
     df['Lower'] = df['SMA10'] - 2 * df['Close'].rolling(window=10).std()
-
-    # RSI
     delta = df['Close'].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
@@ -63,33 +56,21 @@ def calculate_indicators(df):
     avg_loss = loss.rolling(window=14).mean()
     rs = avg_gain / avg_loss
     df['RSI'] = 100 - (100 / (1 + rs))
-
-    # MACD
     exp12 = df['Close'].ewm(span=12, adjust=False).mean()
     exp26 = df['Close'].ewm(span=26, adjust=False).mean()
     df['MACD'] = exp12 - exp26
     df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
-
-    # Volume (already present)
-
-    # ATR
     high_low = df['High'] - df['Low']
     high_close = np.abs(df['High'] - df['Close'].shift())
     low_close = np.abs(df['Low'] - df['Close'].shift())
     ranges = pd.concat([high_low, high_close, low_close], axis=1)
     df['ATR'] = ranges.max(axis=1).rolling(window=14).mean()
-
-    # Stochastic
     low_min = df['Low'].rolling(window=14).min()
     high_max = df['High'].rolling(window=14).max()
     df['Stochastic_%K'] = 100 * (df['Close'] - low_min) / (high_max - low_min)
     df['Stochastic_%D'] = df['Stochastic_%K'].rolling(window=3).mean()
-
-    # CMF
     mfv = ((df['Close'] - df['Low']) - (df['High'] - df['Close'])) / (df['High'] - df['Low'] + 1e-9) * df['Volume']
     df['CMF'] = mfv.rolling(window=20).sum() / df['Volume'].rolling(window=20).sum()
-
-    # OBV
     obv = [0]
     for i in range(1, len(df)):
         if df.loc[i, 'Close'] > df.loc[i-1, 'Close']:
@@ -99,55 +80,22 @@ def calculate_indicators(df):
         else:
             obv.append(obv[-1])
     df['OBV'] = obv
-
-    # ADX (placeholder)
     df['ADX'] = np.nan
-
     return df
 
-def get_llm_dual_summary(signals, api_key):
-    client = OpenAI(api_key=api_key)
-    prompt = f"""
-You are an expert technical analyst and educator for a leading financial institution.
-
-Based on the following technical signals and anomalies, produce two summaries:
-1. Technical Summary (for professionals): Write a detailed, precise analysis using standard technical terms and concise logic. Explain not just the signal, but why it matters *now*. Synthesize supporting or conflicting indicators. Highlight risk/opportunity, and explicitly reference the outlook horizon ({signals.get('horizon', 'the next few days')}). Make actionable suggestions.
-
-2. Plain-English Summary (for non-technical users, e.g., grandma/grandpa): Start with "If you're looking at this stock outlook over {signals.get('horizon', 'the next few days')}, here’s what you should know:". Avoid jargon; use analogies and simple language. Give practical advice, mention risk, and be warm, clear, and friendly.
-
-Signals:
-SMA Trend: {signals.get('sma_trend')}
-MACD: {signals.get('macd_signal')}
-RSI: {signals.get('rsi_signal')}
-Bollinger Bands: {signals.get('bollinger_signal')}
-Stochastic: {signals.get('stochastic_signal')}
-CMF: {signals.get('cmf_signal')}
-OBV: {signals.get('obv_signal')}
-ADX: {signals.get('adx_signal')}
-ATR: {signals.get('atr_signal')}
-Volume Spike: {signals.get('vol_spike')}
-Candlestick Patterns: {signals.get('patterns')}
-Key Anomalies: {signals.get('anomaly_events')}
-Outlook Horizon: {signals.get('horizon', 'the next few days')}
-Risk Level: {signals.get('risk_level')}
-
-Write two sections, each starting with a title: "Technical Summary" and "Plain-English Summary".
-"""
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=800,
-        temperature=0.6,
-    )
-    output = response.choices[0].message.content.strip()
+def parse_dual_summary(llm_output):
+    """
+    Splits the LLM output into technical and plain-English summaries.
+    Expects output to contain both "Technical Summary" and "Plain-English Summary" as section headers.
+    """
     tech, plain = "", ""
-    if "Technical Summary" in output and "Plain-English Summary" in output:
-        parts = output.split("Plain-English Summary")
+    if "Technical Summary" in llm_output and "Plain-English Summary" in llm_output:
+        parts = llm_output.split("Plain-English Summary")
         tech = parts[0].replace("Technical Summary", "").strip()
         plain = parts[1].strip()
     else:
-        tech = output
-        plain = output
+        tech = llm_output
+        plain = llm_output
     return tech, plain
 
 def analyze(
@@ -155,7 +103,7 @@ def analyze(
     company_name=None,
     horizon="7 Days",
     lookback_days=None,
-    api_key=None
+    api_key=None  # Not used; all LLM logic centralized now
 ):
     if lookback_days is None:
         lookback_days = decide_lookback_days(horizon)
@@ -258,31 +206,31 @@ def analyze(
     }
 
     # LLM Dual Summary (technical & plain-English)
-    if api_key:
-        try:
-            signal_keys = [
-                "sma_trend", "macd_signal", "bollinger_signal", "rsi_signal",
-                "stochastic_signal", "cmf_signal", "obv_signal", "adx_signal",
-                "atr_signal", "vol_spike", "patterns", "anomaly_events", "horizon", "risk_level"
-            ]
-            slim_signals = {k: summary.get(k) for k in signal_keys}
-            if isinstance(slim_signals.get("patterns"), list):
-                slim_signals["patterns"] = slim_signals["patterns"][:3]
-            if isinstance(slim_signals.get("anomaly_events"), list):
-                slim_signals["anomaly_events"] = slim_signals["anomaly_events"][:3]
-            tech, plain = get_llm_dual_summary(slim_signals, api_key)
-            summary["llm_technical_summary"] = tech
-            summary["llm_plain_summary"] = plain
-        except Exception as e:
-            summary["llm_technical_summary"] = f"LLM error: {e}"
-            summary["llm_plain_summary"] = f"LLM error: {e}"
-    else:
-        summary["llm_technical_summary"] = "No API key provided for LLM summary."
-        summary["llm_plain_summary"] = "No API key provided for LLM summary."
+    try:
+        signal_keys = [
+            "sma_trend", "macd_signal", "bollinger_signal", "rsi_signal",
+            "stochastic_signal", "cmf_signal", "obv_signal", "adx_signal",
+            "atr_signal", "vol_spike", "patterns", "anomaly_events", "horizon", "risk_level"
+        ]
+        slim_signals = {k: summary.get(k) for k in signal_keys}
+        if isinstance(slim_signals.get("patterns"), list):
+            slim_signals["patterns"] = slim_signals["patterns"][:3]
+        if isinstance(slim_signals.get("anomaly_events"), list):
+            slim_signals["anomaly_events"] = slim_signals["anomaly_events"][:3]
+        llm_output = call_llm(
+            agent_name="stock",
+            input_text=str(slim_signals)
+        )
+        tech, plain = parse_dual_summary(llm_output)
+        summary["llm_technical_summary"] = tech
+        summary["llm_plain_summary"] = plain
+    except Exception as e:
+        summary["llm_technical_summary"] = f"LLM error: {e}"
+        summary["llm_plain_summary"] = f"LLM error: {e}"
 
     summary["llm_summary"] = summary.get("llm_technical_summary", summary["summary"])
 
-    # --- Big all-in-one chart with all major indicators ---
+    # --- Chart section unchanged ---
     fig = make_subplots(
         rows=9, cols=1,
         shared_xaxes=True,
@@ -402,6 +350,7 @@ def analyze(
     summary["chart"] = fig
 
     return summary
+
 
 
 
