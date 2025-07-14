@@ -11,6 +11,13 @@ import threading
 import queue
 from concurrent.futures import Future
 
+try:
+    import streamlit as st
+    if "OPENAI_API_KEY" in st.secrets:
+        os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+except Exception:
+    pass  # Not running in Streamlit
+    
 # === PROVIDER CONCURRENCY LIMITS ===
 
 PROVIDER_LIMITS = {
@@ -55,7 +62,7 @@ for provider, lim in PROVIDER_LIMITS.items():
 
 def call_openai(model, prompt, api_key, temperature=0.2, max_tokens=1024):
     from openai import OpenAI
-    client = OpenAI(api_key=api_key)
+    client = OpenAI()
     response = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
