@@ -260,7 +260,17 @@ def analyze(
     # LLM Dual Summary (technical & plain-English)
     if api_key:
         try:
-            tech, plain = get_llm_dual_summary(summary, api_key)
+            signal_keys = [
+                "sma_trend", "macd_signal", "bollinger_signal", "rsi_signal",
+                "stochastic_signal", "cmf_signal", "obv_signal", "adx_signal",
+                "atr_signal", "vol_spike", "patterns", "anomaly_events", "horizon", "risk_level"
+            ]
+            slim_signals = {k: summary.get(k) for k in signal_keys}
+            if isinstance(slim_signals.get("patterns"), list):
+                slim_signals["patterns"] = slim_signals["patterns"][:3]
+            if isinstance(slim_signals.get("anomaly_events"), list):
+                slim_signals["anomaly_events"] = slim_signals["anomaly_events"][:3]
+            tech, plain = get_llm_dual_summary(slim_signals, api_key)
             summary["llm_technical_summary"] = tech
             summary["llm_plain_summary"] = plain
         except Exception as e:
