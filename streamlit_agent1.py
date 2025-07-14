@@ -24,7 +24,12 @@ if run_btn:
         )
 
     st.markdown(f"## 🏆 Chief Analyst Grand Outlook — {results['company_name']} ({results['ticker']}) — {results['horizon']}")
-    st.markdown(f"**AI Summary:** {results['llm_summary']}")
+    grand_tabs = st.tabs(["Technical Summary", "Plain-English Summary"])
+    with grand_tabs[0]:
+        st.markdown(results.get("llm_technical_summary", "No technical summary available."))
+    with grand_tabs[1]:
+        st.markdown(results.get("llm_plain_summary", "No plain-English summary available."))
+
     st.markdown(f"**Composite Risk Score:** {results['composite_risk_score']}")
     st.markdown(f"**Risk Level:** {results['risk_level']}")
 
@@ -49,7 +54,19 @@ if run_btn:
         agent_data = results.get(key, {})
         with tabs[i]:
             st.markdown(f"### {label} Agent AI Summary")
-            st.markdown(f"**AI Summary:** {agent_data.get('llm_summary', 'No summary.')}")
+            summary_tabs = st.tabs(["Technical Summary", "Plain-English Summary"])
+            with summary_tabs[0]:
+                tech = agent_data.get("llm_technical_summary", "")
+                if not tech or "llm error" in tech.lower():
+                    st.warning("Technical summary could not be generated due to an LLM error.")
+                else:
+                    st.markdown(tech)
+            with summary_tabs[1]:
+                plain = agent_data.get("llm_plain_summary", "")
+                if not plain or "llm error" in plain.lower():
+                    st.warning("Plain-English summary could not be generated due to an LLM error.")
+                else:
+                    st.markdown(plain)
             st.markdown(f"**Risk Level:** {agent_data.get('risk_level', 'N/A')}")
 
             with st.expander("Show technical details / raw data"):
@@ -58,9 +75,17 @@ if run_btn:
                 if isinstance(df, pd.DataFrame):
                     st.dataframe(df)
 
+            download_text = f"""# {label} Agent AI Report
+
+            ## Technical Summary
+            {agent_data.get('llm_technical_summary', '')}
+            
+            ## Plain-English Summary
+            {agent_data.get('llm_plain_summary', '')}
+            """
             st.download_button(
                 label="Download Agent Report",
-                data=agent_data.get("llm_summary", ""),
+                data=download_text,
                 file_name=f"{ticker}_{label}_report.md"
             )
 
