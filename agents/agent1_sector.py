@@ -1,14 +1,37 @@
-import pandas as pd
 from agents.agent1_stock import analyze as analyze_stock
 from openai import OpenAI
+
+def get_llm_lookback_days(horizon, sector_signals, api_key):
+    client = OpenAI(api_key=api_key)
+    prompt = f"""
+You are an advanced sector-level quant analyst.
+
+Given:
+- Outlook horizon: "{horizon}"
+- Typical sector peer technical signals: {sector_signals}
+
+Decide and return only the ideal number of past days ("lookback_days") to use for technical analysis of this sector—so as to produce the most meaningful indicators for the {horizon} forecast.
+
+Return only the integer number of lookback days (e.g., 14 or 30).
+"""
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=10,
+        temperature=0,
+    )
+    lookback_str = response.choices[0].message.content.strip()
+    try:
+        return int(lookback_str)
+    except:
+        return 30  # fallback
 
 def get_llm_sector_summary(sector_signals, main_ticker, api_key, horizon):
     client = OpenAI(api_key=api_key)
     prompt = f"""
 You are a professional sector-level equity analyst.
-- First, summarize these peer signals for technical readers. Use correct finance/quant terms and connect signals (bullish %, bearish %, leader/laggard, anomalies). 
-- Next, explain for a non-technical reader in plain language: Is the sector healthy? Is their stock leading, lagging, or in the middle? Should they feel confident or cautious for the {horizon} outlook?
-- Include gentle directional advice, but let the reader decide.
+- First, summarize these peer signals for technical readers.
+- Next, explain for a non-technical reader in plain language.
 - Format as two sections: "For Technical Readers" and "For Everyone".
 
 Peer signals:
@@ -39,10 +62,15 @@ def analyze(peer_tickers: list, horizon: str = "7 Days", main_ticker: str = None
     leader, laggard = None, None
     highest_score, lowest_score = -float('inf'), float('inf')
 
+    # Build a fake summary string (just tickers and horizon) for LLM lookback (optionally pass recent peer signals if available)
+    simple_signals = f"Peers: {peer_tickers}. Horizon: {horizon}"
+
+    # Get smart lookback days from LLM!
+    lookback_days = get_llm_lookback_days(horizon, simple_signals, api_key) if api_key else 30
+
     for ticker in peer_tickers:
         try:
-            summary, _ = analyze_stock(ticker, horizon)
-            # Calculate composite score for leadership
+            summary, _ = analyze_stock(ticker, horizon, lookback_days=lookback_days)
             score = (
                 (1 if summary.get("sma_trend", "").lower() == "bullish" else 0) +
                 (1 if summary.get("macd_signal", "").lower() == "bullish" else 0) +
@@ -55,20 +83,16 @@ def analyze(peer_tickers: list, horizon: str = "7 Days", main_ticker: str = None
             if score < lowest_score:
                 lowest_score = score
                 laggard = ticker
-
-            # Count sector trends
             if summary.get("sma_trend", "").lower() == "bullish":
                 bullish += 1
             elif summary.get("sma_trend", "").lower() == "bearish":
                 bearish += 1
             else:
                 neutral += 1
-
             if summary.get("rsi_signal", "").lower() == "overbought":
                 overbought += 1
             if summary.get("rsi_signal", "").lower() == "oversold":
                 oversold += 1
-
             sector_patterns.extend(summary.get("patterns", []))
             anomalies.extend(summary.get("anomaly_events", []))
             peer_summaries.append({"ticker": ticker, **summary})
@@ -85,7 +109,8 @@ def analyze(peer_tickers: list, horizon: str = "7 Days", main_ticker: str = None
         "laggard": laggard,
         "num_peers": total,
         "sector_patterns": list(set(sector_patterns)),
-        "anomalies": anomalies[:5],  # show up to 5 key anomalies
+        "anomalies": anomalies[:5],
+        "lookback_days": lookback_days
     }
 
     summary_str = (
@@ -98,12 +123,7 @@ def analyze(peer_tickers: list, horizon: str = "7 Days", main_ticker: str = None
         f"Key anomalies: {sector_stats['anomalies']}"
     )
 
-    # LLM sector summary (optional: only if api_key supplied)
-    llm_summary = None
-    if api_key is not None:
-        llm_summary = get_llm_sector_summary(
-            summary_str, main_ticker or leader, api_key, horizon
-        )
+    llm_summary = get_llm_sector_summary(summary_str, main_ticker or leader, api_key, horizon) if api_key else None
 
     return {
         "agent": "1.1-sector",
@@ -112,6 +132,7 @@ def analyze(peer_tickers: list, horizon: str = "7 Days", main_ticker: str = None
         "sector_stats": sector_stats,
         "llm_summary": llm_summary
     }
+
 
 
 
