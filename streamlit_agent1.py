@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from agents.agent1_core import run_full_technical_analysis
+from agents.ta_chief import run_full_technical_analysis
 
 st.set_page_config(page_title="SGX AI Stock Analyst", page_icon=":chart_with_upwards_trend:", layout="wide")
 st.title("🇸🇬 SGX AI-Powered Multi-Agent Stock Analyst")
@@ -46,7 +46,11 @@ if run_btn:
     st.divider()
 
     # --- Tabs for Agent AI Summaries ---
-    AGENT_KEYS = [("Stock", "stock"), ("Sector", "sector"), ("Market", "market"), ("Commodities", "commodities"), ("Globals", "globals")]
+    AGENT_KEYS = [("Stock", "stock"),
+                  ("Sector", "sector"),
+                  ("Market", "market"),
+                  ("Commodity", "commodity"),
+                  ("Global", "global")]
     tab_labels = [x[0] for x in AGENT_KEYS]
     tabs = st.tabs(tab_labels)
 
@@ -91,9 +95,6 @@ if run_btn:
 
 else:
     st.info("Enter a SGX ticker (e.g., D05.SI, U11.SI, A17U.SI) and click **Run AI Analysis** to start.")
-
-
-
 
 
 
