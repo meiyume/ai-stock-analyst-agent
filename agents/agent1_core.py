@@ -1,4 +1,5 @@
-# agents/agent1_core.py
+import os
+import yfinance as yf
 
 from agents.agent1_stock import analyze as analyze_stock
 from agents.agent1_sector import analyze as analyze_sector
@@ -7,57 +8,79 @@ from agents.agent1_commodities import analyze as analyze_commodities
 from agents.agent1_globals import analyze as analyze_globals
 from llm_config_agent import generate_meta_config
 
-# Optionally, import your company name fetcher if available:
-try:
-    from agents.agent1_stock import get_company_name_from_ticker
-except ImportError:
-    get_company_name_from_ticker = None
+def get_company_name_from_ticker(ticker):
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        return info.get("longName", ticker)
+    except Exception:
+        return ticker
 
-def run_full_technical_analysis(ticker: str, horizon: str):
+def run_full_technical_analysis(
+    ticker: str,
+    company_name: str = None,
+    horizon: str = "7 Days",
+    api_key: str = None
+):
     """
-    Orchestrates all agent layers using dynamic, context-aware meta-config.
-    Returns a multi-layer results dict and the main stock DataFrame.
+    Unified orchestrator for all Agent 1 sub-agents.
+    Returns a dict with summaries for stock, sector, market, commodities, globals (with lookback_days set by LLM per layer).
     """
-    # (Optional) Get company name for better meta-config, else use empty string.
-    company_name = ""
-    if get_company_name_from_ticker is not None:
-        try:
-            company_name = get_company_name_from_ticker(ticker)
-        except Exception:
-            company_name = ""
+    if api_key is None:
+        api_key = os.getenv("OPENAI_API_KEY", "")
 
-    # Generate context-aware peer/commodity/global config for all layers:
+    # --- Auto-fetch company name if not provided ---
+    if not company_name:
+        company_name = get_company_name_from_ticker(ticker)
+
+    # --- 1. Get peer/index/universe config from meta-agent (LLM) ---
     meta = generate_meta_config(ticker, company_name)
-
-    # --- Stock Layer (main ticker only, always returns summary and DataFrame)
-    stock_summary, df = analyze_stock(ticker, horizon)
-
-    # --- Sector Layer (analyze sector peers list, context-aware)
-    sector_peers = meta.get("sector_peers", [])
-    sector_summary = analyze_sector(sector_peers, horizon)
-
-    # --- Market Layer (analyze relevant market index tickers)
-    market_index = meta.get("market_index", [])
-    market_summary = analyze_market(market_index, horizon)
-
-    # --- Commodities Layer (analyze all relevant commodities)
+    sector_peers = [ticker] + [peer for peer in meta.get("sector_peers", []) if peer != ticker]
+    market_index = meta.get("market_index", ["^STI"])
+    if isinstance(market_index, str):
+        market_index = [market_index]
     commodities_list = meta.get("commodities", [])
-    commodities_summary = analyze_commodities(commodities_list, horizon)
-
-    # --- Globals Layer (analyze all relevant global indices)
     globals_list = meta.get("globals", [])
-    globals_summary = analyze_globals(globals_list, horizon)
 
-    # Optionally, you can add a stitched final outlook, or let frontend/LLM do it.
-    # final_summary = generate_final_outlook(stock_summary, sector_summary, market_summary, commodities_summary, globals_summary)
+    # --- 2. Stock-level analysis (default to 30, LLM can adjust if you wish) ---
+    stock_summary, stock_df = analyze_stock(ticker, horizon, lookback_days=30)
 
-    # Return a unified results dict plus main DataFrame
-    return {
+    # --- 3. Sector analysis (LLM decides lookback) ---
+    sector_summary = analyze_sector(
+        sector_peers, horizon, main_ticker=ticker, api_key=api_key
+    )
+
+    # --- 4. Market analysis (LLM decides lookback) ---
+    market_summary = analyze_market(
+        market_index, horizon, main_ticker=ticker, api_key=api_key
+    )
+
+    # --- 5. Commodities analysis (LLM decides lookback) ---
+    commodities_summary = analyze_commodities(
+        commodities_list, horizon, main_ticker=ticker, api_key=api_key
+    )
+
+    # --- 6. Global Macro (LLM decides lookback) ---
+    globals_summary = analyze_globals(
+        globals_list, horizon, main_ticker=ticker, api_key=api_key
+    )
+
+    # --- 7. Assemble everything for Streamlit/frontend/Agent 2 ---
+    results = {
         "stock": stock_summary,
         "sector": sector_summary,
         "market": market_summary,
         "commodities": commodities_summary,
-        "globals": globals_summary
-        # , "final_summary": final_summary  # (Optional)
-    }, df
+        "globals": globals_summary,
+        "stock_df": stock_df,
+        "sector_peers": sector_peers,
+        "market_index": market_index,
+        "commodities_list": commodities_list,
+        "globals_list": globals_list,
+        "meta": meta,
+        "company_name": company_name,
+        "ticker": ticker,
+        "horizon": horizon
+    }
+    return results
 
