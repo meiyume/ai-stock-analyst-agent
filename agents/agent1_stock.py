@@ -23,7 +23,6 @@ def fetch_data(ticker, lookback_days=30, interval="1d"):
             '_'.join(filter(None, map(str, col))).replace(f"_{ticker}", "") 
             for col in data.columns.values
         ]
-
     return data 
 
 def enforce_date_column(df):
@@ -71,8 +70,7 @@ def calculate_indicators(df):
     df['MACD'] = exp12 - exp26
     df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
 
-    # Volume
-    df['Volume'] = df['Volume']
+    # Volume (already present)
 
     # ATR
     high_low = df['High'] - df['Low']
@@ -102,7 +100,7 @@ def calculate_indicators(df):
             obv.append(obv[-1])
     df['OBV'] = obv
 
-    # ADX (stub)
+    # ADX (placeholder)
     df['ADX'] = np.nan
 
     return df
@@ -113,11 +111,11 @@ def get_llm_dual_summary(signals, api_key):
 You are an expert technical analyst and educator for a leading financial institution.
 
 Based on the following technical signals and anomalies, produce two summaries:
-1. Technical Summary (for professional or advanced readers): Write a detailed, precise analysis using standard technical terms and concise logic. Explain not just the signal, but why it matters *now*. Synthesize supporting or conflicting indicators. Highlight risk/opportunity, and explicitly reference the outlook horizon ({signals.get('horizon', 'the next few days')}). Make actionable suggestions.
+1. Technical Summary (for professionals): Write a detailed, precise analysis using standard technical terms and concise logic. Explain not just the signal, but why it matters *now*. Synthesize supporting or conflicting indicators. Highlight risk/opportunity, and explicitly reference the outlook horizon ({signals.get('horizon', 'the next few days')}). Make actionable suggestions.
 
 2. Plain-English Summary (for non-technical users, e.g., grandma/grandpa): Start with "If you're looking at this stock outlook over {signals.get('horizon', 'the next few days')}, here’s what you should know:". Avoid jargon; use analogies and simple language. Give practical advice, mention risk, and be warm, clear, and friendly.
 
-Here are the signals:
+Signals:
 SMA Trend: {signals.get('sma_trend')}
 MACD: {signals.get('macd_signal')}
 RSI: {signals.get('rsi_signal')}
@@ -134,7 +132,6 @@ Outlook Horizon: {signals.get('horizon', 'the next few days')}
 Risk Level: {signals.get('risk_level')}
 
 Write two sections, each starting with a title: "Technical Summary" and "Plain-English Summary".
-Do not number or prefix the titles with any numbers or colons.
 """
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -181,6 +178,7 @@ def analyze(
     cols_to_use = [col for col in existing_cols + remaining_cols if col in df.columns]
     df = df[cols_to_use]
 
+    # --- Handle no/empty data robustly ---
     if df.empty or df["Close"].isna().all():
         summary = {
             "summary": f"⚠️ No data available for {ticker}.",
@@ -203,13 +201,13 @@ def analyze(
             "horizon": horizon,
             "llm_technical_summary": "No LLM report (no data available).",
             "llm_plain_summary": "No LLM report (no data available).",
-            "df": df
+            "df": df,
+            "chart": None
         }
         summary["llm_summary"] = summary["llm_technical_summary"]
-        summary["chart"] = None
         return summary
 
-    # --- Real technical signal summaries (stub logic here, can expand) ---
+    # --- Compute signal summaries (simple rules; customize as needed) ---
     sma_trend = "Bullish" if df['SMA5'].iloc[-1] > df['SMA10'].iloc[-1] else "Bearish"
     macd_signal = "Bullish" if df['MACD'].iloc[-1] > df['Signal'].iloc[-1] else "Bearish"
     rsi_signal = (
@@ -259,7 +257,7 @@ def analyze(
         "df": df
     }
 
-    # LLM Dual Summary (technical & non-technical)
+    # LLM Dual Summary (technical & plain-English)
     if api_key:
         try:
             tech, plain = get_llm_dual_summary(summary, api_key)
@@ -274,7 +272,7 @@ def analyze(
 
     summary["llm_summary"] = summary.get("llm_technical_summary", summary["summary"])
 
-    # --- Chart: Candlestick + SMA + Bollinger + Volume below ---
+    # --- Big all-in-one chart with all major indicators ---
     fig = make_subplots(
         rows=9, cols=1,
         shared_xaxes=True,
@@ -292,7 +290,7 @@ def analyze(
             "ADX"
         ]
     )
-    
+
     # 1. Candlestick and overlays
     fig.add_trace(go.Candlestick(
         x=df['Date'],
@@ -314,13 +312,13 @@ def analyze(
     fig.add_trace(go.Scatter(
         x=df['Date'], y=df['Lower'], mode='lines', line=dict(dash='dot'), name='Lower Bollinger'
     ), row=1, col=1)
-    
+
     # 2. Volume
     fig.add_trace(go.Bar(
         x=df['Date'], y=df['Volume'],
         marker_color='rgba(0,100,255,0.4)', name='Volume'
     ), row=2, col=1)
-    
+
     # 3. RSI
     fig.add_trace(go.Scatter(
         x=df['Date'], y=df['RSI'],
@@ -330,7 +328,7 @@ def analyze(
                   line=dict(color="red", width=1, dash="dash"), row=3, col=1)
     fig.add_shape(type="line", x0=df['Date'].min(), y0=30, x1=df['Date'].max(), y1=30,
                   line=dict(color="green", width=1, dash="dash"), row=3, col=1)
-    
+
     # 4. MACD & Signal
     fig.add_trace(go.Scatter(
         x=df['Date'], y=df['MACD'],
@@ -340,7 +338,7 @@ def analyze(
         x=df['Date'], y=df['Signal'],
         mode='lines', name='MACD Signal', line=dict(color='purple', dash='dot')
     ), row=4, col=1)
-    
+
     # 5. Stochastic Oscillator
     fig.add_trace(go.Scatter(
         x=df['Date'], y=df['Stochastic_%K'],
@@ -350,37 +348,36 @@ def analyze(
         x=df['Date'], y=df['Stochastic_%D'],
         mode='lines', name='%D', line=dict(color='magenta', dash='dot')
     ), row=5, col=1)
-    
+
     # 6. CMF
     fig.add_trace(go.Scatter(
         x=df['Date'], y=df['CMF'],
         mode='lines', name='CMF', line=dict(color='teal')
     ), row=6, col=1)
-    
+
     # 7. OBV
     fig.add_trace(go.Scatter(
         x=df['Date'], y=df['OBV'],
         mode='lines', name='OBV', line=dict(color='gray')
     ), row=7, col=1)
-    
+
     # 8. ATR
     fig.add_trace(go.Scatter(
         x=df['Date'], y=df['ATR'],
         mode='lines', name='ATR', line=dict(color='brown')
     ), row=8, col=1)
-    
+
     # 9. ADX
     fig.add_trace(go.Scatter(
         x=df['Date'], y=df['ADX'],
         mode='lines', name='ADX', line=dict(color='black')
     ), row=9, col=1)
-    
-    # Final layout tweaks
+
     fig.update_layout(
         xaxis_rangeslider_visible=False,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         margin=dict(l=15, r=15, t=40, b=15),
-        height=1800  # Adjust as needed for your display
+        height=1800
     )
     fig.update_yaxes(title_text="Price", row=1, col=1)
     fig.update_yaxes(title_text="Volume", row=2, col=1)
@@ -391,9 +388,11 @@ def analyze(
     fig.update_yaxes(title_text="OBV", row=7, col=1)
     fig.update_yaxes(title_text="ATR", row=8, col=1)
     fig.update_yaxes(title_text="ADX", row=9, col=1)
-    
+
     summary["chart"] = fig
-    
+
+    return summary
+
 
 
 
