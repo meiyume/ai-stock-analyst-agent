@@ -1,9 +1,20 @@
-# agents/agent1_stock.py
-
 import yfinance as yf
 import pandas as pd
 import numpy as np
 from openai import OpenAI
+
+def fetch_data(ticker, lookback_days=30, interval="1d"):
+    end_date = pd.Timestamp.today()
+    start_date = end_date - pd.Timedelta(days=lookback_days * 2)
+    data = yf.download(
+        tickers=ticker,
+        start=start_date.strftime("%Y-%m-%d"),
+        end=end_date.strftime("%Y-%m-%d"),
+        interval=interval,
+        progress=False
+    )
+    data = data.reset_index()
+    return data
 
 def enforce_date_column(df):
     if 'Date' not in df.columns:
@@ -17,25 +28,88 @@ def enforce_date_column(df):
     df = df.sort_values('Date').drop_duplicates('Date').reset_index(drop=True)
     return df
 
-# ... [other compute_*, fetch_data, etc. functions unchanged] ...
+def decide_lookback_days(horizon: str):
+    try:
+        num = int(''.join(filter(str.isdigit, horizon)))
+    except:
+        num = 7
+    lookback_days = max(30, num * 3)
+    lookback_days = min(lookback_days, 360)
+    return lookback_days
+
+def get_llm_dual_summary(signals, api_key):
+    client = OpenAI(api_key=api_key)
+    prompt = f"""
+You are an expert technical analyst and educator for a leading financial institution.
+
+Based on the following technical signals and anomalies, produce two summaries:
+1. Technical Summary (for professional or advanced readers): Write a detailed, precise analysis using standard technical terms and concise logic. Explain not just the signal, but why it matters *now*. Synthesize supporting or conflicting indicators. Highlight risk/opportunity, and explicitly reference the outlook horizon ({signals.get('horizon', 'the next few days')}). Make actionable suggestions.
+
+2. Plain-English Summary (for non-technical users, e.g., grandma/grandpa): Start with "If you're looking at this stock outlook over {signals.get('horizon', 'the next few days')}, here’s what you should know:". Avoid jargon; use analogies and simple language. Give practical advice, mention risk, and be warm, clear, and friendly.
+
+Here are the signals:
+SMA Trend: {signals.get('sma_trend')}
+MACD: {signals.get('macd_signal')}
+RSI: {signals.get('rsi_signal')}
+Bollinger Bands: {signals.get('bollinger_signal')}
+Stochastic: {signals.get('stochastic_signal')}
+CMF: {signals.get('cmf_signal')}
+OBV: {signals.get('obv_signal')}
+ADX: {signals.get('adx_signal')}
+ATR: {signals.get('atr_signal')}
+Volume Spike: {signals.get('vol_spike')}
+Candlestick Patterns: {signals.get('patterns')}
+Key Anomalies: {signals.get('anomaly_events')}
+Outlook Horizon: {signals.get('horizon', 'the next few days')}
+Risk Level: {signals.get('risk_level')}
+
+Write two sections, each starting with a title: "Technical Summary" and "Plain-English Summary".
+Do not number or prefix the titles with any numbers or colons.
+"""
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=800,
+        temperature=0.6,
+    )
+    # Split response by titles
+    output = response.choices[0].message.content.strip()
+    tech, plain = "", ""
+    if "Technical Summary" in output and "Plain-English Summary" in output:
+        parts = output.split("Plain-English Summary")
+        tech = parts[0].replace("Technical Summary", "").strip()
+        plain = parts[1].strip()
+    else:
+        tech = output
+        plain = output
+    return tech, plain
 
 def analyze(
     ticker: str,
     horizon: str = "7 Days",
-    lookback_days: int = 30,
+    lookback_days: int = None,
     api_key: str = None
 ):
+    # --- Dynamic lookback ---
+    if lookback_days is None:
+        lookback_days = decide_lookback_days(horizon)
+
     df = fetch_data(ticker, lookback_days=lookback_days)
     df = enforce_date_column(df)
-    # --- PATCH: Always ensure indicator columns exist, even if empty ---
-    indicator_cols = ["Open", "High", "Low", "Close", "SMA5", "SMA10", "Upper", "Lower",
-                      "RSI", "MACD", "Signal", "Volume", "ATR", "Stochastic_%K",
-                      "Stochastic_%D", "CMF", "OBV", "ADX"]
+
+    # --- Ensure all indicator columns exist ---
+    indicator_cols = [
+        "Open", "High", "Low", "Close", "SMA5", "SMA10", "Upper", "Lower",
+        "RSI", "MACD", "Signal", "Volume", "ATR", "Stochastic_%K",
+        "Stochastic_%D", "CMF", "OBV", "ADX"
+    ]
     for col in indicator_cols:
         if col not in df.columns:
             df[col] = np.nan
     df = df[indicator_cols + [c for c in df.columns if c not in indicator_cols]]
-    if df.empty:
+
+    # --- Handle empty data case ---
+    if df.empty or df["Close"].isna().all():
         summary = {
             "summary": f"⚠️ No data available for {ticker}.",
             "sma_trend": "N/A",
@@ -51,12 +125,35 @@ def analyze(
             "patterns": [],
             "anomaly_events": [],
             "heatmap_signals": {},
+            "composite_risk_score": np.nan,
+            "risk_level": "N/A",
             "lookback_days": lookback_days,
-            "llm_summary": "No LLM report (no data available)."
+            "horizon": horizon,
+            "llm_technical_summary": "No LLM report (no data available).",
+            "llm_plain_summary": "No LLM report (no data available)."
         }
         return summary, df
 
-    # === Composite Risk Score and Final Summary ===
+    # --- [Insert your technical calculations here] ---
+    # Example stub logic (replace with your real code)
+    sma_trend = "Neutral"
+    macd_signal = "Neutral"
+    bollinger_signal = "Neutral"
+    rsi_signal = "Neutral"
+    stochastic_signal = "Neutral"
+    cmf_signal = "Neutral"
+    obv_signal = "Neutral"
+    adx_signal = "Neutral"
+    atr_signal = "Neutral"
+    vol_spike = False
+    patterns = []
+    anomaly_events = []
+    heatmap_signals = {}
+    risk_score = 0.5
+    risk_level = "Caution"
+
+    # TODO: Use real indicator calculations!
+
     summary = {
         "summary": f"{sma_trend} SMA, {macd_signal} MACD, {rsi_signal} RSI, {bollinger_signal} Bollinger, "
                    f"{stochastic_signal} Stochastic, {cmf_signal} CMF, {obv_signal} OBV, "
@@ -74,75 +171,29 @@ def analyze(
         "patterns": patterns,
         "anomaly_events": anomaly_events,
         "heatmap_signals": heatmap_signals,
-        "composite_risk_score": round(risk_score, 2),
+        "composite_risk_score": risk_score,
         "risk_level": risk_level,
         "lookback_days": lookback_days,
-        "horizon": horizon  # For LLM prompt
+        "horizon": horizon
     }
 
-    # === LLM summary (ALWAYS include, just like other agents) ===
+    # --- LLM Dual Summary (for both technical & non-technical) ---
     if api_key:
         try:
-            summary["llm_summary"] = get_llm_summary(summary, api_key)
+            tech, plain = get_llm_dual_summary(summary, api_key)
+            summary["llm_technical_summary"] = tech
+            summary["llm_plain_summary"] = plain
         except Exception as e:
-            summary["llm_summary"] = f"LLM error: {e}"
+            summary["llm_technical_summary"] = f"LLM error: {e}"
+            summary["llm_plain_summary"] = f"LLM error: {e}"
     else:
-        summary["llm_summary"] = "No API key provided for LLM summary."
+        summary["llm_technical_summary"] = "No API key provided for LLM summary."
+        summary["llm_plain_summary"] = "No API key provided for LLM summary."
 
     return summary, df
 
-def run_full_technical_analysis(ticker, horizon, lookback_days=30, api_key=None):
+def run_full_technical_analysis(ticker, horizon, lookback_days=None, api_key=None):
     return analyze(ticker, horizon, lookback_days=lookback_days, api_key=api_key)
-
-def get_llm_summary(signals, api_key):
-    client = OpenAI(api_key=api_key)
-    prompt = f"""
-You are an expert technical analyst for a leading financial institution.
-
-Based on the following technical signals and anomalies, do the following:
-- First, write a detailed summary for technical readers (using precise, professional terminology and concise reasoning). For each indicator, explain not just the signal, but also why it matters right now. Connect supporting indicators together (e.g., “Rising OBV + bullish MACD reinforces uptrend…”). Summarize the overall risk or opportunity, and recommend what a technical analyst should watch for in the next few sessions. Include actionable insight or a forward-looking caution. Use a confident, objective tone. 
-- Explicitly frame all your conclusions and recommendations in terms of the provided outlook horizon: {signals.get('horizon', 'the next few days')}.
-- Then, write a second summary for non-technical readers. Imagine you are explaining it to a grandparent with no finance background:
-    - Start your summary with this phrase (customized for the horizon): "If you are looking at this stock outlook over {signals.get('horizon', 'the next few days')}, here’s what you should know:"
-    - Avoid technical terms and acronyms unless you give a short, simple explanation.
-    - Use analogies and plain language.
-    - Give gentle, practical advice for someone considering buying or selling for the chosen outlook horizon ({signals.get('horizon', 'the next few days')}).
-    - Clearly mention if things look good for buying, if caution is advised, or if it might be wise to hold off, and explain why in simple terms.
-    - Focus on helping the reader make a simple decision for the chosen time frame, but let them decide if they want to buy or sell based on their own needs and comfort.
-    - Always explain the risk in plain language.
-    - Make it warm, clear, and friendly.
-    - Absolutely no jargon!
-    - Be sure your advice is specific to the provided outlook horizon.
-
-Here are the signals:
-SMA Trend: {signals.get('sma_trend')}
-MACD: {signals.get('macd_signal')}
-RSI: {signals.get('rsi_signal')}
-Bollinger Bands: {signals.get('bollinger_signal')}
-Stochastic: {signals.get('stochastic_signal')}
-CMF: {signals.get('cmf_signal')}
-OBV: {signals.get('obv_signal')}
-ADX: {signals.get('adx_signal')}
-ATR: {signals.get('atr_signal')}
-Volume Spike: {signals.get('vol_spike')}
-Candlestick Patterns: {signals.get('patterns')}
-Key Anomalies: {signals.get('anomaly_events')}
-Outlook Horizon: {signals.get('horizon', 'the next few days')}
-
-Write two clearly separated sections, each starting with a clear title:
-- For Technical Readers
-- For Grandmas and Grandpas
-
-Do not number or prefix the titles with any numbers or colons.
-Just start each section with the title on its own line.
-"""
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=700,
-        temperature=0.6,
-    )
-    return response.choices[0].message.content.strip()
 
 
 
