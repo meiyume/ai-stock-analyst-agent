@@ -50,6 +50,10 @@ def analyze(ticker, company_name=None, horizon="7 Days", lookback_days=None, api
                 "atr_signal", "vol_spike", "patterns", "anomaly_events", "horizon", "risk_level"
             ]
             slim_signals = {k: signals.get(k) for k in keys}
+            if isinstance(slim_signals.get("patterns"), list):
+                slim_signals["patterns"] = slim_signals["patterns"][:3]
+            if isinstance(slim_signals.get("anomaly_events"), list):
+                slim_signals["anomaly_events"] = slim_signals["anomaly_events"][:3]
             tech, plain = get_llm_dual_summary(slim_signals, api_key)
             summary["llm_technical_summary"] = tech
             summary["llm_plain_summary"] = plain
