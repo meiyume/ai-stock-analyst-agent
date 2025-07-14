@@ -42,8 +42,8 @@ def run_full_technical_analysis(
     commodities_list = meta.get("commodities", [])
     globals_list = meta.get("globals", [])
 
-    # --- 2. Stock-level analysis (default to 30, LLM can adjust if you wish) ---
-    stock_summary, stock_df = analyze_stock(ticker, horizon, lookback_days=30)
+    # --- 2. Stock-level analysis (now consistent—pass api_key) ---
+    stock_summary, stock_df = analyze_stock(ticker, horizon, lookback_days=30, api_key=api_key)
 
     # --- 3. Sector analysis (LLM decides lookback) ---
     sector_summary = analyze_sector(
@@ -83,4 +83,5 @@ def run_full_technical_analysis(
         "horizon": horizon
     }
     return results
+
 
