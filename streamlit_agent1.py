@@ -83,29 +83,29 @@ else:
     selected_horizon = horizon_choice
 
 # --- Session State for seamless UX ---
-if "results" not in st.session_state:
-    st.session_state["results"] = None
-if "df" not in st.session_state:
-    st.session_state["df"] = None
+st.subheader("Step 2: Analyze All Tickers")
 
+# Button to trigger analysis
 if st.button("🔍 Run Technical Analysis"):
-    with st.spinner("Analyzing..."):
-        results = run_full_technical_analysis(
-            ticker,
-            None,  # company_name auto-fetched!
-            selected_horizon,
-            api_key=st.secrets["OPENAI_API_KEY"]
-        )
-        df = results.get("stock_df", None)
-        if df is not None:
-            df = enforce_date_column(df)
-        st.session_state["results"] = results
-        st.session_state["df"] = df
+    all_results = {}  # { "UOB.SI": {...}, "OCBC.SI": {...}, ... }
+    with st.spinner("Analyzing all tickers with Agent 1..."):
+        for ticker in tickers:
+            try:
+                results = run_full_technical_analysis(
+                    ticker,
+                    None,  # company_name auto-fetched!
+                    selected_horizon,
+                    api_key=st.secrets["OPENAI_API_KEY"]
+                )
+                all_results[ticker] = results
+            except Exception as e:
+                all_results[ticker] = {"error": str(e)}
+    st.session_state["all_results"] = all_results
 
-results = st.session_state["results"]
-df = st.session_state["df"]
+# Retrieve for later rendering
+all_results = st.session_state.get("all_results", {})
 
-if df is None or results is None:
+if not all_results:
     st.info("Please run the technical analysis to view results.")
     st.stop()
 
