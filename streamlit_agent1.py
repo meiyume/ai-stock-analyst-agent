@@ -64,7 +64,7 @@ if horizon_choice == "Custom...":
 else:
     selected_horizon = horizon_choice
 
-# --- Step 2: Analyze All Tickers ---
+# --- Step 3: Analyze All Tickers ---
 st.subheader("Step 3: Analyze All Tickers")
 
 if st.button("🔍 Run Technical Analysis"):
@@ -87,6 +87,55 @@ all_results = st.session_state.get("all_results", {})
 if not all_results:
     st.info("Please run the technical analysis to view results.")
     st.stop()
+
+# --- Chief AI Analyst Grand Outlook ---
+def get_chief_llm_summary(all_results, horizon, api_key):
+    """
+    Synthesize a multi-ticker grand outlook from all agent reports using LLM.
+    """
+    context_lines = []
+    for ticker, reports in all_results.items():
+        context_lines.append(f"\nFor {ticker}:")
+        context_lines.append(f"- Stock Analyst: {reports.get('stock', {}).get('llm_summary', 'N/A')}")
+        context_lines.append(f"- Sector Analyst: {reports.get('sector', {}).get('llm_summary', 'N/A')}")
+        context_lines.append(f"- Market Analyst: {reports.get('market', {}).get('llm_summary', 'N/A')}")
+        context_lines.append(f"- Commodities Analyst: {reports.get('commodities', {}).get('llm_summary', 'N/A')}")
+        context_lines.append(f"- Global Macro Analyst: {reports.get('globals', {}).get('llm_summary', 'N/A')}")
+
+    prompt = f"""
+You are the Chief AI Analyst. Your analyst team has submitted their LLM reports for multiple stocks and outlook horizon ({horizon}):
+
+{chr(10).join(context_lines)}
+
+Carefully read all agent reports above and write a single, comprehensive 'Grand Outlook' for the user:
+
+- Summarize the technical and macro outlook for each stock.
+- Directly compare the tickers: Which is more favorable for the horizon, and why? Highlight key risks and opportunities for each.
+- Reference sector, market, commodities, or global factors that impact both/all.
+- If the agents disagree or there are conflicting signals, clearly state so.
+- End with a bold, 1-2 sentence “Grand Outlook Verdict” that is actionable and understandable by both professional and everyday investors.
+
+Start with a bold headline: “Chief AI Analyst’s Grand Outlook”.
+"""
+    from openai import OpenAI
+    client = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=800,
+        temperature=0.4,
+    )
+    return response.choices[0].message.content.strip()
+
+st.header("👑 Chief AI Analyst's Grand Outlook")
+api_key = st.secrets["OPENAI_API_KEY"]
+
+with st.spinner("Chief AI Analyst is reviewing all agent reports and composing a grand synthesis..."):
+    try:
+        chief_llm = get_chief_llm_summary(all_results, selected_horizon, api_key)
+        st.success(chief_llm)
+    except Exception as e:
+        st.error(f"Chief AI Analyst synthesis failed: {e}")
 
 # --- Output results for each ticker in expandable panels ---
 for ticker, results in all_results.items():
@@ -146,13 +195,15 @@ for ticker, results in all_results.items():
             st.plotly_chart(fig, use_container_width=True)
 
         # --- LLM summary per ticker (stock-level only for now) ---
-        st.markdown("#### 🧠 LLM Analyst Commentary")
-        api_key = st.secrets["OPENAI_API_KEY"]
+        st.markdown("#### 🧠 Stock Analyst LLM Commentary")
         with st.spinner("Agent 1 is generating LLM commentary..."):
-            llm_summary = get_llm_summary(stock_summary, api_key)
-        st.write(llm_summary)
+            try:
+                llm_summary = get_llm_summary(stock_summary, api_key)
+                st.write(llm_summary)
+            except Exception as e:
+                st.warning(f"LLM summary not available: {e}")
 
-        # --- You can add more charts/summaries per ticker as needed ---
+        # --- You can add more agent summaries/charts for sector, market, etc., under each ticker as next step ---
 
 # Footer
 st.markdown("---")
