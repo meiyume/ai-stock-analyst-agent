@@ -276,14 +276,24 @@ def analyze(
 
     # --- Chart: Candlestick + SMA + Bollinger + Volume below ---
     fig = make_subplots(
-        rows=2, cols=1, 
-        shared_xaxes=True, 
-        vertical_spacing=0.08,
-        row_heights=[0.7, 0.3],
-        subplot_titles=("Candlestick, SMA, Bollinger Bands", "Volume")
+        rows=9, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.02,
+        row_heights=[0.36, 0.09, 0.09, 0.09, 0.09, 0.07, 0.07, 0.07, 0.07],
+        subplot_titles=[
+            "Price (Candlestick, SMA, Bollinger Bands)",
+            "Volume",
+            "RSI",
+            "MACD",
+            "Stochastic Oscillator",
+            "Chaikin Money Flow (CMF)",
+            "On-Balance Volume (OBV)",
+            "ATR",
+            "ADX"
+        ]
     )
-
-    # Row 1: Candlestick and overlays
+    
+    # 1. Candlestick and overlays
     fig.add_trace(go.Candlestick(
         x=df['Date'],
         open=df['Open'],
@@ -293,51 +303,97 @@ def analyze(
         name='Candlestick'
     ), row=1, col=1)
     fig.add_trace(go.Scatter(
-        x=df['Date'],
-        y=df['SMA5'],
-        mode='lines',
-        name='SMA5'
+        x=df['Date'], y=df['SMA5'], mode='lines', name='SMA5'
     ), row=1, col=1)
     fig.add_trace(go.Scatter(
-        x=df['Date'],
-        y=df['SMA10'],
-        mode='lines',
-        name='SMA10'
+        x=df['Date'], y=df['SMA10'], mode='lines', name='SMA10'
     ), row=1, col=1)
     fig.add_trace(go.Scatter(
-        x=df['Date'],
-        y=df['Upper'],
-        mode='lines',
-        line=dict(dash='dot'),
-        name='Upper Bollinger'
+        x=df['Date'], y=df['Upper'], mode='lines', line=dict(dash='dot'), name='Upper Bollinger'
     ), row=1, col=1)
     fig.add_trace(go.Scatter(
-        x=df['Date'],
-        y=df['Lower'],
-        mode='lines',
-        line=dict(dash='dot'),
-        name='Lower Bollinger'
+        x=df['Date'], y=df['Lower'], mode='lines', line=dict(dash='dot'), name='Lower Bollinger'
     ), row=1, col=1)
-
-    # Row 2: Volume
+    
+    # 2. Volume
     fig.add_trace(go.Bar(
-        x=df['Date'],
-        y=df['Volume'],
-        marker_color='rgba(0,100,255,0.4)',
-        name='Volume'
+        x=df['Date'], y=df['Volume'],
+        marker_color='rgba(0,100,255,0.4)', name='Volume'
     ), row=2, col=1)
-
+    
+    # 3. RSI
+    fig.add_trace(go.Scatter(
+        x=df['Date'], y=df['RSI'],
+        mode='lines', name='RSI', line=dict(color='orange')
+    ), row=3, col=1)
+    fig.add_shape(type="line", x0=df['Date'].min(), y0=70, x1=df['Date'].max(), y1=70,
+                  line=dict(color="red", width=1, dash="dash"), row=3, col=1)
+    fig.add_shape(type="line", x0=df['Date'].min(), y0=30, x1=df['Date'].max(), y1=30,
+                  line=dict(color="green", width=1, dash="dash"), row=3, col=1)
+    
+    # 4. MACD & Signal
+    fig.add_trace(go.Scatter(
+        x=df['Date'], y=df['MACD'],
+        mode='lines', name='MACD', line=dict(color='blue')
+    ), row=4, col=1)
+    fig.add_trace(go.Scatter(
+        x=df['Date'], y=df['Signal'],
+        mode='lines', name='MACD Signal', line=dict(color='purple', dash='dot')
+    ), row=4, col=1)
+    
+    # 5. Stochastic Oscillator
+    fig.add_trace(go.Scatter(
+        x=df['Date'], y=df['Stochastic_%K'],
+        mode='lines', name='%K', line=dict(color='darkgreen')
+    ), row=5, col=1)
+    fig.add_trace(go.Scatter(
+        x=df['Date'], y=df['Stochastic_%D'],
+        mode='lines', name='%D', line=dict(color='magenta', dash='dot')
+    ), row=5, col=1)
+    
+    # 6. CMF
+    fig.add_trace(go.Scatter(
+        x=df['Date'], y=df['CMF'],
+        mode='lines', name='CMF', line=dict(color='teal')
+    ), row=6, col=1)
+    
+    # 7. OBV
+    fig.add_trace(go.Scatter(
+        x=df['Date'], y=df['OBV'],
+        mode='lines', name='OBV', line=dict(color='gray')
+    ), row=7, col=1)
+    
+    # 8. ATR
+    fig.add_trace(go.Scatter(
+        x=df['Date'], y=df['ATR'],
+        mode='lines', name='ATR', line=dict(color='brown')
+    ), row=8, col=1)
+    
+    # 9. ADX
+    fig.add_trace(go.Scatter(
+        x=df['Date'], y=df['ADX'],
+        mode='lines', name='ADX', line=dict(color='black')
+    ), row=9, col=1)
+    
+    # Final layout tweaks
     fig.update_layout(
         xaxis_rangeslider_visible=False,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=15, r=15, t=40, b=15)
+        margin=dict(l=15, r=15, t=40, b=15),
+        height=1800  # Adjust as needed for your display
     )
     fig.update_yaxes(title_text="Price", row=1, col=1)
     fig.update_yaxes(title_text="Volume", row=2, col=1)
-
+    fig.update_yaxes(title_text="RSI", row=3, col=1, range=[0, 100])
+    fig.update_yaxes(title_text="MACD", row=4, col=1)
+    fig.update_yaxes(title_text="Stochastic", row=5, col=1, range=[0, 100])
+    fig.update_yaxes(title_text="CMF", row=6, col=1)
+    fig.update_yaxes(title_text="OBV", row=7, col=1)
+    fig.update_yaxes(title_text="ATR", row=8, col=1)
+    fig.update_yaxes(title_text="ADX", row=9, col=1)
+    
     summary["chart"] = fig
-
-    return summary
+    
 
 
 
