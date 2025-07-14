@@ -355,28 +355,18 @@ for (label, key), col in zip(layer_titles, cols):
         col.markdown(f"### {label}")
         col.info("No summary.")
 
-# === LLM Commentary (auto-generated, always visible) ===
-api_key = st.secrets["OPENAI_API_KEY"]
-with st.spinner("Agent 1 is generating LLM commentary..."):
-    llm_summary = get_llm_summary(stock_summary, api_key)
+st.subheader("🧠 LLM-Powered Analyst Commentary (Agent 1 Stock)")
+st.markdown(
+    "<span style='font-size:1.3em;font-weight:600;'>🧑‍💼 For Technical Readers</span>",
+    unsafe_allow_html=True
+)
+st.write(stock_summary.get("llm_technical_summary", "No technical summary available."))
+st.markdown(
+    "<span style='font-size:1.3em;font-weight:600;'>👵 For Grandmas and Grandpas</span>",
+    unsafe_allow_html=True
+)
+st.write(stock_summary.get("llm_plain_summary", "No plain-English summary available."))
 
-# Split the LLM response:
-if "For Technical Readers" in llm_summary and "For Grandmas and Grandpas" in llm_summary:
-    technical, grandma = llm_summary.split("For Grandmas and Grandpas", 1)
-    st.subheader("🧠 LLM-Powered Analyst Commentary")
-    st.markdown(
-        "<span style='font-size:1.3em;font-weight:600;'>🧑‍💼 For Technical Readers</span>",
-        unsafe_allow_html=True
-    )
-    st.write(technical.replace("For Technical Readers", "").replace("Summary:", "").strip())
-    st.markdown(
-        "<span style='font-size:1.3em;font-weight:600;'>👵 For Grandmas and Grandpas</span>",
-        unsafe_allow_html=True
-    )
-    st.write(grandma.replace("Summary:", "").strip())
-else:
-    st.subheader("🧠 LLM-Powered Analyst Commentary")
-    st.write(llm_summary)
 
 
 
