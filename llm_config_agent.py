@@ -22,7 +22,7 @@ Given the company:
 - Name: {company_name}
 
 Provide the following:
-1. Up to 2 SGX ticker peers from the same sector
+1. Up to 5 SGX ticker peers from the same sector (excluding the input ticker if possible)
 2. The main index this stock belongs to (e.g., ^STI)
 3. Any related commodities that affect this stock's performance (e.g., oil, gold)
 4. 2-3 relevant global indices (e.g., ^DJI, ^HSI, ^N225)
