@@ -25,12 +25,16 @@ def analyze(
     lookback_days: int = 30,
     api_key: str = None
 ):
-    """
-    Run full technical, anomaly, risk, and LLM summary analysis for a single stock/index/commodity.
-    Returns (summary, df).
-    """
     df = fetch_data(ticker, lookback_days=lookback_days)
     df = enforce_date_column(df)
+    # --- PATCH: Always ensure indicator columns exist, even if empty ---
+    indicator_cols = ["Open", "High", "Low", "Close", "SMA5", "SMA10", "Upper", "Lower",
+                      "RSI", "MACD", "Signal", "Volume", "ATR", "Stochastic_%K",
+                      "Stochastic_%D", "CMF", "OBV", "ADX"]
+    for col in indicator_cols:
+        if col not in df.columns:
+            df[col] = np.nan
+    df = df[indicator_cols + [c for c in df.columns if c not in indicator_cols]]
     if df.empty:
         summary = {
             "summary": f"⚠️ No data available for {ticker}.",
@@ -47,17 +51,10 @@ def analyze(
             "patterns": [],
             "anomaly_events": [],
             "heatmap_signals": {},
-            "lookback_days": lookback_days
+            "lookback_days": lookback_days,
+            "llm_summary": "No LLM report (no data available)."
         }
-        # Add empty LLM summary
-        summary["llm_summary"] = "No LLM report (no data available)."
         return summary, df
-
-    # === [all indicator and signal calculations unchanged] ===
-    # (insert the unchanged calculation code here from your latest version)
-
-    # [ ... all code for technicals, heatmap, composite score, etc. ... ]
-    # (for brevity, not repeating all code. Use your current calculations here.)
 
     # === Composite Risk Score and Final Summary ===
     summary = {
