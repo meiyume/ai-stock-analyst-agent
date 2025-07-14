@@ -337,6 +337,24 @@ if commodities_summary:
 if globals_summary:
     st.markdown(globals_summary.get("summary", "No global macro insights available."))
 
+st.markdown("## 🧠 LLM-Powered Analyst Summaries (All Layers)")
+layer_titles = [
+    ("💹 Stock", "stock"),
+    ("🏭 Sector", "sector"),
+    ("📈 Market", "market"),
+    ("🛢️ Commodities", "commodities"),
+    ("🌏 Global Macro", "globals")
+]
+cols = st.columns(5)
+for (label, key), col in zip(layer_titles, cols):
+    llm_text = results.get(key, {}).get("llm_summary", None)
+    if llm_text:
+        col.markdown(f"### {label}")
+        col.markdown(llm_text, unsafe_allow_html=True)
+    else:
+        col.markdown(f"### {label}")
+        col.info("No summary.")
+
 # === LLM Commentary (auto-generated, always visible) ===
 api_key = st.secrets["OPENAI_API_KEY"]
 with st.spinner("Agent 1 is generating LLM commentary..."):
