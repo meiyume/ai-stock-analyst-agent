@@ -1,13 +1,37 @@
 from agents.agent1_stock import analyze as analyze_stock
 from openai import OpenAI
 
+def get_llm_lookback_days(horizon, global_signals, api_key):
+    client = OpenAI(api_key=api_key)
+    prompt = f"""
+You are an advanced global macro quant analyst.
+
+Given:
+- Outlook horizon: "{horizon}"
+- Typical global index signals: {global_signals}
+
+Decide and return only the ideal number of past days ("lookback_days") to use for technical analysis of global indices—so as to produce the most meaningful indicators for the {horizon} forecast.
+
+Return only the integer number of lookback days (e.g., 14 or 30).
+"""
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=10,
+        temperature=0,
+    )
+    lookback_str = response.choices[0].message.content.strip()
+    try:
+        return int(lookback_str)
+    except:
+        return 30  # fallback
+
 def get_llm_globals_summary(global_signals, main_ticker, api_key, horizon):
     client = OpenAI(api_key=api_key)
     prompt = f"""
 You are a global macro strategist.
-- Summarize these global index signals for technical readers: bullish/bearish/neutral %, trends, outliers.
-- Then explain for a non-technical audience: what does global market mood mean for someone interested in {main_ticker} over the {horizon} outlook? Should they be confident, cautious, or watchful?
-- Offer gentle guidance, but let them decide.
+- Summarize these global index signals for technical readers.
+- Then explain for a non-technical audience.
 - Format as two sections: "For Technical Readers" and "For Everyone".
 
 Global index signals:
@@ -18,7 +42,7 @@ Outlook horizon: {horizon}
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=600,
+        max_tokens=700,
         temperature=0.5,
     )
     return response.choices[0].message.content.strip()
@@ -30,6 +54,9 @@ def analyze(global_index_tickers: list, horizon: str = "7 Days", main_ticker: st
             "summary": "No global indices provided."
         }
 
+    simple_signals = f"Global indices: {global_index_tickers}. Horizon: {horizon}"
+    lookback_days = get_llm_lookback_days(horizon, simple_signals, api_key) if api_key else 30
+
     summaries = []
     bullish, bearish, neutral = 0, 0, 0
     trends = []
@@ -37,7 +64,7 @@ def analyze(global_index_tickers: list, horizon: str = "7 Days", main_ticker: st
 
     for idx in global_index_tickers:
         try:
-            summary, _ = analyze_stock(idx, horizon)
+            summary, _ = analyze_stock(idx, horizon, lookback_days=lookback_days)
             trend = summary.get("sma_trend", "N/A").lower()
             if trend == "bullish":
                 bullish += 1
@@ -60,7 +87,8 @@ def analyze(global_index_tickers: list, horizon: str = "7 Days", main_ticker: st
         "bearish_pct": round(100 * bearish / total, 1) if total else 0,
         "num_indices": total,
         "trends": trends,
-        "anomalies": anomalies[:5],  # show up to 5
+        "anomalies": anomalies[:5],
+        "lookback_days": lookback_days
     }
 
     summary_str = (
@@ -71,11 +99,7 @@ def analyze(global_index_tickers: list, horizon: str = "7 Days", main_ticker: st
         f"Key anomalies: {macro_stats['anomalies']}"
     )
 
-    llm_summary = None
-    if api_key is not None:
-        llm_summary = get_llm_globals_summary(
-            summary_str, main_ticker or "unknown", api_key, horizon
-        )
+    llm_summary = get_llm_globals_summary(summary_str, main_ticker or "unknown", api_key, horizon) if api_key else None
 
     return {
         "agent": "1.4-global",
