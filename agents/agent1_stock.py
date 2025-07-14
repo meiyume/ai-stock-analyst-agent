@@ -285,46 +285,68 @@ def analyze(
     summary["llm_summary"] = summary.get("llm_technical_summary", summary["summary"])
 
     # --- Example chart: candlestick with overlays ---
-    try:
-        import plotly.graph_objects as go
-        fig = go.Figure()
-        fig.add_trace(go.Candlestick(
-            x=df['Date'],
-            open=df['Open'],
-            high=df['High'],
-            low=df['Low'],
-            close=df['Close'],
-            name='Candlestick'
-        ))
-        fig.add_trace(go.Scatter(
-            x=df['Date'],
-            y=df['SMA5'],
-            mode='lines',
-            name='SMA5'
-        ))
-        fig.add_trace(go.Scatter(
-            x=df['Date'],
-            y=df['SMA10'],
-            mode='lines',
-            name='SMA10'
-        ))
-        # Bollinger Bands
-        fig.add_trace(go.Scatter(
-            x=df['Date'],
-            y=df['Upper'],
-            mode='lines',
-            line=dict(dash='dot'),
-            name='Upper Bollinger'
-        ))
-        fig.add_trace(go.Scatter(
-            x=df['Date'],
-            y=df['Lower'],
-            mode='lines',
-            line=dict(dash='dot'),
-            name='Lower Bollinger'
-        ))
-        summary["chart"] = fig
-    except Exception as e:
-        summary["chart"] = None
 
-    return summary
+        from plotly.subplots import make_subplots
+        import plotly.graph_objects as go
+        
+        fig = make_subplots(
+            rows=2, cols=1, 
+            shared_xaxes=True, 
+            vertical_spacing=0.08,
+            row_heights=[0.7, 0.3],
+            subplot_titles=("Candlestick, SMA, Bollinger Bands", "Volume")
+        )
+        
+    # --- Candlestick and overlays (Row 1) ---
+    fig.add_trace(go.Candlestick(
+        x=df['Date'],
+        open=df['Open'],
+        high=df['High'],
+        low=df['Low'],
+        close=df['Close'],
+        name='Candlestick'
+    ), row=1, col=1)
+    fig.add_trace(go.Scatter(
+        x=df['Date'],
+        y=df['SMA5'],
+        mode='lines',
+        name='SMA5'
+    ), row=1, col=1)
+    fig.add_trace(go.Scatter(
+        x=df['Date'],
+        y=df['SMA10'],
+        mode='lines',
+        name='SMA10'
+    ), row=1, col=1)
+    fig.add_trace(go.Scatter(
+        x=df['Date'],
+        y=df['Upper'],
+        mode='lines',
+        line=dict(dash='dot'),
+        name='Upper Bollinger'
+    ), row=1, col=1)
+    fig.add_trace(go.Scatter(
+        x=df['Date'],
+        y=df['Lower'],
+        mode='lines',
+        line=dict(dash='dot'),
+        name='Lower Bollinger'
+    ), row=1, col=1)
+    
+    # --- Volume bar chart (Row 2) ---
+    fig.add_trace(go.Bar(
+        x=df['Date'],
+        y=df['Volume'],
+        marker_color='rgba(0,100,255,0.4)',
+        name='Volume'
+    ), row=2, col=1)
+    
+    fig.update_layout(
+        xaxis_rangeslider_visible=False,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=15, r=15, t=40, b=15)
+    )
+    fig.update_yaxes(title_text="Price", row=1, col=1)
+    fig.update_yaxes(title_text="Volume", row=2, col=1)
+    
+    summary["chart"] = fig
