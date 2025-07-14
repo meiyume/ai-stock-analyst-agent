@@ -7,7 +7,6 @@ from agents.agent1_stock import enforce_date_column, get_llm_summary
 
 st.set_page_config(page_title="Agent 1: AI Technical Analyst", layout="wide")
 
-# -- Premium, inclusive intro (Wall Street version) --
 st.title("📊 Agent 1: AI Technical Analyst")
 st.markdown("""
 🤖 **Agent 1** is your AI-powered market sidekick—giving everyone the expert edge, whether you’re trading millions or just starting out.
@@ -16,8 +15,7 @@ st.markdown("""
 
 📊 It fuses classic signals (MACD, RSI, Bollinger Bands, ADX, ATR) with sector, commodities, and global insights for a complete, instant risk check.
 
-💡 But here’s the real magic:  
-Every scan comes with a clear risk score, an AI-written summary, _and_ plain-English explanations for every indicator and dashboard—so you always know exactly what you’re seeing, and why.
+💡 Every scan comes with a clear risk score, an AI-written summary, and plain-English explanations for every indicator and dashboard—so you always know exactly what you’re seeing, and why.
 
 ---
 
@@ -32,7 +30,7 @@ def auto_format_ticker(ticker):
         return t + ".SI"
     return t
 
-st.subheader("Step 1: Enter SGX/US Stock Ticker")
+st.subheader("Step 1: Enter Stock Ticker")
 user_input = st.text_input("🎯 Ticker (e.g. U11.SI, UOB, AAPL, TSLA)", value="U11.SI")
 ticker = auto_format_ticker(user_input)
 
@@ -337,9 +335,54 @@ if sector_summary:
 st.markdown("**📌 Market Index Analysis:**")
 market_summary = results.get("market", None)
 if market_summary:
-    st.markdown(market_summary.get("summary", "No market index
+    st.markdown(market_summary.get("summary", "No market index insights available."))
 
+st.markdown("**📌 Commodities & Global Macro:**")
+commodities_summary = results.get("commodities", None)
+globals_summary = results.get("globals", None)
+if commodities_summary:
+    st.markdown(commodities_summary.get("summary", "No commodities insights available."))
+if globals_summary:
+    st.markdown(globals_summary.get("summary", "No global macro insights available."))
 
+st.markdown("## 🧠 LLM-Powered Analyst Summaries (All Layers)")
+layer_titles = [
+    ("💹 Stock", "stock"),
+    ("🏭 Sector", "sector"),
+    ("📈 Market", "market"),
+    ("🛢️ Commodities", "commodities"),
+    ("🌏 Global Macro", "globals")
+]
+cols = st.columns(5)
+for (label, key), col in zip(layer_titles, cols):
+    llm_text = results.get(key, {}).get("llm_summary", None)
+    if llm_text:
+        col.markdown(f"### {label}")
+        col.markdown(llm_text, unsafe_allow_html=True)
+    else:
+        col.markdown(f"### {label}")
+        col.info("No summary.")
 
+# === LLM Commentary (auto-generated, always visible) ===
+api_key = st.secrets["OPENAI_API_KEY"]
+with st.spinner("Agent 1 is generating LLM commentary..."):
+    llm_summary = get_llm_summary(stock_summary, api_key)
+
+if "For Technical Readers" in llm_summary and "For Grandmas and Grandpas" in llm_summary:
+    technical, grandma = llm_summary.split("For Grandmas and Grandpas", 1)
+    st.subheader("🧠 LLM-Powered Analyst Commentary")
+    st.markdown(
+        "<span style='font-size:1.3em;font-weight:600;'>🧑‍💼 For Technical Readers</span>",
+        unsafe_allow_html=True
+    )
+    st.write(technical.replace("For Technical Readers", "").replace("Summary:", "").strip())
+    st.markdown(
+        "<span style='font-size:1.3em;font-weight:600;'>👵 For Grandmas and Grandpas</span>",
+        unsafe_allow_html=True
+    )
+    st.write(grandma.replace("Summary:", "").strip())
+else:
+    st.subheader("🧠 LLM-Powered Analyst Commentary")
+    st.write(llm_summary)
 
 
