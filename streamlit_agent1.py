@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-from agent1_core import (
+from agents.agent1_core import (
     analyze_stock,
     analyze_sector,
     analyze_market,
