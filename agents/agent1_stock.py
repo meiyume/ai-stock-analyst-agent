@@ -308,6 +308,21 @@ def analyze(
             mode='lines',
             name='SMA10'
         ))
+        # Bollinger Bands
+        fig.add_trace(go.Scatter(
+            x=df['Date'],
+            y=df['Upper'],
+            mode='lines',
+            line=dict(dash='dot'),
+            name='Upper Bollinger'
+        ))
+        fig.add_trace(go.Scatter(
+            x=df['Date'],
+            y=df['Lower'],
+            mode='lines',
+            line=dict(dash='dot'),
+            name='Lower Bollinger'
+        ))
         summary["chart"] = fig
     except Exception as e:
         summary["chart"] = None
