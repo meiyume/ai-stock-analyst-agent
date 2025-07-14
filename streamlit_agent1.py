@@ -75,20 +75,19 @@ for agent_name, agent_module in AGENT_CONFIG:
                 "raw": res
             }
         except Exception as e:
-    # Create a unique empty plotly chart for every agent failure
-    empty_fig = go.Figure()
-    empty_fig.add_annotation(
-        text=f"No data for {agent_name}",
-        xref="paper", yref="paper",
-        showarrow=False,
-        font=dict(size=18, color="grey")
-    )
-    agent_reports[agent_name] = {
-        "summary": f"(Agent failed: {e})",
-        "risk": "N/A",
-        "plot": empty_fig,
-        "raw": {}
-    }
+            empty_fig = go.Figure()
+            empty_fig.add_annotation(
+                text=f"No data for {agent_name}",
+                xref="paper", yref="paper",
+                showarrow=False,
+                font=dict(size=18, color="grey")
+            )
+            agent_reports[agent_name] = {
+                "summary": f"(Agent failed: {e})",
+                "risk": "N/A",
+                "plot": empty_fig,
+                "raw": {}
+            }
 
 # --- Header Section ---
 st.markdown(f"# {company_name} ({ticker.upper()})")
