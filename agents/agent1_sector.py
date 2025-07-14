@@ -35,25 +35,38 @@ Begin with "Technical Summary" and "Plain-English Summary" as section headers.
     return tech, plain
 
 def analyze(ticker, company_name=None, horizon="7 Days", lookback_days=None, api_key=None):
-    # Use a deepcopy so we never share dicts/objects with stock agent
-    summary = copy.deepcopy(agent1_stock.analyze(ticker, company_name, horizon, lookback_days, api_key))
-    
-    # Clone the chart object (if present)
-    if "chart" in summary and summary["chart"] is not None:
-        try:
-            summary["chart"] = pio.from_json(summary["chart"].to_json())
-        except Exception:
-            summary["chart"] = None
+    try:
+        summary = copy.deepcopy(agent1_stock.analyze(ticker, company_name, horizon, lookback_days, api_key))
+        if "chart" in summary and summary["chart"] is not None:
+            try:
+                summary["chart"] = pio.from_json(summary["chart"].to_json())
+            except Exception:
+                summary["chart"] = None
+        signals = summary.copy()
+        if api_key:
+            keys = [
+                "sma_trend", "macd_signal", "bollinger_signal", "rsi_signal",
+                "stochastic_signal", "cmf_signal", "obv_signal", "adx_signal",
+                "atr_signal", "vol_spike", "patterns", "anomaly_events", "horizon", "risk_level"
+            ]
+            slim_signals = {k: signals.get(k) for k in keys}
+            tech, plain = get_llm_dual_summary(slim_signals, api_key)
+            summary["llm_technical_summary"] = tech
+            summary["llm_plain_summary"] = plain
+        else:
+            summary["llm_technical_summary"] = "No API key provided."
+            summary["llm_plain_summary"] = "No API key provided."
+        summary["llm_summary"] = summary.get("llm_technical_summary", summary.get("summary", ""))
+        return summary
+    except Exception as e:
+        return {
+            "summary": f"⚠️ Globals agent failed: {e}",
+            "llm_technical_summary": f"Globals agent error: {e}",
+            "llm_plain_summary": f"Globals agent error: {e}",
+            "llm_summary": f"Globals agent error: {e}",
+            "risk_level": "N/A",
+            "df": pd.DataFrame(),
+            "chart": None,
+        }
 
-    signals = summary.copy()
-    if api_key:
-        tech, plain = get_llm_dual_summary(signals, api_key)
-        summary["llm_technical_summary"] = tech
-        summary["llm_plain_summary"] = plain
-    else:
-        summary["llm_technical_summary"] = "No API key provided."
-        summary["llm_plain_summary"] = "No API key provided."
-    # For compatibility: ensure "llm_summary" key is present
-    summary["llm_summary"] = summary.get("llm_technical_summary", summary.get("summary", ""))
-    return summary
 
