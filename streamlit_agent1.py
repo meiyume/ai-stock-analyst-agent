@@ -35,12 +35,12 @@ for i, ticker in enumerate(st.session_state.tickers):
     if len(st.session_state.tickers) > 1:
         if cols[1].button("❌", key=f"remove_{i}"):
             remove_ticker(i)
-            st.experimental_rerun()
+            st.rerun()
 
 if len(st.session_state.tickers) < 3:
     if st.button("➕ Add another ticker"):
         add_ticker()
-        st.experimental_rerun()
+        st.rerun()
 
 def auto_format_ticker(t):
     t = t.strip().upper()
