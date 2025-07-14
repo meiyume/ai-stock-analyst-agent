@@ -37,6 +37,66 @@ def decide_lookback_days(horizon: str):
     lookback_days = min(lookback_days, 360)
     return lookback_days
 
+def calculate_indicators(df):
+    # SMA
+    df['SMA5'] = df['Close'].rolling(window=5).mean()
+    df['SMA10'] = df['Close'].rolling(window=10).mean()
+
+    # Bollinger Bands
+    df['Upper'] = df['SMA10'] + 2 * df['Close'].rolling(window=10).std()
+    df['Lower'] = df['SMA10'] - 2 * df['Close'].rolling(window=10).std()
+
+    # RSI
+    delta = df['Close'].diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.rolling(window=14).mean()
+    avg_loss = loss.rolling(window=14).mean()
+    rs = avg_gain / avg_loss
+    df['RSI'] = 100 - (100 / (1 + rs))
+
+    # MACD
+    exp12 = df['Close'].ewm(span=12, adjust=False).mean()
+    exp26 = df['Close'].ewm(span=26, adjust=False).mean()
+    df['MACD'] = exp12 - exp26
+    df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+
+    # Volume
+    df['Volume'] = df['Volume']
+
+    # ATR
+    high_low = df['High'] - df['Low']
+    high_close = np.abs(df['High'] - df['Close'].shift())
+    low_close = np.abs(df['Low'] - df['Close'].shift())
+    ranges = pd.concat([high_low, high_close, low_close], axis=1)
+    df['ATR'] = ranges.max(axis=1).rolling(window=14).mean()
+
+    # Stochastic
+    low_min = df['Low'].rolling(window=14).min()
+    high_max = df['High'].rolling(window=14).max()
+    df['Stochastic_%K'] = 100 * (df['Close'] - low_min) / (high_max - low_min)
+    df['Stochastic_%D'] = df['Stochastic_%K'].rolling(window=3).mean()
+
+    # CMF
+    mfv = ((df['Close'] - df['Low']) - (df['High'] - df['Close'])) / (df['High'] - df['Low'] + 1e-9) * df['Volume']
+    df['CMF'] = mfv.rolling(window=20).sum() / df['Volume'].rolling(window=20).sum()
+
+    # OBV
+    obv = [0]
+    for i in range(1, len(df)):
+        if df.loc[i, 'Close'] > df.loc[i-1, 'Close']:
+            obv.append(obv[-1] + df.loc[i, 'Volume'])
+        elif df.loc[i, 'Close'] < df.loc[i-1, 'Close']:
+            obv.append(obv[-1] - df.loc[i, 'Volume'])
+        else:
+            obv.append(obv[-1])
+    df['OBV'] = obv
+
+    # ADX
+    df['ADX'] = np.nan  # Stub, can be implemented if needed
+
+    return df
+
 def get_llm_dual_summary(signals, api_key):
     client = OpenAI(api_key=api_key)
     prompt = f"""
@@ -97,6 +157,9 @@ def analyze(
     df = fetch_data(ticker, lookback_days=lookback_days)
     df = enforce_date_column(df)
 
+    # Calculate technicals
+    df = calculate_indicators(df)
+
     # --- Ensure all indicator columns exist ---
     indicator_cols = [
         "Open", "High", "Low", "Close", "SMA5", "SMA10", "Upper", "Lower",
@@ -107,10 +170,11 @@ def analyze(
         if col not in df.columns:
             df[col] = np.nan
 
-    # Only use columns that actually exist to avoid KeyError
+    # Only use columns that actually exist (no KeyError even with missing columns)
     existing_cols = [col for col in indicator_cols if col in df.columns]
     remaining_cols = [c for c in df.columns if c not in existing_cols]
-    df = df[existing_cols + remaining_cols]
+    cols_to_use = [col for col in existing_cols + remaining_cols if col in df.columns]
+    df = df[cols_to_use]
 
     # --- Handle empty data case ---
     if df.empty or df["Close"].isna().all():
@@ -138,26 +202,35 @@ def analyze(
         }
         return summary, df
 
-    # --- [Insert your technical calculations here] ---
-    # Example stub logic (replace with your real code)
-    sma_trend = "Neutral"
-    macd_signal = "Neutral"
-    bollinger_signal = "Neutral"
-    rsi_signal = "Neutral"
-    stochastic_signal = "Neutral"
-    cmf_signal = "Neutral"
-    obv_signal = "Neutral"
-    adx_signal = "Neutral"
-    atr_signal = "Neutral"
-    vol_spike = False
+    # --- Real technical signal summaries (stub logic here, can expand) ---
+    sma_trend = "Bullish" if df['SMA5'].iloc[-1] > df['SMA10'].iloc[-1] else "Bearish"
+    macd_signal = "Bullish" if df['MACD'].iloc[-1] > df['Signal'].iloc[-1] else "Bearish"
+    rsi_signal = (
+        "Overbought" if df['RSI'].iloc[-1] > 70 else
+        "Oversold" if df['RSI'].iloc[-1] < 30 else
+        "Neutral"
+    )
+    bollinger_signal = (
+        "Breakout" if df['Close'].iloc[-1] > df['Upper'].iloc[-1]
+        else "Breakdown" if df['Close'].iloc[-1] < df['Lower'].iloc[-1]
+        else "Neutral"
+    )
+    stochastic_signal = (
+        "Overbought" if df['Stochastic_%K'].iloc[-1] > 80 else
+        "Oversold" if df['Stochastic_%K'].iloc[-1] < 20 else
+        "Neutral"
+    )
+    cmf_signal = "Bullish" if df['CMF'].iloc[-1] > 0 else "Bearish"
+    obv_signal = "Up" if df['OBV'].iloc[-1] > df['OBV'].iloc[-10] else "Down"
+    adx_signal = "Strong Trend" if df['ADX'].iloc[-1] > 25 else "Weak/No Trend"
+    atr_signal = "High Volatility" if df['ATR'].iloc[-1] > df['ATR'].rolling(window=30).mean().iloc[-1] else "Normal"
+
+    # Example volume spike/anomaly (stub)
+    vol_spike = bool(df['Volume'].iloc[-1] > df['Volume'].rolling(window=30).mean().iloc[-1] * 1.5)
     patterns = []
     anomaly_events = []
-    heatmap_signals = {}
-    risk_score = 0.5
-    risk_level = "Caution"
 
-    # TODO: Use real indicator calculations!
-
+    # Compose signals for LLM
     summary = {
         "summary": f"{sma_trend} SMA, {macd_signal} MACD, {rsi_signal} RSI, {bollinger_signal} Bollinger, "
                    f"{stochastic_signal} Stochastic, {cmf_signal} CMF, {obv_signal} OBV, "
@@ -174,9 +247,9 @@ def analyze(
         "vol_spike": vol_spike,
         "patterns": patterns,
         "anomaly_events": anomaly_events,
-        "heatmap_signals": heatmap_signals,
-        "composite_risk_score": risk_score,
-        "risk_level": risk_level,
+        "heatmap_signals": {},  # Add if you compute
+        "composite_risk_score": 0.5,  # Placeholder, update with logic
+        "risk_level": "Caution",      # Placeholder, update with logic
         "lookback_days": lookback_days,
         "horizon": horizon
     }
@@ -198,7 +271,6 @@ def analyze(
 
 def run_full_technical_analysis(ticker, horizon, lookback_days=None, api_key=None):
     return analyze(ticker, horizon, lookback_days=lookback_days, api_key=api_key)
-
 
 
 
