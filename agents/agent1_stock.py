@@ -96,7 +96,6 @@ def scan_all_anomalies(df):
     df = enforce_date_column(df)
     for i in range(1, len(df)):
         date = df["Date"].iloc[i]
-        # (Same anomaly logic as your file...)
         if abs(df["RSI"].iloc[i] - df["RSI"].iloc[i - 1]) > 15:
             events.append({"date": date, "indicator": "RSI", "event": "Spike"})
         if df["RSI"].iloc[i] > 70 and df["RSI"].iloc[i - 1] <= 70:
@@ -125,7 +124,6 @@ def scan_all_anomalies(df):
     return events
 
 def fetch_data(ticker, lookback_days=30):
-    import yfinance as yf
     from datetime import datetime, timedelta
     end = datetime.today()
     start = end - timedelta(days=lookback_days * 2)
@@ -134,17 +132,65 @@ def fetch_data(ticker, lookback_days=30):
     df.reset_index(inplace=True)
     return df
 
+def decide_lookback_via_llm(horizon: str, volatility: float = None, api_key: str = None):
+    """
+    Use an LLM to recommend an optimal lookback period (days) for technical analysis,
+    based on prediction horizon and optional context.
+    """
+    if api_key is None:
+        # fallback mapping
+        mapping = {
+            "1 Day": 14,
+            "3 Days": 21,
+            "7 Days": 30,
+            "30 Days": 90,
+            "90 Days": 150,
+            "180 Days": 180
+        }
+        return mapping.get(horizon, 30)
+    client = OpenAI(api_key=api_key)
+    prompt = f"""
+As an expert stock analyst, recommend the optimal lookback period in days for technical indicator calculations,
+given the following context:
+
+- Prediction Horizon: {horizon}
+- Market Volatility (standard deviation): {volatility if volatility is not None else 'not provided'}
+
+Your answer MUST be a single integer only, representing the number of days of historical data to use.
+Do not include any explanation or words, just the integer.
+"""
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=5,
+        temperature=0.2,
+    )
+    text = response.choices[0].message.content.strip()
+    try:
+        lookback = int(text)
+        lookback = max(10, min(lookback, 180))
+    except Exception:
+        lookback = 30
+    return lookback
+
 def analyze(
     ticker: str,
     horizon: str = "7 Days",
-    lookback_days: int = 30
+    lookback_days: int = None,
+    api_key: str = None
 ):
     """
     Run full technical, anomaly, risk, and LLM summary analysis for a single stock/index/commodity.
     - ticker: Yahoo/Sgx ticker
     - horizon: Forward-looking outlook (e.g. "Next Day", "7 Days", "30 Days")
-    - lookback_days: How much historical data to fetch/analyze (LLM/adaptive)
+    - lookback_days: If not provided, LLM (or fallback logic) will determine optimal window.
     """
+    # Dynamically decide lookback if not provided
+    if lookback_days is None:
+        # Optionally use a small sample to estimate volatility
+        df_sample = fetch_data(ticker, lookback_days=15)
+        volatility = df_sample['Close'].std() if not df_sample.empty else None
+        lookback_days = decide_lookback_via_llm(horizon, volatility, api_key)
     df = fetch_data(ticker, lookback_days=lookback_days)
     df = enforce_date_column(df)
     if df.empty:
@@ -166,7 +212,7 @@ def analyze(
             "lookback_days": lookback_days
         }, df
 
-    # === All indicator calculations (same as your file) ===
+    # === Indicator calculations ===
     df["SMA5"] = df["Close"].rolling(window=5).mean()
     df["SMA10"] = df["Close"].rolling(window=10).mean()
     df["EMA12"] = df["Close"].ewm(span=12, adjust=False).mean()
@@ -237,10 +283,8 @@ def analyze(
     patterns = detect_patterns(df_signals)
     anomaly_events = scan_all_anomalies(df_signals)
 
-    # === Comprehensive Heatmap Signal Status ===
+    # === Heatmap Signal Status ===
     heatmap_signals = {}
-
-    # (heatmap logic unchanged...)
 
     heatmap_signals["SMA Trend"] = sma_trend
     heatmap_signals["MACD"] = "Bullish Crossover" if macd_signal == "Bullish" else "Bearish Crossover"
@@ -320,12 +364,13 @@ def analyze(
         "heatmap_signals": heatmap_signals,
         "composite_risk_score": round(risk_score, 2),
         "risk_level": risk_level,
-        "lookback_days": lookback_days
+        "lookback_days": lookback_days,
+        "horizon": horizon
     }
     return summary, df_for_plotting
 
-def run_full_technical_analysis(ticker, horizon, lookback_days=30):
-    return analyze(ticker, horizon, lookback_days=lookback_days)
+def run_full_technical_analysis(ticker, horizon, lookback_days=None, api_key=None):
+    return analyze(ticker, horizon, lookback_days=lookback_days, api_key=api_key)
 
 def get_llm_summary(signals, api_key):
     client = OpenAI(api_key=api_key)
