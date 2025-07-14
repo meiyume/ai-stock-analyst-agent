@@ -90,9 +90,6 @@ if not all_results:
 
 # --- Chief AI Analyst Grand Outlook ---
 def get_chief_llm_summary(all_results, horizon, api_key):
-    """
-    Synthesize a multi-ticker grand outlook from all agent reports using LLM.
-    """
     context_lines = []
     for ticker, reports in all_results.items():
         context_lines.append(f"\nFor {ticker}:")
@@ -101,7 +98,6 @@ def get_chief_llm_summary(all_results, horizon, api_key):
         context_lines.append(f"- Market Analyst: {reports.get('market', {}).get('llm_summary', 'N/A')}")
         context_lines.append(f"- Commodities Analyst: {reports.get('commodities', {}).get('llm_summary', 'N/A')}")
         context_lines.append(f"- Global Macro Analyst: {reports.get('globals', {}).get('llm_summary', 'N/A')}")
-
     prompt = f"""
 You are the Chief AI Analyst. Your analyst team has submitted their LLM reports for multiple stocks and outlook horizon ({horizon}):
 
@@ -137,76 +133,107 @@ with st.spinner("Chief AI Analyst is reviewing all agent reports and composing a
     except Exception as e:
         st.error(f"Chief AI Analyst synthesis failed: {e}")
 
-# --- Output results for each ticker in expandable panels ---
+# --- Results per ticker with tabs ---
 for ticker, results in all_results.items():
     with st.expander(f"📊 Results for {ticker}", expanded=True):
         if "error" in results:
             st.error(f"Analysis failed for {ticker}: {results['error']}")
             continue
 
-        stock_summary = results.get("stock", {}) if "stock" in results else results
-        stock_summary["horizon"] = selected_horizon
+        tab_dashboard, tab_agents, tab_technicals = st.tabs(
+            ["🛡️ Dashboard", "🤖 AI Agent Reports", "📈 Technicals"]
+        )
 
-        df = results.get("stock_df", None)
-        if df is not None:
-            df = enforce_date_column(df)
+        # --- Dashboard tab ---
+        with tab_dashboard:
+            stock_summary = results.get("stock", {}) if "stock" in results else results
+            stock_summary["horizon"] = selected_horizon
 
-        # --- Display dashboard, charts, summaries for each ticker (reuse your previous logic here) ---
-        st.markdown(f"### Risk Dashboard for {ticker}")
-        heatmap = stock_summary.get("heatmap_signals", {})
-        risk_score = stock_summary.get("composite_risk_score", None)
-        risk_level = stock_summary.get("risk_level", None)
-        if heatmap:
-            cols = st.columns(len(heatmap))
-            for i, (indicator, status) in enumerate(heatmap.items()):
-                if "Overbought" in status or "Bearish" in status or "Selling" in status or "Divergence" in status:
-                    color = "🔴"
-                elif "Spike" in status or "High" in status or "Oversold" in status:
-                    color = "🟠"
-                elif "Bullish" in status or "Buying" in status or "Strong" in status:
-                    color = "🟢"
-                elif "Neutral" in status or "None" in status:
-                    color = "⚪"
-                else:
-                    color = "🟡"
-                cols[i].markdown(
-                    f"<div style='background-color:#ffffff;padding:10px;border-radius:10px;text-align:center;'>"
-                    f"<b>{indicator}</b><br>{color} {status}</div>",
-                    unsafe_allow_html=True
-                )
-        if risk_score is not None:
-            st.markdown(f"**Composite Risk Score**: `{risk_score}`")
-        if risk_level is not None:
-            st.markdown(f"**Overall Risk Level**: 🎯 **{risk_level}**")
+            df = results.get("stock_df", None)
+            if df is not None:
+                df = enforce_date_column(df)
 
-        # --- Candlestick Chart with SMA & Bollinger Bands ---
-        if df is not None:
-            st.markdown("#### 🕯️ Candlestick Chart with SMA & Bollinger Bands")
-            fig = go.Figure()
-            fig.add_trace(go.Candlestick(
-                x=df["Date"], open=df["Open"], high=df["High"],
-                low=df["Low"], close=df["Close"], name="Candles"
-            ))
-            fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA5"], mode="lines", name="SMA5"))
-            fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA10"], mode="lines", name="SMA10"))
-            fig.add_trace(go.Scatter(x=df["Date"], y=df["Upper"], mode="lines", name="Upper BB", line=dict(dash='dot')))
-            fig.add_trace(go.Scatter(x=df["Date"], y=df["Lower"], mode="lines", name="Lower BB", line=dict(dash='dot')))
-            fig.update_layout(height=400, xaxis_rangeslider_visible=False)
-            st.plotly_chart(fig, use_container_width=True)
+            st.markdown(f"### Risk Dashboard for {ticker}")
+            heatmap = stock_summary.get("heatmap_signals", {})
+            risk_score = stock_summary.get("composite_risk_score", None)
+            risk_level = stock_summary.get("risk_level", None)
+            if heatmap:
+                cols = st.columns(len(heatmap))
+                for i, (indicator, status) in enumerate(heatmap.items()):
+                    if "Overbought" in status or "Bearish" in status or "Selling" in status or "Divergence" in status:
+                        color = "🔴"
+                    elif "Spike" in status or "High" in status or "Oversold" in status:
+                        color = "🟠"
+                    elif "Bullish" in status or "Buying" in status or "Strong" in status:
+                        color = "🟢"
+                    elif "Neutral" in status or "None" in status:
+                        color = "⚪"
+                    else:
+                        color = "🟡"
+                    cols[i].markdown(
+                        f"<div style='background-color:#ffffff;padding:10px;border-radius:10px;text-align:center;'>"
+                        f"<b>{indicator}</b><br>{color} {status}</div>",
+                        unsafe_allow_html=True
+                    )
+            if risk_score is not None:
+                st.markdown(f"**Composite Risk Score**: `{risk_score}`")
+            if risk_level is not None:
+                st.markdown(f"**Overall Risk Level**: 🎯 **{risk_level}**")
 
-        # --- LLM summary per ticker (stock-level only for now) ---
-        st.markdown("#### 🧠 Stock Analyst LLM Commentary")
-        with st.spinner("Agent 1 is generating LLM commentary..."):
-            try:
-                llm_summary = get_llm_summary(stock_summary, api_key)
-                st.write(llm_summary)
-            except Exception as e:
-                st.warning(f"LLM summary not available: {e}")
+            if df is not None:
+                st.markdown("#### 🕯️ Candlestick Chart with SMA & Bollinger Bands")
+                fig = go.Figure()
+                fig.add_trace(go.Candlestick(
+                    x=df["Date"], open=df["Open"], high=df["High"],
+                    low=df["Low"], close=df["Close"], name="Candles"
+                ))
+                fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA5"], mode="lines", name="SMA5"))
+                fig.add_trace(go.Scatter(x=df["Date"], y=df["SMA10"], mode="lines", name="SMA10"))
+                fig.add_trace(go.Scatter(x=df["Date"], y=df["Upper"], mode="lines", name="Upper BB", line=dict(dash='dot')))
+                fig.add_trace(go.Scatter(x=df["Date"], y=df["Lower"], mode="lines", name="Lower BB", line=dict(dash='dot')))
+                fig.update_layout(height=400, xaxis_rangeslider_visible=False)
+                st.plotly_chart(fig, use_container_width=True)
 
-        # --- You can add more agent summaries/charts for sector, market, etc., under each ticker as next step ---
+            # Add more visuals (patterns, anomalies) here if needed.
+
+        # --- AI Agent Reports tab ---
+        with tab_agents:
+            st.markdown("### 🤖 AI Agent Reports")
+            agent_configs = [
+                ("Stock Analyst", "stock", "📈"),
+                ("Sector Analyst", "sector", "🏭"),
+                ("Market Analyst", "market", "📊"),
+                ("Commodities Analyst", "commodities", "🛢️"),
+                ("Global Macro Analyst", "globals", "🌍"),
+            ]
+            for label, key, icon in agent_configs:
+                with st.expander(f"{icon} {label}"):
+                    st.write(results.get(key, {}).get("llm_summary", "No report."))
+
+        # --- Technicals tab ---
+        with tab_technicals:
+            st.markdown("### 📈 Technical Indicators & Patterns")
+            # Here you can insert RSI, MACD, Stochastic, Volume, ADX, ATR, CMF, OBV, anomalies, and pattern detection
+            # Example for RSI (add others similarly):
+
+            df = results.get("stock_df", None)
+            if df is not None and "RSI" in df.columns:
+                st.markdown("#### 📉 RSI (Relative Strength Index)")
+                rsi_fig = go.Figure()
+                rsi_fig.add_trace(go.Scatter(
+                    x=df["Date"], y=df["RSI"],
+                    name="RSI", line=dict(width=3, color="purple")
+                ))
+                rsi_fig.update_yaxes(range=[0, 100])
+                rsi_fig.update_layout(height=220, margin=dict(t=16, b=8))
+                st.plotly_chart(rsi_fig, use_container_width=True)
+            # Repeat for MACD, volume, etc. as you like
 
 # Footer
 st.markdown("---")
 st.caption("Agent 1: For informational and educational use only. Not financial advice.")
+
+
+
 
 
