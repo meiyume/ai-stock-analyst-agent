@@ -1,5 +1,7 @@
 import agents.agent1_stock as agent1_stock
 from openai import OpenAI
+import copy
+import plotly.io as pio
 
 def get_llm_dual_summary(signals, api_key):
     client = OpenAI(api_key=api_key)
@@ -33,8 +35,16 @@ Begin with "Technical Summary" and "Plain-English Summary" as section headers.
     return tech, plain
 
 def analyze(ticker, company_name=None, horizon="7 Days", lookback_days=None, api_key=None):
-    # For now, sector is "proxied" by stock agent output (can replace with real logic later)
-    summary = agent1_stock.analyze(ticker, company_name, horizon, lookback_days, api_key)
+    # Use a deepcopy so we never share dicts/objects with stock agent
+    summary = copy.deepcopy(agent1_stock.analyze(ticker, company_name, horizon, lookback_days, api_key))
+    
+    # Clone the chart object (if present)
+    if "chart" in summary and summary["chart"] is not None:
+        try:
+            summary["chart"] = pio.from_json(summary["chart"].to_json())
+        except Exception:
+            summary["chart"] = None
+
     signals = summary.copy()
     if api_key:
         tech, plain = get_llm_dual_summary(signals, api_key)
@@ -46,3 +56,4 @@ def analyze(ticker, company_name=None, horizon="7 Days", lookback_days=None, api
     # For compatibility: ensure "llm_summary" key is present
     summary["llm_summary"] = summary.get("llm_technical_summary", summary.get("summary", ""))
     return summary
+
