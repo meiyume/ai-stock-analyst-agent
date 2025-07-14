@@ -102,10 +102,10 @@ def analyze(
     "Open", "High", "Low", "Close", "SMA5", "SMA10", "Upper", "Lower",
     "RSI", "MACD", "Signal", "Volume", "ATR", "Stochastic_%K",
     "Stochastic_%D", "CMF", "OBV", "ADX"
-]
-for col in indicator_cols:
-    if col not in df.columns:
-        df[col] = np.nan
+    ]
+    for col in indicator_cols:
+        if col not in df.columns:
+            df[col] = np.nan
 
 # Only use columns that actually exist to avoid KeyError
 existing_cols = [col for col in indicator_cols if col in df.columns]
