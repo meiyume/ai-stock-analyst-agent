@@ -14,7 +14,16 @@ def fetch_data(ticker, lookback_days=30, interval="1d"):
         progress=False
     )
     data = data.reset_index()
-    return data
+
+    # --- Flatten MultiIndex columns ---
+    if isinstance(data.columns, pd.MultiIndex):
+        data.columns = [
+            '_'.join(filter(None, map(str, col))).replace(f"_{ticker}", "") 
+            for col in data.columns.values
+        ]
+
+    return data 
+
 
 def enforce_date_column(df):
     if 'Date' not in df.columns:
