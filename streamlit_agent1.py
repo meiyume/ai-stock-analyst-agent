@@ -23,16 +23,51 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- User Input ---
-def auto_format_ticker(ticker):
-    t = ticker.strip().upper()
-    # Only append '.SI' if no exchange is specified
+st.subheader("Step 1: Enter up to 3 Stock Tickers")
+
+# Session state for multi-ticker input
+if "tickers" not in st.session_state:
+    st.session_state.tickers = ["UOB"]  # Start with one
+
+# Functions for UI logic
+def add_ticker():
+    if len(st.session_state.tickers) < 3:
+        st.session_state.tickers.append("")
+
+def remove_ticker(idx):
+    if len(st.session_state.tickers) > 1:
+        st.session_state.tickers.pop(idx)
+
+# Render each ticker input
+for i, ticker in enumerate(st.session_state.tickers):
+    cols = st.columns([7, 1])
+    key = f"ticker_{i}"
+    st.session_state.tickers[i] = cols[0].text_input(
+        f"Ticker {i+1}", value=ticker, key=key
+    )
+    if len(st.session_state.tickers) > 1:
+        if cols[1].button("❌", key=f"remove_{i}"):
+            remove_ticker(i)
+            st.experimental_rerun()
+
+# Add button (max 3 tickers)
+if len(st.session_state.tickers) < 3:
+    if st.button("➕ Add another ticker"):
+        add_ticker()
+        st.experimental_rerun()
+
+# Normalization function
+def auto_format_ticker(t):
+    t = t.strip().upper()
     if '.' not in t:
         return t + ".SI"
     return t
 
-st.subheader("Step 1: Enter Stock Ticker")
-user_input = st.text_input("🎯 Ticker (e.g. U11.SI, UOB, AAPL, TSLA)", value="U11.SI")
-ticker = auto_format_ticker(user_input)
+# Final list of normalized tickers, filter out blanks
+tickers = [auto_format_ticker(t) for t in st.session_state.tickers if t.strip()]
+
+st.write("**Selected Tickers:**", ", ".join(tickers) if tickers else "None")
+
 
 # --- Horizon selection (Hybrid style) ---
 st.subheader("Step 2: Select Outlook Horizon")
