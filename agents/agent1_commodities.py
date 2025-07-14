@@ -32,7 +32,7 @@ Begin with "Technical Summary" and "Plain-English Summary" as section headers.
         plain = output
     return tech, plain
 
-def analyze(ticker, horizon="7 Days", lookback_days=None, api_key=None):
+def analyze(ticker, company_name=None, horizon="7 Days", lookback_days=None, api_key=None):
     # Example: Aggregate commodities signals
     summary, df = agent1_stock.analyze(ticker, horizon, lookback_days, api_key)
     signals = summary.copy()
