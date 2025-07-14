@@ -3,13 +3,9 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import re
-from openai import OpenAI  # Modern SDK v1 import
+from openai import OpenAI
 
 def enforce_date_column(df):
-    """
-    Ensures DataFrame has a 'Date' column of dtype datetime64[ns], sorted, and unique.
-    """
     if 'Date' not in df.columns:
         df = df.reset_index()
         possible = [col for col in df.columns if 'date' in col.lower() or 'time' in col.lower()]
@@ -20,18 +16,6 @@ def enforce_date_column(df):
     df['Date'] = pd.to_datetime(df['Date'])
     df = df.sort_values('Date').drop_duplicates('Date').reset_index(drop=True)
     return df
-
-def decide_history_period(horizon: str, ticker: str, use_llm: bool = False) -> str:
-    if use_llm:
-        return "60d"
-    else:
-        map_lookup = {
-            "1 Day": "30d",
-            "3 Days": "45d",
-            "7 Days": "90d",
-            "30 Days": "180d"
-        }
-        return map_lookup.get(horizon, "90d")
 
 def compute_rsi(series, period=14):
     delta = series.diff()
@@ -98,7 +82,6 @@ def detect_patterns(df):
     patterns = []
     if len(df) < 3:
         return patterns
-    # Simple Hammer pattern example for last candle
     last = df.iloc[-1]
     body = abs(last['Close'] - last['Open'])
     range_ = last['High'] - last['Low']
@@ -113,35 +96,27 @@ def scan_all_anomalies(df):
     df = enforce_date_column(df)
     for i in range(1, len(df)):
         date = df["Date"].iloc[i]
-
-        # RSI spike
+        # (Same anomaly logic as your file...)
         if abs(df["RSI"].iloc[i] - df["RSI"].iloc[i - 1]) > 15:
             events.append({"date": date, "indicator": "RSI", "event": "Spike"})
-        # RSI Overbought/Oversold cross
         if df["RSI"].iloc[i] > 70 and df["RSI"].iloc[i - 1] <= 70:
             events.append({"date": date, "indicator": "RSI", "event": "Overbought Cross"})
         if df["RSI"].iloc[i] < 30 and df["RSI"].iloc[i - 1] >= 30:
             events.append({"date": date, "indicator": "RSI", "event": "Oversold Cross"})
-        # MACD spike
         if abs(df["MACD"].iloc[i] - df["MACD"].iloc[i - 1]) > 0.5:
             events.append({"date": date, "indicator": "MACD", "event": "Spike"})
-        # MACD Crossover
         if (df["MACD"].iloc[i] > df["Signal"].iloc[i] and df["MACD"].iloc[i - 1] <= df["Signal"].iloc[i - 1]):
             events.append({"date": date, "indicator": "MACD", "event": "Bullish Crossover"})
         if (df["MACD"].iloc[i] < df["Signal"].iloc[i] and df["MACD"].iloc[i - 1] >= df["Signal"].iloc[i - 1]):
             events.append({"date": date, "indicator": "MACD", "event": "Bearish Crossover"})
-        # Price Gap
         if abs(df["Open"].iloc[i] - df["Close"].iloc[i - 1]) > 0.02 * df["Close"].iloc[i - 1]:
             events.append({"date": date, "indicator": "Price", "event": "Gap"})
-        # Volume Spike
         avg_vol = df["Volume"].rolling(window=5).mean().iloc[i - 1]
         if avg_vol > 0 and df["Volume"].iloc[i] > 1.5 * avg_vol:
             events.append({"date": date, "indicator": "Volume", "event": "Spike"})
-        # ATR Spike
         avg_atr = df["ATR"].rolling(window=20).mean().iloc[i - 1]
         if avg_atr > 0 and df["ATR"].iloc[i] > 1.5 * avg_atr:
             events.append({"date": date, "indicator": "ATR", "event": "Spike"})
-        # Stochastic Overbought/Oversold
         if "Stochastic_%K" in df.columns:
             if df["Stochastic_%K"].iloc[i] > 80 and df["Stochastic_%K"].iloc[i - 1] <= 80:
                 events.append({"date": date, "indicator": "Stochastic", "event": "Overbought Cross"})
@@ -149,10 +124,28 @@ def scan_all_anomalies(df):
                 events.append({"date": date, "indicator": "Stochastic", "event": "Oversold Cross"})
     return events
 
-def analyze(ticker: str, horizon: str = "7 Days"):
-    history_period = decide_history_period(horizon, ticker, use_llm=False)
-    stock = yf.Ticker(ticker)
-    df = stock.history(period=history_period, interval="1d")
+def fetch_data(ticker, lookback_days=30):
+    import yfinance as yf
+    from datetime import datetime, timedelta
+    end = datetime.today()
+    start = end - timedelta(days=lookback_days * 2)
+    df = yf.Ticker(ticker).history(start=start, end=end)
+    df = df[-lookback_days:]
+    df.reset_index(inplace=True)
+    return df
+
+def analyze(
+    ticker: str,
+    horizon: str = "7 Days",
+    lookback_days: int = 30
+):
+    """
+    Run full technical, anomaly, risk, and LLM summary analysis for a single stock/index/commodity.
+    - ticker: Yahoo/Sgx ticker
+    - horizon: Forward-looking outlook (e.g. "Next Day", "7 Days", "30 Days")
+    - lookback_days: How much historical data to fetch/analyze (LLM/adaptive)
+    """
+    df = fetch_data(ticker, lookback_days=lookback_days)
     df = enforce_date_column(df)
     if df.empty:
         return {
@@ -169,9 +162,11 @@ def analyze(ticker: str, horizon: str = "7 Days"):
             "vol_spike": False,
             "patterns": [],
             "anomaly_events": [],
-            "heatmap_signals": {}
+            "heatmap_signals": {},
+            "lookback_days": lookback_days
         }, df
 
+    # === All indicator calculations (same as your file) ===
     df["SMA5"] = df["Close"].rolling(window=5).mean()
     df["SMA10"] = df["Close"].rolling(window=10).mean()
     df["EMA12"] = df["Close"].ewm(span=12, adjust=False).mean()
@@ -245,28 +240,20 @@ def analyze(ticker: str, horizon: str = "7 Days"):
     # === Comprehensive Heatmap Signal Status ===
     heatmap_signals = {}
 
-    # SMA Trend
+    # (heatmap logic unchanged...)
+
     heatmap_signals["SMA Trend"] = sma_trend
-
-    # MACD
     heatmap_signals["MACD"] = "Bullish Crossover" if macd_signal == "Bullish" else "Bearish Crossover"
-
-    # RSI
-    if latest["RSI"] > 70:
-        heatmap_signals["RSI"] = "Overbought"
-    elif latest["RSI"] < 30:
-        heatmap_signals["RSI"] = "Oversold"
-    else:
-        heatmap_signals["RSI"] = "Neutral"
-
-    # Bollinger
+    heatmap_signals["RSI"] = (
+        "Overbought" if latest["RSI"] > 70
+        else "Oversold" if latest["RSI"] < 30
+        else "Neutral"
+    )
     heatmap_signals["Bollinger"] = (
         "Above Upper Band" if latest["Close"] > latest["Upper"]
         else "Below Lower Band" if latest["Close"] < latest["Lower"]
         else "Within Band"
     )
-
-    # Stochastic
     stoch = latest["Stochastic_%K"]
     if stoch > 80:
         heatmap_signals["Stochastic"] = "Overbought"
@@ -274,52 +261,30 @@ def analyze(ticker: str, horizon: str = "7 Days"):
         heatmap_signals["Stochastic"] = "Oversold"
     else:
         heatmap_signals["Stochastic"] = "Neutral"
-
-    # CMF
     if latest["CMF"] > 0:
         heatmap_signals["CMF"] = "Buying"
     elif latest["CMF"] < 0:
         heatmap_signals["CMF"] = "Selling"
     else:
         heatmap_signals["CMF"] = "Neutral"
-
-    # OBV
     if latest["OBV"] > df["OBV"].iloc[-2]:
         heatmap_signals["OBV"] = "Rising"
     elif latest["OBV"] < df["OBV"].iloc[-2]:
         heatmap_signals["OBV"] = "Falling"
     else:
         heatmap_signals["OBV"] = "Flat"
-
-    # ADX
     heatmap_signals["ADX"] = "Strong Trend" if latest["ADX"] > 25 else "Weak Trend"
-
-    # ATR
     heatmap_signals["ATR"] = "High Volatility" if latest["ATR"] > atr_mean else "Stable"
-
-    # Volume
     heatmap_signals["Volume"] = "Spike" if vol_spike else "Normal"
-
-    # Pattern
     heatmap_signals["Pattern"] = patterns[0] if patterns else "None"
 
-    # === Composite Risk Score (Weights can be tuned as needed) ===
+    # === Composite Risk Score ===
     weights = {
-        "SMA Trend": 0.08,
-        "MACD": 0.15,
-        "RSI": 0.10,
-        "Bollinger": 0.07,
-        "Stochastic": 0.10,
-        "CMF": 0.08,
-        "OBV": 0.07,
-        "ADX": 0.10,
-        "ATR": 0.10,
-        "Volume": 0.08,
-        "Pattern": 0.07,
+        "SMA Trend": 0.08, "MACD": 0.15, "RSI": 0.10, "Bollinger": 0.07,
+        "Stochastic": 0.10, "CMF": 0.08, "OBV": 0.07, "ADX": 0.10,
+        "ATR": 0.10, "Volume": 0.08, "Pattern": 0.07,
     }
-
     risk_score = 0
-
     score_map = {
         "Bearish": 1, "Bearish Crossover": 1, "Overbought": 1, "Selling": 1,
         "Falling": 1, "Weak Trend": 1, "High Volatility": 1, "Spike": 1,
@@ -327,10 +292,8 @@ def analyze(ticker: str, horizon: str = "7 Days"):
         "Buying": 0, "Rising": 0, "Strong Trend": 0, "Stable": 0, "Above Upper Band": 1,
         "Neutral": 0.5, "Normal": 0.5, "Within Band": 0.5, "Flat": 0.5, "None": 0.5,
     }
-
     for k, v in heatmap_signals.items():
         risk_score += weights.get(k, 0) * score_map.get(v, 0.5)
-
     if risk_score >= 0.61:
         risk_level = "High Risk"
     elif risk_score >= 0.34:
@@ -356,15 +319,13 @@ def analyze(ticker: str, horizon: str = "7 Days"):
         "anomaly_events": anomaly_events,
         "heatmap_signals": heatmap_signals,
         "composite_risk_score": round(risk_score, 2),
-        "risk_level": risk_level
+        "risk_level": risk_level,
+        "lookback_days": lookback_days
     }
-
     return summary, df_for_plotting
 
-def run_full_technical_analysis(ticker, horizon):
-    return analyze(ticker, horizon)
-
-# === LLM Summary using OpenAI GPT-3.5-turbo ===
+def run_full_technical_analysis(ticker, horizon, lookback_days=30):
+    return analyze(ticker, horizon, lookback_days=lookback_days)
 
 def get_llm_summary(signals, api_key):
     client = OpenAI(api_key=api_key)
