@@ -1,18 +1,20 @@
 import streamlit as st
 import plotly.graph_objects as go
-from agents.chief_orchestrator import analyze as chief_analyze
-from agents.agent1_stock import analyze as stock_analyze
-from agents.agent1_sector import analyze as sector_analyze
-from agents.agent1_market import analyze as market_analyze
-from agents.agent1_commodities import analyze as commodities_analyze
-from agents.agent1_globals import analyze as globals_analyze
 
-# --- User Inputs ---
+from agents.agent1_core import run_full_technical_analysis
+import agents.agent1_stock as agent1_stock
+import agents.agent1_sector as agent1_sector
+import agents.agent1_market as agent1_market
+import agents.agent1_commodities as agent1_commodities
+import agents.agent1_globals as agent1_globals
+
 st.set_page_config(page_title="AI Stock Analyst", page_icon="📊", layout="wide")
+
+# --- Sidebar Inputs ---
 st.sidebar.title("Stock Selection")
 ticker = st.sidebar.text_input("Ticker", value="A17U.SI")
 horizon = st.sidebar.selectbox("Forecast Horizon", ["1 Day", "3 Days", "7 Days", "30 Days"])
-lookback_days = st.sidebar.number_input("Lookback Days (override, optional)", min_value=7, max_value=365, value=60)
+lookback_days = st.sidebar.number_input("Lookback Days (optional override)", min_value=7, max_value=365, value=60)
 openai_api_key = st.secrets.get("OPENAI_API_KEY", None)
 st.sidebar.markdown("---")
 st.sidebar.caption("Built by AI | [About](#)")
@@ -28,10 +30,10 @@ def get_company_name_from_ticker(ticker):
 
 company_name = get_company_name_from_ticker(ticker)
 
-# --- Chief Analyst Grand Outlook ---
-with st.spinner("Analyzing overall outlook..."):
+# --- Chief Analyst Grand Outlook (using agent1_core) ---
+with st.spinner("Chief Analyst is analyzing overall outlook..."):
     try:
-        chief_result = chief_analyze(
+        chief_result = run_full_technical_analysis(
             ticker,
             company_name=company_name,
             horizon=horizon,
@@ -48,18 +50,18 @@ with st.spinner("Analyzing overall outlook..."):
 
 # --- Agent Analyzer Calls ---
 AGENT_CONFIG = [
-    ("Stock", stock_analyze),
-    ("Sector", sector_analyze),
-    ("Market", market_analyze),
-    ("Commodities", commodities_analyze),
-    ("Globals", globals_analyze)
+    ("Stock", agent1_stock),
+    ("Sector", agent1_sector),
+    ("Market", agent1_market),
+    ("Commodities", agent1_commodities),
+    ("Globals", agent1_globals),
 ]
 
 agent_reports = {}
-for agent_name, analyze_fn in AGENT_CONFIG:
+for agent_name, agent_module in AGENT_CONFIG:
     with st.spinner(f"Analyzing with {agent_name} agent..."):
         try:
-            res = analyze_fn(
+            res = agent_module.analyze(
                 ticker,
                 company_name=company_name,
                 horizon=horizon,
@@ -119,6 +121,7 @@ for i, agent in enumerate(tab_names):
 # --- Footer ---
 st.markdown("---")
 st.caption("For educational use only. AI Multi-Agent Analyst © 2025 | v1.0")
+
 
 
 
