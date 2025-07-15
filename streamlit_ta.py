@@ -116,12 +116,13 @@ def plot_chart(ticker, label, explanation):
                 x=df[date_col], y=df["SMA50"],
                 mode='lines', name='SMA 50', line=dict(dash='dash')
             ))
-            # Volatility overlay
+            # Volatility overlay (no extra y-axis)
             if "Volatility20" in df.columns and not df["Volatility20"].isna().all():
                 fig.add_trace(go.Scatter(
                     x=df[date_col], y=df["Volatility20"],
-                    mode='lines', name="Volatility (20d std)", line=dict(color="orange", dash='dashdot'),
-                    yaxis="y3"
+                    mode='lines', name="Volatility (20d std)",
+                    line=dict(color="orange", dash='dashdot', width=2),
+                    opacity=0.6
                 ))
             # Volume (secondary axis)
             if volume_col and volume_col in df.columns:
@@ -132,16 +133,13 @@ def plot_chart(ticker, label, explanation):
                     opacity=0.5
                 ))
 
-            # Layout for dual axis (and 3rd for volatility)
+            # Layout for dual axis (only price and volume now)
             fig.update_layout(
                 title=label,
                 xaxis_title="Date",
                 yaxis=dict(title="Price", showgrid=True),
                 yaxis2=dict(
                     title="Volume", overlaying='y', side='right', showgrid=False, rangemode='tozero'
-                ),
-                yaxis3=dict(
-                    title="Volatility", overlaying='y', side='left', anchor="x", position=0.05, showgrid=False, visible=True
                 ),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 template="plotly_white",
@@ -152,6 +150,7 @@ def plot_chart(ticker, label, explanation):
             st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.info(f"{label} chart failed to load: {e}")
+
 
 # --- Chart definitions and explanations ---
 chart_list = [
