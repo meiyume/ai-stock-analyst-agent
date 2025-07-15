@@ -27,47 +27,58 @@ with st.spinner("Loading global technical summary..."):
         st.stop()
 
 # ---- S&P 500 Chart Robust Block ----
+import pandas as pd
+
 with st.container():
     with st.spinner("Loading S&P 500 historical data..."):
         try:
             end = datetime.today()
             start = end - timedelta(days=180)
             sp500_hist = yf.download("^GSPC", start=start, end=end, interval="1d", auto_adjust=True, progress=False)
-            if sp500_hist.empty or "Close" not in sp500_hist.columns:
-                st.info("S&P 500 data unavailable or missing 'Close' column.")
+
+            # ---- Flatten MultiIndex if needed ----
+            if isinstance(sp500_hist.columns, pd.MultiIndex):
+                sp500_hist.columns = ['_'.join([str(i) for i in col if i]) for col in sp500_hist.columns.values]
+
+            sp500_hist = sp500_hist.reset_index()
+
+            # ---- Identify Date and Close columns ----
+            date_col = None
+            close_col = None
+            for col in sp500_hist.columns:
+                # Date column detection
+                if isinstance(col, str) and col.lower() in ["date", "datetime", "index"]:
+                    date_col = col
+                # Close price detection (may be "Close" or "Close_^GSPC")
+                if isinstance(col, str) and "close" in col.lower():
+                    close_col = col
+
+            if not date_col or not close_col:
+                st.info(f"S&P 500 chart failed to load: columns found: {list(sp500_hist.columns)}")
             else:
-                # Try to find the date column after reset_index()
-                sp500_hist = sp500_hist.reset_index()
-                date_col = None
-                for col in sp500_hist.columns:
-                    if col.lower() in ["date", "datetime", "index"]:
-                        date_col = col
-                        break
-                if date_col is None:
-                    st.info("No date-like column found in S&P 500 data.")
+                # Drop NaN values
+                sp500_hist = sp500_hist.dropna(subset=[date_col, close_col])
+                if len(sp500_hist) < 5:
+                    st.info("Not enough S&P 500 data to plot.")
                 else:
-                    # Drop rows with NaN in date/close
-                    sp500_hist = sp500_hist.dropna(subset=[date_col, "Close"])
-                    if sp500_hist.shape[0] < 5:
-                        st.info("Not enough data to plot S&P 500 chart.")
-                    else:
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(
-                            x=sp500_hist[date_col],
-                            y=sp500_hist["Close"],
-                            mode='lines',
-                            name='S&P 500'
-                        ))
-                        fig.update_layout(
-                            title="S&P 500 Index (Last 6 Months)",
-                            xaxis_title="Date",
-                            yaxis_title="Price",
-                            template="plotly_white",
-                            height=350
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=sp500_hist[date_col],
+                        y=sp500_hist[close_col],
+                        mode='lines',
+                        name='S&P 500'
+                    ))
+                    fig.update_layout(
+                        title="S&P 500 Index (Last 6 Months)",
+                        xaxis_title="Date",
+                        yaxis_title="Price",
+                        template="plotly_white",
+                        height=350
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.info(f"S&P 500 chart failed to load: {e}")
+
 
 
 st.subheader("Raw Global Technical Data")
