@@ -4,7 +4,9 @@ import numpy as np
 from datetime import datetime
 
 def fetch_yf(symbol, period="13mo", interval="1d"):
+    print(f"Downloading {symbol} ...", flush=True)
     data = yf.download(symbol, period=period, interval=interval, progress=False)
+    print(f"{symbol} rows: {len(data)}", flush=True)
     return data
 
 def compute_pct_change(series, periods):
@@ -13,6 +15,8 @@ def compute_pct_change(series, periods):
     return (series.iloc[-1] / series.iloc[-(periods + 1)] - 1) * 100
 
 def compute_rolling_vol(series, window):
+    if len(series) < window + 1:
+        return np.nan
     returns = series.pct_change()
     vol = returns.rolling(window=window).std().iloc[-1]
     if pd.isna(vol):
@@ -20,6 +24,8 @@ def compute_rolling_vol(series, window):
     return vol * np.sqrt(252)  # annualized
 
 def compute_trend(series, window):
+    if len(series) < window:
+        return "Unknown"
     ma = series.rolling(window).mean()
     if pd.isna(ma.iloc[-1]):
         return "Unknown"
@@ -29,20 +35,19 @@ def compute_breadth(indices, window):
     above_ma = 0
     valid = 0
     for s in indices:
-        try:
-            if len(s) >= window:
-                ma = s.rolling(window).mean()
-                if s.iloc[-1] > ma.iloc[-1]:
-                    above_ma += 1
-                valid += 1
-        except:
+        if len(s) < window:
             continue
+        ma = s.rolling(window).mean()
+        if pd.isna(ma.iloc[-1]):
+            continue
+        if s.iloc[-1] > ma.iloc[-1]:
+            above_ma += 1
+        valid += 1
     if valid == 0:
         return np.nan
     return (above_ma / valid) * 100
 
 def ta_global():
-    # --- Define symbols (all free via yfinance) ---
     SYMBOLS = {
         "VIX": "^VIX",
         "S&P500": "^GSPC",
@@ -64,59 +69,81 @@ def ta_global():
         "Copper": "HG=F",
     }
 
-    WINDOWS = [30, 90, 200]  # Standard global lookback windows
+    WINDOWS = [30, 90, 200]
 
     out = {}
     data = {}
 
-    # --- Download all data ---
+    print("\n---- Starting downloads ----\n", flush=True)
     for key, symbol in SYMBOLS.items():
         try:
             d = fetch_yf(symbol, period="13mo", interval="1d")
             if d.empty:
+                print(f"WARNING: {symbol} ({key}) is empty!", flush=True)
                 d = fetch_yf(symbol, period="60d", interval="1d")
+                if d.empty:
+                    print(f"ERROR: {symbol} ({key}) is STILL empty after fallback.", flush=True)
             data[key] = d
         except Exception as e:
-            pass
+            print(f"ERROR downloading {key} ({symbol}): {e}", flush=True)
 
-    # --- Compute metrics for each asset & window ---
+    print("\n---- Checking key symbols ----", flush=True)
+    for key in ["S&P500", "VIX"]:
+        if key in data:
+            print(f"{key} rows: {len(data[key])}, latest: {data[key].index[-1] if not data[key].empty else 'EMPTY'}", flush=True)
+
     for key, d in data.items():
         try:
-            close = d["Close"].dropna()
+            # --- Robustly get close/adj close price series ---
+            close = d.get("Close")
+            if close is None or close.dropna().empty:
+                close = d.get("Adj Close")
+            if close is None or close.dropna().empty:
+                print(f"WARNING: No usable Close/Adj Close for {key}")
+                continue
+            close = close.dropna()
             metrics = {}
             for win in WINDOWS:
                 suffix = f"{win}d"
                 metrics[f"change_{suffix}_pct"] = compute_pct_change(close, win)
                 metrics[f"vol_{suffix}"] = compute_rolling_vol(close, win)
                 metrics[f"trend_{suffix}"] = compute_trend(close, win)
-            metrics["last"] = float(close.iloc[-1])
+            metrics["last"] = float(close.iloc[-1]) if not close.empty else np.nan
             out[key] = metrics
         except Exception as e:
-            pass
+            print(f"ERROR computing metrics for {key}: {e}", flush=True)
 
-    # --- Breadth: percent above 50/200 MA for major indices ---
-    major_indices = [data[k]["Close"].dropna() for k in ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"] if k in data and not data[k].empty]
+    major_indices = [
+        # Robust to missing Close/Adj Close
+        (data[k].get("Close") if "Close" in data[k] else data[k].get("Adj Close")).dropna()
+        for k in ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"]
+        if k in data and not data[k].empty and (
+            (data[k].get("Close") is not None and not data[k]["Close"].dropna().empty) or
+            (data[k].get("Adj Close") is not None and not data[k]["Adj Close"].dropna().empty)
+        )
+    ]
     breadth = {}
     for win in [50, 200]:
-        breadth[f"breadth_above_{win}dma_pct"] = compute_breadth(major_indices, window=win)
+        b = compute_breadth(major_indices, window=win)
+        print(f"Breadth {win}d: {b}", flush=True)
+        breadth[f"breadth_above_{win}dma_pct"] = b
 
-    # --- Composite risk regime (simple logic) ---
     try:
-        vix_30d = out["VIX"]["last"]
-        spx_trend = out["S&P500"]["trend_30d"]
-        if vix_30d >= 25 or spx_trend == "Downtrend":
+        vix_30d = out.get("VIX", {}).get("last", np.nan)
+        spx_trend = out.get("S&P500", {}).get("trend_30d", "Unknown")
+        print(f"VIX latest: {vix_30d}, SPX 30d trend: {spx_trend}", flush=True)
+        if not np.isnan(vix_30d) and (vix_30d >= 25 or spx_trend == "Downtrend"):
             risk_regime = "Risk-Off"
-        elif vix_30d <= 15 and spx_trend == "Uptrend":
+        elif not np.isnan(vix_30d) and vix_30d <= 15 and spx_trend == "Uptrend":
             risk_regime = "Risk-On"
         else:
             risk_regime = "Neutral"
-    except:
+    except Exception as e:
+        print(f"Risk regime calc error: {e}", flush=True)
         risk_regime = "Unknown"
 
-    # --- News placeholder (for future news agents) ---
     news_summary = "No news data yet. (Reserved for future global/regional/local news agent summary.)"
 
-    # --- Output summary dict ---
     summary = {
         "as_of": datetime.now().strftime("%Y-%m-%d"),
         "lookbacks": WINDOWS,
@@ -126,10 +153,15 @@ def ta_global():
         "news": news_summary,
     }
 
+    print("\n---- Global Agent Output ----", flush=True)
+    for k, v in summary.items():
+        print(f"{k}: {v}", flush=True)
+
     return summary
 
-# No print or Streamlit here; for frontend integration!
-
+# Test/debug in terminal
+if __name__ == "__main__":
+    ta_global()
 
 
 
