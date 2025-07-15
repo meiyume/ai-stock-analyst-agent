@@ -1,10 +1,10 @@
 import streamlit as st
 import json
-from datetime import datetime, timedelta
-import pandas as pd
-import yfinance as yf
 import plotly.graph_objects as go
-from agents.ta_global import ta_global
+import yfinance as yf
+import pandas as pd
+from datetime import datetime, timedelta
+from ta_global import ta_global
 from llm_utils import call_llm
 
 st.set_page_config(page_title="AI Global Technical Macro Analyst", page_icon="🌍")
@@ -26,87 +26,73 @@ with st.spinner("Loading global technical summary..."):
         st.error(f"Error in ta_global(): {e}")
         st.stop()
 
-# ---- S&P500 Chart ----
-spx_hist = summary.get('s&p500_hist')
-if spx_hist is not None and len(spx_hist) > 0:
-    import pandas as pd
-    df = pd.DataFrame(spx_hist)
-    # Handle column name cases and index issues
-    for c in df.columns:
-        if isinstance(c, tuple):
-            # MultiIndex, collapse
-            df[c[0]] = df[c]
-    if "Date" not in df.columns:
-        df["Date"] = df.index
-    df = df.dropna(subset=["Close"])
-    st.markdown("**S&P 500 Index (Last 6 Months)**")
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=pd.to_datetime(df["Date"]), y=df["Close"],
-        mode='lines', name='S&P 500'
-    ))
-    fig.update_layout(height=300, xaxis_title="Date", yaxis_title="Price")
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("S&P 500 chart not available in current summary.")
+# ----------- CHART SECTION ----------- #
+def plot_yfinance_chart(ticker, title):
+    with st.container():
+        with st.spinner(f"Loading {title} historical data..."):
+            try:
+                end = datetime.today()
+                start = end - timedelta(days=180)
+                data = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
 
-# ---- VIX Chart ----
-vix_hist = summary.get('vix_hist')
-if vix_hist is not None and len(vix_hist) > 0:
-    df = pd.DataFrame(vix_hist)
-    for c in df.columns:
-        if isinstance(c, tuple):
-            df[c[0]] = df[c]
-    if "Date" not in df.columns:
-        df["Date"] = df.index
-    df = df.dropna(subset=["Close"])
-    st.markdown("**VIX (Volatility Index) (Last 6 Months)**")
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=pd.to_datetime(df["Date"]), y=df["Close"],
-        mode='lines', name='VIX'
-    ))
-    fig.update_layout(height=300, xaxis_title="Date", yaxis_title="VIX Level")
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("VIX chart not available in current summary.")
+                # Flatten MultiIndex if needed
+                if isinstance(data.columns, pd.MultiIndex):
+                    data.columns = ['_'.join([str(i) for i in col if i]) for col in data.columns.values]
+                data = data.reset_index()
 
-# ---- Nasdaq Chart ----
-nasdaq_hist = summary.get('nasdaq_hist')
-if nasdaq_hist is not None and len(nasdaq_hist) > 0:
-    df = pd.DataFrame(nasdaq_hist)
-    for c in df.columns:
-        if isinstance(c, tuple):
-            df[c[0]] = df[c]
-    if "Date" not in df.columns:
-        df["Date"] = df.index
-    df = df.dropna(subset=["Close"])
-    st.markdown("**Nasdaq Index (Last 6 Months)**")
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=pd.to_datetime(df["Date"]), y=df["Close"],
-        mode='lines', name='Nasdaq'
-    ))
-    fig.update_layout(height=300, xaxis_title="Date", yaxis_title="Price")
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("Nasdaq chart not available in current summary.")
+                # Identify Date and Close columns
+                date_col = None
+                close_col = None
+                for col in data.columns:
+                    # Date column detection
+                    if isinstance(col, str) and col.lower() in ["date", "datetime", "index"]:
+                        date_col = col
+                    # Close price detection (may be "Close" or e.g., "Close_^GSPC")
+                    if isinstance(col, str) and "close" in col.lower():
+                        close_col = col
 
+                if not date_col or not close_col:
+                    st.info(f"{title} chart failed to load: {list(data.columns)}")
+                else:
+                    data = data.dropna(subset=[date_col, close_col])
+                    if len(data) < 5:
+                        st.info(f"Not enough {title} data to plot.")
+                    else:
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(
+                            x=data[date_col],
+                            y=data[close_col],
+                            mode='lines',
+                            name=title
+                        ))
+                        fig.update_layout(
+                            title=f"{title} (Last 6 Months)",
+                            xaxis_title="Date",
+                            yaxis_title="Price" if "vix" not in title.lower() else "VIX Level",
+                            template="plotly_white",
+                            height=350
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.info(f"{title} chart failed to load: {e}")
 
+# ----------- DISPLAY CHARTS ----------- #
+plot_yfinance_chart("^GSPC", "S&P 500 Index")
+plot_yfinance_chart("^VIX", "VIX (Volatility Index)")
+plot_yfinance_chart("^IXIC", "Nasdaq Index")
+
+# ------------- RAW DATA ------------- #
 st.subheader("Raw Global Technical Data")
 with st.expander("Show raw summary dict", expanded=False):
     st.json(summary)
 
-# --- Prepare prompt for LLM
-json_summary = json.dumps(summary, indent=2)
-
-# --- Run LLM agent for summary (global)
+# ------------- LLM SUMMARIES ------------- #
 st.subheader("LLM-Generated Summaries")
 if st.button("Generate LLM Global Summaries", type="primary"):
     with st.spinner("Querying LLM..."):
         try:
+            json_summary = json.dumps(summary, indent=2)
             llm_output = call_llm("global", json_summary)
-            # Expecting: "Technical Summary\n...\nPlain-English Summary\n..."
             if "Technical Summary" in llm_output and "Plain-English Summary" in llm_output:
                 tech = llm_output.split("Plain-English Summary")[0].replace("Technical Summary", "").strip()
                 plain = llm_output.split("Plain-English Summary")[1].strip()
@@ -121,6 +107,7 @@ if st.button("Generate LLM Global Summaries", type="primary"):
             st.error(f"LLM error: {e}")
 
 st.caption("If you do not see the summaries, check the console logs for LLM errors or ensure your OpenAI API key is correctly set.")
+
 
 
 
