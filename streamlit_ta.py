@@ -104,25 +104,26 @@ def plot_chart(ticker, label, explanation):
             # Main price line
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df[close_col],
-                mode='lines', name=label
+                mode='lines', name=label, yaxis="y1"
             ))
             # SMA20
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df["SMA20"],
-                mode='lines', name='SMA 20', line=dict(dash='dot')
+                mode='lines', name='SMA 20', line=dict(dash='dot'), yaxis="y1"
             ))
             # SMA50
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df["SMA50"],
-                mode='lines', name='SMA 50', line=dict(dash='dash')
+                mode='lines', name='SMA 50', line=dict(dash='dash'), yaxis="y1"
             ))
-            # Volatility overlay (no extra y-axis)
+            # Volatility overlay (separate axis)
             if "Volatility20" in df.columns and not df["Volatility20"].isna().all():
                 fig.add_trace(go.Scatter(
                     x=df[date_col], y=df["Volatility20"],
                     mode='lines', name="Volatility (20d std)",
                     line=dict(color="orange", dash='dashdot', width=2),
-                    opacity=0.6
+                    opacity=0.7,
+                    yaxis="y3"
                 ))
             # Volume (secondary axis)
             if volume_col and volume_col in df.columns:
@@ -133,13 +134,29 @@ def plot_chart(ticker, label, explanation):
                     opacity=0.5
                 ))
 
-            # Layout for dual axis (only price and volume now)
+            # Layout for triple axis (price, volume, volatility)
             fig.update_layout(
                 title=label,
                 xaxis_title="Date",
-                yaxis=dict(title="Price", showgrid=True),
+                yaxis=dict(
+                    title="Price",
+                    showgrid=True,
+                    side="left"
+                ),
                 yaxis2=dict(
-                    title="Volume", overlaying='y', side='right', showgrid=False, rangemode='tozero'
+                    title="Volume",
+                    overlaying='y',
+                    side='right',
+                    showgrid=False,
+                    rangemode='tozero'
+                ),
+                yaxis3=dict(
+                    title="Volatility",
+                    anchor="free",
+                    overlaying="y",
+                    side="right",
+                    position=1.08,  # shifts axis to far right
+                    showgrid=False
                 ),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 template="plotly_white",
