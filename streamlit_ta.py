@@ -85,7 +85,8 @@ def plot_chart(ticker, label, explanation):
         st.caption(explanation)
         try:
             end = datetime.today()
-            start = end - timedelta(days=180)
+            # --- Fetch 400 days of data for reliable rolling windows (SMA 200, etc.) ---
+            start = end - timedelta(days=400)
             df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
             if df is None or len(df) < 10:
                 st.info(f"Not enough {label} data to plot.")
@@ -110,10 +111,14 @@ def plot_chart(ticker, label, explanation):
                 st.info(f"Not enough {label} data to plot.")
                 return
 
-            # Calculate SMA20, SMA50, SMA200
+            # --- Calculate SMAs for trend overlays ---
             df["SMA20"] = df[close_col].rolling(window=20).mean()
             df["SMA50"] = df[close_col].rolling(window=50).mean()
             df["SMA200"] = df[close_col].rolling(window=200).mean()
+
+            # --- Clip to last 180 days for chart display only ---
+            if len(df) > 180:
+                df = df.iloc[-180:].copy()
 
             fig = go.Figure()
             # Main price line
@@ -161,7 +166,7 @@ def plot_chart(ticker, label, explanation):
 
             st.plotly_chart(fig, use_container_width=True)
 
-            # --- 4-column Trend Table ---
+            # --- 4-column Trend Table (20d, 50d, 200d) ---
             table_windows = [20, 50, 200]
             table_rows = []
             for win in table_windows:
@@ -277,7 +282,6 @@ chart_list = [
 st.subheader("Global Market Charts")
 for chart in chart_list:
     plot_chart(chart["ticker"], chart["label"], chart["explanation"])
-
 
 
 
