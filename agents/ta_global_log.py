@@ -15,6 +15,8 @@ def compute_pct_change(series, periods):
     return (series.iloc[-1] / series.iloc[-(periods + 1)] - 1) * 100
 
 def compute_rolling_vol(series, window):
+    if len(series) < window + 1:
+        return np.nan
     returns = series.pct_change()
     vol = returns.rolling(window=window).std().iloc[-1]
     if pd.isna(vol):
@@ -22,6 +24,8 @@ def compute_rolling_vol(series, window):
     return vol * np.sqrt(252)  # annualized
 
 def compute_trend(series, window):
+    if len(series) < window:
+        return "Unknown"
     ma = series.rolling(window).mean()
     if pd.isna(ma.iloc[-1]):
         return "Unknown"
@@ -31,15 +35,14 @@ def compute_breadth(indices, window):
     above_ma = 0
     valid = 0
     for s in indices:
-        try:
-            if len(s) >= window:
-                ma = s.rolling(window).mean()
-                if s.iloc[-1] > ma.iloc[-1]:
-                    above_ma += 1
-                valid += 1
-        except Exception as e:
-            print(f"Breadth calculation error: {e}")
+        if len(s) < window:
             continue
+        ma = s.rolling(window).mean()
+        if pd.isna(ma.iloc[-1]):
+            continue
+        if s.iloc[-1] > ma.iloc[-1]:
+            above_ma += 1
+        valid += 1
     if valid == 0:
         return np.nan
     return (above_ma / valid) * 100
@@ -91,7 +94,14 @@ def ta_global():
 
     for key, d in data.items():
         try:
-            close = d["Close"].dropna()
+            # --- Robustly get close/adj close price series ---
+            close = d.get("Close")
+            if close is None or close.dropna().empty:
+                close = d.get("Adj Close")
+            if close is None or close.dropna().empty:
+                print(f"WARNING: No usable Close/Adj Close for {key}")
+                continue
+            close = close.dropna()
             metrics = {}
             for win in WINDOWS:
                 suffix = f"{win}d"
@@ -104,9 +114,13 @@ def ta_global():
             print(f"ERROR computing metrics for {key}: {e}", flush=True)
 
     major_indices = [
-        data[k]["Close"].dropna()
+        # Robust to missing Close/Adj Close
+        (data[k].get("Close") if "Close" in data[k] else data[k].get("Adj Close")).dropna()
         for k in ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"]
-        if k in data and not data[k].empty
+        if k in data and not data[k].empty and (
+            (data[k].get("Close") is not None and not data[k]["Close"].dropna().empty) or
+            (data[k].get("Adj Close") is not None and not data[k]["Adj Close"].dropna().empty)
+        )
     ]
     breadth = {}
     for win in [50, 200]:
@@ -115,12 +129,12 @@ def ta_global():
         breadth[f"breadth_above_{win}dma_pct"] = b
 
     try:
-        vix_30d = out["VIX"]["last"]
-        spx_trend = out["S&P500"]["trend_30d"]
+        vix_30d = out.get("VIX", {}).get("last", np.nan)
+        spx_trend = out.get("S&P500", {}).get("trend_30d", "Unknown")
         print(f"VIX latest: {vix_30d}, SPX 30d trend: {spx_trend}", flush=True)
-        if vix_30d >= 25 or spx_trend == "Downtrend":
+        if not np.isnan(vix_30d) and (vix_30d >= 25 or spx_trend == "Downtrend"):
             risk_regime = "Risk-Off"
-        elif vix_30d <= 15 and spx_trend == "Uptrend":
+        elif not np.isnan(vix_30d) and vix_30d <= 15 and spx_trend == "Uptrend":
             risk_regime = "Risk-On"
         else:
             risk_regime = "Neutral"
@@ -148,6 +162,7 @@ def ta_global():
 # Test/debug in terminal
 if __name__ == "__main__":
     ta_global()
+
 
 
 
