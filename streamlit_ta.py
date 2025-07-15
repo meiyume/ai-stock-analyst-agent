@@ -1,6 +1,6 @@
 import streamlit as st
 import json
-from ta_global import ta_global
+from agents.ta_global import ta_global
 from llm_utils import call_llm
 
 st.set_page_config(page_title="AI Global Technical Macro Analyst", page_icon="🌍")
