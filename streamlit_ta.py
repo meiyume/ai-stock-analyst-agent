@@ -62,6 +62,18 @@ def find_col(possibles, columns):
                 return c
     return None
 
+def trend_label(pct):
+    if pct > 0.7:
+        return "Strong Uptrend"
+    elif pct > 0.15:
+        return "Uptrend"
+    elif pct < -0.7:
+        return "Strong Downtrend"
+    elif pct < -0.15:
+        return "Downtrend"
+    else:
+        return "Sideways"
+
 def plot_chart(ticker, label, explanation):
     with st.container():
         st.markdown(f"#### {label}")
@@ -93,13 +105,12 @@ def plot_chart(ticker, label, explanation):
                 st.info(f"Not enough {label} data to plot.")
                 return
 
-            # Calculate SMA20, SMA50, Volatility (20d stdev)
+            # Calculate SMA20, SMA50
             df["SMA20"] = df[close_col].rolling(window=20).mean()
             df["SMA50"] = df[close_col].rolling(window=50).mean()
-            df["Volatility20"] = df[close_col].rolling(window=20).std() * 20  # Multiply for visibility
 
             fig = go.Figure()
-            # Price
+            # Main price line
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df[close_col],
                 mode='lines', name=label
@@ -114,15 +125,7 @@ def plot_chart(ticker, label, explanation):
                 x=df[date_col], y=df["SMA50"],
                 mode='lines', name='SMA 50', line=dict(dash='dash')
             ))
-            # Volatility overlay (orange dashed, scaled for visibility)
-            if "Volatility20" in df.columns and not df["Volatility20"].isna().all():
-                fig.add_trace(go.Scatter(
-                    x=df[date_col], y=df["Volatility20"],
-                    mode='lines', name="Volatility (20d std, ×20)",
-                    line=dict(color="orange", dash='dashdot', width=2),
-                    opacity=0.7
-                ))
-            # Volume (right y-axis)
+            # Volume (secondary axis)
             if volume_col and volume_col in df.columns:
                 fig.add_trace(go.Bar(
                     x=df[date_col], y=df[volume_col],
@@ -131,38 +134,42 @@ def plot_chart(ticker, label, explanation):
                     opacity=0.5
                 ))
 
+            # Layout for dual axis
             fig.update_layout(
                 title=label,
                 xaxis_title="Date",
-                yaxis=dict(
-                    title="Price / Volatility (×20)",
-                    showgrid=True,
-                    side="left",
-                    tickfont=dict(color="#fff"),
-                    titlefont=dict(color="#fff")
-                ),
+                yaxis_title="Price",
+                yaxis=dict(title="Price", showgrid=True),
                 yaxis2=dict(
-                    title="Volume",
-                    overlaying='y',
-                    side='right',
-                    showgrid=False,
-                    rangemode='tozero',
-                    tickfont=dict(color="#fff"),
-                    titlefont=dict(color="#fff")
+                    title="Volume", overlaying='y', side='right', showgrid=False, rangemode='tozero'
                 ),
-                legend=dict(
-                    orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                    font=dict(color="#fff")
-                ),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 template="plotly_white",
                 height=350,
                 bargap=0
             )
-
             st.plotly_chart(fig, use_container_width=True)
+
+            # --- Trend summary table ---
+            # Only show if have enough data (min 50 days)
+            if len(df) >= 55:
+                trend_windows = [20, 50]
+                table = []
+                for win in trend_windows:
+                    if len(df) >= win + 1:
+                        pct = (df[close_col].iloc[-1] - df[close_col].iloc[-1 - win]) / df[close_col].iloc[-1 - win] * 100
+                        vol = df[close_col].iloc[-win:].std()
+                        table.append({
+                            "Window": f"{win}d",
+                            "% Change": f"{pct:.2f}%",
+                            "Volatility": f"{vol:.2f}",
+                            "Trend": trend_label(pct / 10)
+                        })
+                if table:
+                    st.markdown("**Recent Trend Table**")
+                    st.table(pd.DataFrame(table))
         except Exception as e:
             st.info(f"{label} chart failed to load: {e}")
-
 
 # --- Chart definitions and explanations ---
 chart_list = [
@@ -262,6 +269,7 @@ chart_list = [
 st.subheader("Global Market Charts")
 for chart in chart_list:
     plot_chart(chart["ticker"], chart["label"], chart["explanation"])
+
 
 
 
