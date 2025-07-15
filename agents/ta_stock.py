@@ -224,9 +224,17 @@ def analyze(
         tech, plain = parse_dual_summary(llm_output)
         summary["llm_technical_summary"] = tech
         summary["llm_plain_summary"] = plain
+        print("\n[LLM] call_llm() output for stock:", repr(llm_output))
+        tech, plain = parse_dual_summary(llm_output)
+        print("[LLM] Parsed technical summary:", repr(tech))
+        print("[LLM] Parsed plain summary:", repr(plain))
+        summary["llm_technical_summary"] = tech
+        summary["llm_plain_summary"] = plain
     except Exception as e:
         summary["llm_technical_summary"] = f"LLM error: {e}"
         summary["llm_plain_summary"] = f"LLM error: {e}"
+        print("[LLM ERROR in ta_stock] Exception details:", repr(e))
+
 
     summary["llm_summary"] = summary.get("llm_technical_summary", summary["summary"])
 
@@ -349,9 +357,12 @@ def analyze(
 
     summary["chart"] = fig
 
+    # Final print debug before returning summary
+    print("[ta_stock] Final summary keys/values (truncated):")
+    for k in ['llm_technical_summary', 'llm_plain_summary', 'llm_summary']:
+        print(f"  {k}: {repr(summary.get(k))[:300]}")
+
     return summary
-
-
 
 
 
