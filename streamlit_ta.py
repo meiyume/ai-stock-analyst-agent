@@ -40,7 +40,7 @@ with st.header("Equities"):
         ("FTSE100", "^FTSE"),
         ("VIX", "^VIX"),
     ]:
-        with st.expander(f"{label} ({ticker})", expanded=False):
+        with st.expander(f"{label} ({ticker})", expanded=True):
             try:
                 end = datetime.today()
                 start = end - timedelta(days=180)
@@ -77,7 +77,7 @@ with st.header("Fixed Income / Rates"):
         ("US 10Y Yield", "^TNX"),
         ("US 2Y Yield", "^IRX"),
     ]:
-        with st.expander(f"{label} ({ticker})", expanded=False):
+        with st.expander(f"{label} ({ticker})", expanded=True):
             try:
                 end = datetime.today()
                 start = end - timedelta(days=180)
@@ -117,7 +117,7 @@ with st.header("FX"):
         ("EUR/USD", "EURUSD=X"),
         ("USD/CNH", "USDCNH=X"),
     ]:
-        with st.expander(f"{label} ({ticker})", expanded=False):
+        with st.expander(f"{label} ({ticker})", expanded=True):
             try:
                 end = datetime.today()
                 start = end - timedelta(days=180)
@@ -156,7 +156,7 @@ with st.header("Commodities"):
         ("WTI Oil", "CL=F"),
         ("Copper", "HG=F"),
     ]:
-        with st.expander(f"{label} ({ticker})", expanded=False):
+        with st.expander(f"{label} ({ticker})", expanded=True):
             try:
                 end = datetime.today()
                 start = end - timedelta(days=180)
