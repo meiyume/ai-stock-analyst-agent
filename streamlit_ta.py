@@ -128,10 +128,8 @@ def plot_chart(ticker, title, explanation):
             df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
             df = df.reset_index()
 
-            # Column identification (robust to MultiIndex)
-            date_col = None
-            close_col = None
-            volume_col = None
+            # --- Identify columns robustly ---
+            date_col, close_col, volume_col = None, None, None
             for col in df.columns:
                 if isinstance(col, str) and col.lower() in ["date", "datetime", "index"]:
                     date_col = col
@@ -139,60 +137,70 @@ def plot_chart(ticker, title, explanation):
                     close_col = col
                 if isinstance(col, str) and "volume" in col.lower():
                     volume_col = col
-            # Handle fallback for Yahoo-style
             if not date_col:
                 date_col = df.columns[0]
             if not close_col:
-                # Try to use the second column
                 close_col = df.columns[1] if len(df.columns) > 1 else None
-            # NaN/tuple data check
+
             if not date_col or not close_col or df.empty or df[close_col].isnull().all():
                 st.info(f"Not enough {title} data to plot.")
                 return
 
-            # Calculate SMAs only if enough data
-            df['SMA_20'] = df[close_col].rolling(window=20).mean() if close_col in df else None
-            df['SMA_50'] = df[close_col].rolling(window=50).mean() if close_col in df else None
-            df['SMA_200'] = df[close_col].rolling(window=200).mean() if close_col in df else None
+            # Calculate SMAs
+            df['SMA_20'] = df[close_col].rolling(window=20).mean()
+            df['SMA_50'] = df[close_col].rolling(window=50).mean()
+            df['SMA_200'] = df[close_col].rolling(window=200).mean()
 
             fig = go.Figure()
+
+            # Price line
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df[close_col],
                 mode='lines', name=title, line=dict(width=2)
             ))
-            # Add SMAs if data is valid
-            if 'SMA_20' in df and not df['SMA_20'].isnull().all():
+            # SMAs
+            if not df['SMA_20'].isnull().all():
                 fig.add_trace(go.Scatter(x=df[date_col], y=df['SMA_20'], mode='lines', name="SMA 20", line=dict(dash='dot')))
-            if 'SMA_50' in df and not df['SMA_50'].isnull().all():
+            if not df['SMA_50'].isnull().all():
                 fig.add_trace(go.Scatter(x=df[date_col], y=df['SMA_50'], mode='lines', name="SMA 50", line=dict(dash='dash')))
-            if 'SMA_200' in df and not df['SMA_200'].isnull().all():
+            if not df['SMA_200'].isnull().all():
                 fig.add_trace(go.Scatter(x=df[date_col], y=df['SMA_200'], mode='lines', name="SMA 200", line=dict(dash='dashdot')))
-            # Add Volume (if available)
-            if volume_col and not df[volume_col].isnull().all():
+
+            # Volume bars (only if there are enough nonzero and non-NaN)
+            show_volume = False
+            if volume_col and volume_col in df:
+                v = df[volume_col]
+                if v.notnull().sum() > 10 and (v > 0).sum() > 0:
+                    show_volume = True
+
+            if show_volume:
                 fig.add_trace(go.Bar(
                     x=df[date_col], y=df[volume_col],
                     name="Volume", yaxis='y2',
-                    marker=dict(color='rgba(0,180,255,0.15)'),
+                    marker=dict(color='rgba(30,144,255,0.25)'),
                     opacity=0.7
                 ))
-            # Axes config
+
+            # Dual y-axis if volume
+            if show_volume:
+                fig.update_layout(
+                    yaxis=dict(title="Price"),
+                    yaxis2=dict(
+                        title="Volume", overlaying='y', side='right',
+                        showgrid=False, rangemode='tozero'
+                    ),
+                )
             fig.update_layout(
                 title=title,
                 xaxis_title="Date",
-                yaxis=dict(title="Price"),
-                yaxis2=dict(
-                    title="Volume",
-                    overlaying='y',
-                    side='right',
-                    showgrid=False
-                ),
                 bargap=0,
                 template="plotly_white",
                 height=400,
-                legend=dict(orientation="h", yanchor="bottom", y=1.04, xanchor="right", x=1)
+                legend=dict(orientation="h", yanchor="bottom", y=1.04, xanchor="right", x=1),
             )
             st.plotly_chart(fig, use_container_width=True)
             st.caption(explanation)
+
 
 # --- Plot all charts (can limit to first few for speed)
 for chart in chart_configs:
