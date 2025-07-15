@@ -35,30 +35,35 @@ if run_btn:
 
     st.divider()
 
-    # --- Candlestick Chart Section ---
-    st.subheader("Candlestick, SMA, and Bollinger Bands")
-    stock_chart = results['stock'].get("chart")
-    if stock_chart:
-        st.plotly_chart(stock_chart, use_container_width=True, key="main_stock_chart")
-    else:
-        st.info("No chart available for this ticker.")
-
-    st.divider()
-
-    # --- Tabs for Agent AI Summaries ---
-    AGENT_KEYS = [("Stock", "stock"),
-                  ("Sector", "sector"),
-                  ("Market", "market"),
-                  ("Commodity", "commodity"),
-                  ("Global", "global")]
+    # --- Agent Tabs (Stock, Sector, Market, Commodity, Global) ---
+    AGENT_KEYS = [
+        ("Stock", "stock"),
+        ("Sector", "sector"),
+        ("Market", "market"),
+        ("Commodity", "commodity"),
+        ("Global", "global"),
+    ]
     tab_labels = [x[0] for x in AGENT_KEYS]
-    tabs = st.tabs(tab_labels)
+    agent_tabs = st.tabs(tab_labels)
 
     for i, (label, key) in enumerate(AGENT_KEYS):
         agent_data = results.get(key, {})
-        with tabs[i]:
-            st.markdown(f"### {label} Agent AI Summary")
-            summary_tabs = st.tabs(["Technical Summary", "Plain-English Summary"])
+
+        with agent_tabs[i]:
+            st.markdown(f"## {label} Agent")
+
+            # --- Chart Section ---
+            chart = agent_data.get("chart")
+            if chart is not None:
+                st.plotly_chart(chart, use_container_width=True, key=f"{label}_chart")
+            elif key == "stock" and results['stock'].get("chart"):
+                st.plotly_chart(results['stock']["chart"], use_container_width=True, key=f"{label}_chart")
+            else:
+                st.info("No chart available for this agent.")
+
+            # --- Summary Section (Tabbed: Technical / Plain-English) ---
+            st.markdown("### AI Summary")
+            summary_tabs = st.tabs(["Technical", "Plain-English"])
             with summary_tabs[0]:
                 tech = agent_data.get("llm_technical_summary", "")
                 if not tech or "llm error" in tech.lower():
@@ -71,22 +76,26 @@ if run_btn:
                     st.warning("Plain-English summary could not be generated due to an LLM error.")
                 else:
                     st.markdown(plain)
+
+            # --- Risk Level ---
             st.markdown(f"**Risk Level:** {agent_data.get('risk_level', 'N/A')}")
 
+            # --- Expandable: Show technical details/raw data ---
             with st.expander("Show technical details / raw data"):
                 st.write(agent_data)
                 df = agent_data.get("df")
                 if isinstance(df, pd.DataFrame):
                     st.dataframe(df)
 
+            # --- Download Agent Report ---
             download_text = f"""# {label} Agent AI Report
 
-            ## Technical Summary
-            {agent_data.get('llm_technical_summary', '')}
-            
-            ## Plain-English Summary
-            {agent_data.get('llm_plain_summary', '')}
-            """
+## Technical Summary
+{agent_data.get('llm_technical_summary', '')}
+
+## Plain-English Summary
+{agent_data.get('llm_plain_summary', '')}
+"""
             st.download_button(
                 label="Download Agent Report",
                 data=download_text,
