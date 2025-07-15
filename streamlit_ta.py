@@ -37,6 +37,7 @@ def plot_chart(ticker, label, summary_key):
                 end = datetime.today()
                 start = end - timedelta(days=250)
                 df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
+                # ---- Flatten MultiIndex if needed ----
                 if isinstance(df.columns, pd.MultiIndex):
                     df.columns = ['_'.join([str(i) for i in col if i]) for i, col in enumerate(df.columns.values)]
                 df = df.reset_index()
@@ -100,17 +101,32 @@ def plot_chart(ticker, label, summary_key):
             except Exception as e:
                 st.info(f"{label} chart failed to load: {e}")
 
-# ----------- S&P 500 CHART -----------
-st.subheader("S&P 500 Index (Multi-Window Analysis)")
-plot_chart("^GSPC", "S&P 500", "s&p500")
+# ----------- CHARTS FOR ALL GLOBAL MAJORS -----------
+chart_configs = [
+    # (ticker, display name, summary key)
+    ("^GSPC", "S&P 500", "s&p500"),
+    ("^VIX", "VIX (Volatility Index)", "vix"),
+    ("^IXIC", "Nasdaq", "nasdaq"),
+    ("^STOXX50E", "Eurostoxx50", "eurostoxx50"),
+    ("^N225", "Nikkei", "nikkei"),
+    ("^HSI", "Hang Seng", "hangseng"),
+    ("^FTSE", "FTSE 100", "ftse100"),
+    ("^TNX", "US 10Y Yield", "us10y"),
+    ("^IRX", "US 2Y Yield", "us2y"),
+    ("DX-Y.NYB", "US Dollar Index (DXY)", "dxy"),
+    ("USDSGD=X", "USD/SGD", "usd_sgd"),
+    ("JPY=X", "USD/JPY", "usd_jpy"),
+    ("EURUSD=X", "EUR/USD", "eur_usd"),
+    ("USDCNH=X", "USD/CNH", "usd_cnh"),
+    ("GC=F", "Gold", "gold"),
+    ("BZ=F", "Brent Oil", "oil_brent"),
+    ("CL=F", "WTI Oil", "oil_wti"),
+    ("HG=F", "Copper", "copper"),
+]
 
-# ----------- VIX CHART -----------
-st.subheader("VIX (Volatility Index)")
-plot_chart("^VIX", "VIX", "vix")
-
-# ----------- DXY CHART -----------
-st.subheader("US Dollar Index (DXY)")
-plot_chart("DX-Y.NYB", "US Dollar Index", "dxy")
+for ticker, label, summary_key in chart_configs:
+    st.subheader(label)
+    plot_chart(ticker, label, summary_key)
 
 # ----------- LLM Summaries -----------
 st.subheader("LLM-Generated Summaries")
@@ -134,8 +150,6 @@ if st.button("Generate LLM Global Summaries", type="primary"):
             st.error(f"LLM error: {e}")
 
 st.caption("If you do not see the summaries, check the console logs for LLM errors or ensure your OpenAI API key is correctly set.")
-
-
 
 
 
