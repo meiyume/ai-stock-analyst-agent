@@ -82,6 +82,8 @@ def plot_yf_chart(ticker, label, chart_title):
 plot_yf_chart("^GSPC", "S&P 500", "S&P 500 Index (Last 6 Months)")
 plot_yf_chart("^VIX", "VIX", "VIX (Volatility Index, Last 6 Months)")
 plot_yf_chart("^IXIC", "Nasdaq", "Nasdaq Index (Last 6 Months)")
+plot_yf_chart("^STOXX50E", "EuroStoxx 50", "EuroStoxx 50 Index (Last 6 Months)")
+plot_yf_chart("^N225", "Nikkei 225", "Nikkei 225 Index (Last 6 Months)")
 
 # --- LLM Summaries Section ---
 
