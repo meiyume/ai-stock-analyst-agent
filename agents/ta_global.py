@@ -9,8 +9,6 @@ def fetch_yf(symbol, period="13mo", interval="1d"):
     print(f"{symbol} rows: {len(data)}", flush=True)
     return data
 
-# ... rest of code above unchanged ...
-
 def get_close_series(d, symbol):
     if d is None or d.empty:
         return None
@@ -33,31 +31,6 @@ def get_close_series(d, symbol):
             if not s.empty:
                 return s
     return None
-
-# ... inside your for key, d in data.items():
-for key, d in data.items():
-    try:
-        close = get_close_series(d, SYMBOLS[key])
-        if close is None:
-            print(f"WARNING: No usable Close/Adj Close for {key}")
-            continue
-        metrics = {}
-        for win in WINDOWS:
-            suffix = f"{win}d"
-            metrics[f"change_{suffix}_pct"] = compute_pct_change(close, win)
-            metrics[f"vol_{suffix}"] = compute_rolling_vol(close, win)
-            metrics[f"trend_{suffix}"] = compute_trend(close, win)
-        metrics["last"] = float(close.iloc[-1]) if not close.empty else np.nan
-        out[key] = metrics
-    except Exception as e:
-        print(f"ERROR computing metrics for {key}: {e}", flush=True)
-
-# ... when building major_indices
-major_indices = [
-    get_close_series(data[k], SYMBOLS[k])
-    for k in ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"]
-    if k in data and get_close_series(data[k], SYMBOLS[k]) is not None
-]
 
 def compute_pct_change(series, periods):
     if series is None or len(series) < periods + 1:
@@ -148,7 +121,7 @@ def ta_global():
 
     for key, d in data.items():
         try:
-            close = get_close_series(d)
+            close = get_close_series(d, SYMBOLS[key])  # <-- FIXED
             if close is None:
                 print(f"WARNING: No usable Close/Adj Close for {key}")
                 continue
@@ -165,9 +138,9 @@ def ta_global():
 
     # Build major_indices list of price series
     major_indices = [
-        get_close_series(data[k])
+        get_close_series(data[k], SYMBOLS[k])  # <-- FIXED
         for k in ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"]
-        if k in data and get_close_series(data[k]) is not None
+        if k in data and get_close_series(data[k], SYMBOLS[k]) is not None
     ]
     breadth = {}
     for win in [50, 200]:
@@ -208,6 +181,7 @@ def ta_global():
 
 if __name__ == "__main__":
     ta_global()
+
 
 
 
