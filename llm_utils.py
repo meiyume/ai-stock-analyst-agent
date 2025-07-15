@@ -99,6 +99,8 @@ PROMPT_TEMPLATES = {
       "commodity": {{ ... }},            # signals, summary, risk_level for key commodities
       "global": {{ ... }}                # signals, summary, risk_level for global factors
     }}
+
+    {input}
     
     Each agent (stock, sector, market, commodity, global) provides:
     - a "summary" string,
