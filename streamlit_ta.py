@@ -97,6 +97,9 @@ def plot_chart(ticker, label, explanation):
             df["SMA20"] = df[close_col].rolling(window=20).mean()
             df["SMA50"] = df[close_col].rolling(window=50).mean()
 
+            # Calculate rolling volatility (20d stdev of Close)
+            df["Volatility20"] = df[close_col].rolling(window=20).std()
+
             fig = go.Figure()
             # Main price line
             fig.add_trace(go.Scatter(
@@ -113,6 +116,13 @@ def plot_chart(ticker, label, explanation):
                 x=df[date_col], y=df["SMA50"],
                 mode='lines', name='SMA 50', line=dict(dash='dash')
             ))
+            # Volatility overlay
+            if "Volatility20" in df.columns and not df["Volatility20"].isna().all():
+                fig.add_trace(go.Scatter(
+                    x=df[date_col], y=df["Volatility20"],
+                    mode='lines', name="Volatility (20d std)", line=dict(color="orange", dash='dashdot'),
+                    yaxis="y3"
+                ))
             # Volume (secondary axis)
             if volume_col and volume_col in df.columns:
                 fig.add_trace(go.Bar(
@@ -122,14 +132,16 @@ def plot_chart(ticker, label, explanation):
                     opacity=0.5
                 ))
 
-            # Layout for dual axis
+            # Layout for dual axis (and 3rd for volatility)
             fig.update_layout(
                 title=label,
                 xaxis_title="Date",
-                yaxis_title="Price",
                 yaxis=dict(title="Price", showgrid=True),
                 yaxis2=dict(
                     title="Volume", overlaying='y', side='right', showgrid=False, rangemode='tozero'
+                ),
+                yaxis3=dict(
+                    title="Volatility", overlaying='y', side='left', anchor="x", position=0.05, showgrid=False, visible=True
                 ),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 template="plotly_white",
@@ -239,6 +251,7 @@ chart_list = [
 st.subheader("Global Market Charts")
 for chart in chart_list:
     plot_chart(chart["ticker"], chart["label"], chart["explanation"])
+
 
 
 
