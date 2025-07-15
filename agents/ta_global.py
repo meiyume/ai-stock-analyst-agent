@@ -95,6 +95,8 @@ def ta_global():
                 if d.empty:
                     print(f"ERROR: {symbol} ({key}) is STILL empty after fallback.", flush=True)
             data[key] = d
+            print(f"==== {key} columns: {list(d.columns)}", flush=True)
+            print(d.head(2))
         except Exception as e:
             print(f"ERROR downloading {key} ({symbol}): {e}", flush=True)
 
