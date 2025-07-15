@@ -55,6 +55,7 @@ for provider, lim in PROVIDER_LIMITS.items():
 # === LLM PROVIDER WRAPPERS ===
 
 def call_openai(model, prompt, api_key, temperature=0.2, max_tokens=1024):
+    print(">>>>>>>> call_openai CALLED <<<<<<<<")
     from openai import OpenAI
     import traceback
     client = OpenAI(api_key=api_key)
