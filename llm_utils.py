@@ -132,8 +132,29 @@ PROMPT_TEMPLATES = {
     "sector":   "Sector performance summary:\n{input}\nExplain main drivers.",
     "market":   "Market overview:\n{input}\nProvide key insights.",
     "commodities": "Commodities report:\n{input}\nHighlight risks and trends.",
-    "globals":  "Global economic context:\n{input}\nSummarize impact on markets.",
-}
+    
+    "global": """
+    You are a world-class macro technical analyst.
+    
+    You will receive a JSON summary of current global volatility, trend, major indices, FX rates, yields, commodities, breadth, and risk regime:
+    
+    {input}
+    
+    Tasks:
+    1. Write a dense, technical global macro summary for professional investors.
+    2. Write a plain-English summary for executives, emphasizing risk regime, key trends, and any actionable outlook.
+    3. Clearly state the lookback windows analyzed (30, 90, 200 days).
+    4. Flag any global “red flags” or “green lights” for risk-on/risk-off.
+    5. Reference the news section if available.
+    
+    Format output exactly as:
+    
+    Technical Summary
+    
+    Plain-English Summary
+    
+    """,
+    }
 
 # === AGENT TO BRAIN MAPPING ===
 
