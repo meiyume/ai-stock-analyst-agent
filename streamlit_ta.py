@@ -121,38 +121,47 @@ chart_configs = [
 
 # --- Plot function for all charts
 def plot_chart(ticker, title, explanation):
+    import plotly.graph_objects as go
+    import yfinance as yf
+    import pandas as pd
+    from datetime import datetime, timedelta
+
     with st.container():
         with st.spinner(f"Loading {title}..."):
             end = datetime.today()
             start = end - timedelta(days=180)
             df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
-            df = df.reset_index()
+            df = df.reset_index(drop=False)
 
-            # --- Identify columns robustly ---
-            date_col, close_col, volume_col = None, None, None
-            for col in df.columns:
-                if isinstance(col, str) and col.lower() in ["date", "datetime", "index"]:
-                    date_col = col
-                if isinstance(col, str) and "close" in col.lower():
-                    close_col = col
-                if isinstance(col, str) and "volume" in col.lower():
-                    volume_col = col
-            if not date_col:
-                date_col = df.columns[0]
+            # Try to robustly detect columns
+            def find_col(possibles, columns):
+                for p in possibles:
+                    for c in columns:
+                        if p in c.lower():
+                            return c
+                return None
+
+            date_col = find_col(['date', 'datetime', 'index'], df.columns) or df.columns[0]
+            close_col = find_col(['close'], df.columns)
+            volume_col = find_col(['volume'], df.columns)
+
             if not close_col:
-                close_col = df.columns[1] if len(df.columns) > 1 else None
-
-            if not date_col or not close_col or df.empty or df[close_col].isnull().all():
-                st.info(f"Not enough {title} data to plot.")
+                st.warning(f"[{title}] No close column found. Columns: {list(df.columns)}")
                 return
 
-            # Calculate SMAs
-            df['SMA_20'] = df[close_col].rolling(window=20).mean()
-            df['SMA_50'] = df[close_col].rolling(window=50).mean()
-            df['SMA_200'] = df[close_col].rolling(window=200).mean()
+            # Clean up data
+            df = df[[date_col, close_col] + ([volume_col] if volume_col else [])]
+            df = df.dropna(subset=[close_col])
+            if df.empty:
+                st.warning(f"[{title}] No data after cleaning.")
+                return
+
+            # Add SMAs
+            df['SMA_20'] = df[close_col].rolling(20).mean()
+            df['SMA_50'] = df[close_col].rolling(50).mean()
+            df['SMA_200'] = df[close_col].rolling(200).mean()
 
             fig = go.Figure()
-
             # Price line
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df[close_col],
@@ -166,33 +175,31 @@ def plot_chart(ticker, title, explanation):
             if not df['SMA_200'].isnull().all():
                 fig.add_trace(go.Scatter(x=df[date_col], y=df['SMA_200'], mode='lines', name="SMA 200", line=dict(dash='dashdot')))
 
-            # Volume bars (only if there are enough nonzero and non-NaN)
-            show_volume = False
-            if volume_col and volume_col in df:
+            # Volume
+            if volume_col:
                 v = df[volume_col]
-                if v.notnull().sum() > 10 and (v > 0).sum() > 0:
-                    show_volume = True
+                # Show debug info!
+                st.write(f"[{title}] Volume stats:", v.describe())
+                if v.notnull().sum() > 5 and v.abs().sum() > 0:
+                    fig.add_trace(go.Bar(
+                        x=df[date_col], y=v,
+                        name="Volume", yaxis='y2',
+                        marker=dict(color='rgba(30,144,255,0.22)'),
+                        opacity=0.7
+                    ))
+                    fig.update_layout(
+                        yaxis2=dict(
+                            title="Volume", overlaying='y', side='right',
+                            showgrid=False, rangemode='tozero'
+                        )
+                    )
+                else:
+                    st.info(f"[{title}] Volume data is empty, zero, or not meaningful.")
 
-            if show_volume:
-                fig.add_trace(go.Bar(
-                    x=df[date_col], y=df[volume_col],
-                    name="Volume", yaxis='y2',
-                    marker=dict(color='rgba(30,144,255,0.25)'),
-                    opacity=0.7
-                ))
-
-            # Dual y-axis if volume
-            if show_volume:
-                fig.update_layout(
-                    yaxis=dict(title="Price"),
-                    yaxis2=dict(
-                        title="Volume", overlaying='y', side='right',
-                        showgrid=False, rangemode='tozero'
-                    ),
-                )
             fig.update_layout(
                 title=title,
                 xaxis_title="Date",
+                yaxis_title="Price",
                 bargap=0,
                 template="plotly_white",
                 height=400,
@@ -200,6 +207,7 @@ def plot_chart(ticker, title, explanation):
             )
             st.plotly_chart(fig, use_container_width=True)
             st.caption(explanation)
+
 
 
 # --- Plot all charts (can limit to first few for speed)
