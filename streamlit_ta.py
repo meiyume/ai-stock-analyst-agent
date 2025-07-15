@@ -36,33 +36,39 @@ with st.container():
             if sp500_hist.empty or "Close" not in sp500_hist.columns:
                 st.info("S&P 500 data unavailable or missing 'Close' column.")
             else:
+                # Try to find the date column after reset_index()
                 sp500_hist = sp500_hist.reset_index()
-                # Force Date column to datetime
-                if not pd.api.types.is_datetime64_any_dtype(sp500_hist["Date"]):
-                    sp500_hist["Date"] = pd.to_datetime(sp500_hist["Date"], errors='coerce')
-                # Remove rows with NaN in Date or Close
-                sp500_hist = sp500_hist.dropna(subset=["Date", "Close"])
-                # Only plot if we have enough points
-                if sp500_hist.shape[0] < 5:
-                    st.info("Not enough data to plot S&P 500 chart.")
+                date_col = None
+                for col in sp500_hist.columns:
+                    if col.lower() in ["date", "datetime", "index"]:
+                        date_col = col
+                        break
+                if date_col is None:
+                    st.info("No date-like column found in S&P 500 data.")
                 else:
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(
-                        x=sp500_hist["Date"],
-                        y=sp500_hist["Close"],
-                        mode='lines',
-                        name='S&P 500'
-                    ))
-                    fig.update_layout(
-                        title="S&P 500 Index (Last 6 Months)",
-                        xaxis_title="Date",
-                        yaxis_title="Price",
-                        template="plotly_white",
-                        height=350
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
+                    # Drop rows with NaN in date/close
+                    sp500_hist = sp500_hist.dropna(subset=[date_col, "Close"])
+                    if sp500_hist.shape[0] < 5:
+                        st.info("Not enough data to plot S&P 500 chart.")
+                    else:
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(
+                            x=sp500_hist[date_col],
+                            y=sp500_hist["Close"],
+                            mode='lines',
+                            name='S&P 500'
+                        ))
+                        fig.update_layout(
+                            title="S&P 500 Index (Last 6 Months)",
+                            xaxis_title="Date",
+                            yaxis_title="Price",
+                            template="plotly_white",
+                            height=350
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.info(f"S&P 500 chart failed to load: {e}")
+
 
 st.subheader("Raw Global Technical Data")
 with st.expander("Show raw summary dict", expanded=False):
