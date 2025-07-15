@@ -26,59 +26,71 @@ with st.spinner("Loading global technical summary..."):
         st.error(f"Error in ta_global(): {e}")
         st.stop()
 
-# ---- S&P 500 Chart Robust Block ----
-import pandas as pd
+# ---- S&P500 Chart ----
+spx_hist = summary.get('s&p500_hist')
+if spx_hist is not None and len(spx_hist) > 0:
+    import pandas as pd
+    df = pd.DataFrame(spx_hist)
+    # Handle column name cases and index issues
+    for c in df.columns:
+        if isinstance(c, tuple):
+            # MultiIndex, collapse
+            df[c[0]] = df[c]
+    if "Date" not in df.columns:
+        df["Date"] = df.index
+    df = df.dropna(subset=["Close"])
+    st.markdown("**S&P 500 Index (Last 6 Months)**")
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=pd.to_datetime(df["Date"]), y=df["Close"],
+        mode='lines', name='S&P 500'
+    ))
+    fig.update_layout(height=300, xaxis_title="Date", yaxis_title="Price")
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("S&P 500 chart not available in current summary.")
 
-with st.container():
-    with st.spinner("Loading S&P 500 historical data..."):
-        try:
-            end = datetime.today()
-            start = end - timedelta(days=180)
-            sp500_hist = yf.download("^GSPC", start=start, end=end, interval="1d", auto_adjust=True, progress=False)
+# ---- VIX Chart ----
+vix_hist = summary.get('vix_hist')
+if vix_hist is not None and len(vix_hist) > 0:
+    df = pd.DataFrame(vix_hist)
+    for c in df.columns:
+        if isinstance(c, tuple):
+            df[c[0]] = df[c]
+    if "Date" not in df.columns:
+        df["Date"] = df.index
+    df = df.dropna(subset=["Close"])
+    st.markdown("**VIX (Volatility Index) (Last 6 Months)**")
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=pd.to_datetime(df["Date"]), y=df["Close"],
+        mode='lines', name='VIX'
+    ))
+    fig.update_layout(height=300, xaxis_title="Date", yaxis_title="VIX Level")
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("VIX chart not available in current summary.")
 
-            # ---- Flatten MultiIndex if needed ----
-            if isinstance(sp500_hist.columns, pd.MultiIndex):
-                sp500_hist.columns = ['_'.join([str(i) for i in col if i]) for col in sp500_hist.columns.values]
-
-            sp500_hist = sp500_hist.reset_index()
-
-            # ---- Identify Date and Close columns ----
-            date_col = None
-            close_col = None
-            for col in sp500_hist.columns:
-                # Date column detection
-                if isinstance(col, str) and col.lower() in ["date", "datetime", "index"]:
-                    date_col = col
-                # Close price detection (may be "Close" or "Close_^GSPC")
-                if isinstance(col, str) and "close" in col.lower():
-                    close_col = col
-
-            if not date_col or not close_col:
-                st.info(f"S&P 500 chart failed to load: columns found: {list(sp500_hist.columns)}")
-            else:
-                # Drop NaN values
-                sp500_hist = sp500_hist.dropna(subset=[date_col, close_col])
-                if len(sp500_hist) < 5:
-                    st.info("Not enough S&P 500 data to plot.")
-                else:
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(
-                        x=sp500_hist[date_col],
-                        y=sp500_hist[close_col],
-                        mode='lines',
-                        name='S&P 500'
-                    ))
-                    fig.update_layout(
-                        title="S&P 500 Index (Last 6 Months)",
-                        xaxis_title="Date",
-                        yaxis_title="Price",
-                        template="plotly_white",
-                        height=350
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-        except Exception as e:
-            st.info(f"S&P 500 chart failed to load: {e}")
-
+# ---- Nasdaq Chart ----
+nasdaq_hist = summary.get('nasdaq_hist')
+if nasdaq_hist is not None and len(nasdaq_hist) > 0:
+    df = pd.DataFrame(nasdaq_hist)
+    for c in df.columns:
+        if isinstance(c, tuple):
+            df[c[0]] = df[c]
+    if "Date" not in df.columns:
+        df["Date"] = df.index
+    df = df.dropna(subset=["Close"])
+    st.markdown("**Nasdaq Index (Last 6 Months)**")
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=pd.to_datetime(df["Date"]), y=df["Close"],
+        mode='lines', name='Nasdaq'
+    ))
+    fig.update_layout(height=300, xaxis_title="Date", yaxis_title="Price")
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("Nasdaq chart not available in current summary.")
 
 
 st.subheader("Raw Global Technical Data")
