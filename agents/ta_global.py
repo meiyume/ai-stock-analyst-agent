@@ -1,81 +1,21 @@
 import yfinance as yf
-import pandas as pd
 import numpy as np
-from datetime import datetime
+import pandas as pd
+from datetime import datetime, timedelta
 
-def fetch_yf(symbol, period="13mo", interval="1d"):
-    print(f"Downloading {symbol} ...", flush=True)
-    data = yf.download(symbol, period=period, interval=interval, progress=False)
-    print(f"{symbol} rows: {len(data)}", flush=True)
-    return data
-
-def get_close_series(d, symbol):
-    if d is None or d.empty:
-        return None
-    # Try for ('Close', symbol) format
-    try:
-        if ("Close", symbol) in d.columns:
-            s = d[("Close", symbol)].dropna()
-            if not s.empty:
-                return s
-        if ("Adj Close", symbol) in d.columns:
-            s = d[("Adj Close", symbol)].dropna()
-            if not s.empty:
-                return s
-    except Exception:
-        pass
-    # Fallback: try legacy single-level
-    for cname in ["Close", "Adj Close"]:
-        if cname in d.columns:
-            s = d[cname].dropna()
-            if not s.empty:
-                return s
-    return None
-
-def compute_pct_change(series, periods):
-    if series is None or len(series) < periods + 1:
-        return np.nan
-    return (series.iloc[-1] / series.iloc[-(periods + 1)] - 1) * 100
-
-def compute_rolling_vol(series, window):
-    if series is None or len(series) < window + 1:
-        return np.nan
-    returns = series.pct_change()
-    vol = returns.rolling(window=window).std().iloc[-1]
-    if pd.isna(vol):
-        return np.nan
-    return vol * np.sqrt(252)
-
-def compute_trend(series, window):
-    if series is None or len(series) < window:
-        return "Unknown"
-    ma = series.rolling(window).mean()
-    val = ma.iloc[-1]
-    if pd.isna(val):
-        return "Unknown"
-    return "Uptrend" if series.iloc[-1] > val else "Downtrend"
-
-def compute_breadth(indices, window):
-    above_ma = 0
-    valid = 0
-    for s in indices:
-        if s is None or len(s) < window:
-            continue
-        ma = s.rolling(window).mean()
-        val = ma.iloc[-1]
-        if pd.isna(val):
-            continue
-        if s.iloc[-1] > val:
-            above_ma += 1
-        valid += 1
-    if valid == 0:
-        return np.nan
-    return (above_ma / valid) * 100
+def trend_to_score(trend):
+    if trend == "Uptrend":
+        return 1.0
+    elif trend == "Downtrend":
+        return 0.0
+    else:
+        return 0.5
 
 def ta_global():
-    SYMBOLS = {
-        "VIX": "^VIX",
+    # List of indices to fetch
+    indices = {
         "S&P500": "^GSPC",
+        "VIX": "^VIX",
         "Nasdaq": "^IXIC",
         "EuroStoxx50": "^STOXX50E",
         "Nikkei": "^N225",
@@ -93,94 +33,109 @@ def ta_global():
         "Oil_WTI": "CL=F",
         "Copper": "HG=F",
     }
-
-    WINDOWS = [30, 90, 200]
-
+    lookbacks = [30, 90, 200]
     out = {}
-    data = {}
+    today = datetime.today()
+    start = today - timedelta(days=400)
 
-    print("\n---- Starting downloads ----\n", flush=True)
-    for key, symbol in SYMBOLS.items():
+    for name, symbol in indices.items():
         try:
-            d = fetch_yf(symbol, period="13mo", interval="1d")
-            if d.empty:
-                print(f"WARNING: {symbol} ({key}) is empty!", flush=True)
-                d = fetch_yf(symbol, period="60d", interval="1d")
-                if d.empty:
-                    print(f"ERROR: {symbol} ({key}) is STILL empty after fallback.", flush=True)
-            data[key] = d
-            print(f"==== {key} columns: {list(d.columns)}", flush=True)
-            print(d.head(2))
-        except Exception as e:
-            print(f"ERROR downloading {key} ({symbol}): {e}", flush=True)
-
-    print("\n---- Checking key symbols ----", flush=True)
-    for key in ["S&P500", "VIX"]:
-        if key in data:
-            print(f"{key} rows: {len(data[key])}, latest: {data[key].index[-1] if not data[key].empty else 'EMPTY'}", flush=True)
-
-    for key, d in data.items():
-        try:
-            close = get_close_series(d, SYMBOLS[key])  # <-- FIXED
-            if close is None:
-                print(f"WARNING: No usable Close/Adj Close for {key}")
+            df = yf.download(symbol, start=start, end=today, interval="1d", auto_adjust=True, progress=False)
+            if df is None or len(df) < 10:
+                out[name.lower()] = {"error": "No data"}
                 continue
-            metrics = {}
-            for win in WINDOWS:
-                suffix = f"{win}d"
-                metrics[f"change_{suffix}_pct"] = compute_pct_change(close, win)
-                metrics[f"vol_{suffix}"] = compute_rolling_vol(close, win)
-                metrics[f"trend_{suffix}"] = compute_trend(close, win)
-            metrics["last"] = float(close.iloc[-1]) if not close.empty else np.nan
-            out[key] = metrics
+            close = df["Close"].dropna()
+            trends = {}
+            for lb in lookbacks:
+                if len(close) >= lb:
+                    change = (close[-1] - close[-lb]) / close[-lb] * 100
+                    trend = (
+                        "Uptrend" if change > 2 else
+                        "Downtrend" if change < -2 else
+                        "Sideways"
+                    )
+                else:
+                    change, trend = np.nan, "N/A"
+                trends[f"change_{lb}d_pct"] = float(np.round(change, 3)) if not np.isnan(change) else None
+                trends[f"trend_{lb}d"] = trend
+                # Add volatility for each window
+                trends[f"vol_{lb}d"] = float(np.round(close[-lb:].std(), 3)) if len(close) >= lb else None
+            trends["last"] = float(np.round(close[-1], 4))
+            out[name] = trends
         except Exception as e:
-            print(f"ERROR computing metrics for {key}: {e}", flush=True)
+            out[name] = {"error": str(e)}
 
-    # Build major_indices list of price series
-    major_indices = [
-        get_close_series(data[k], SYMBOLS[k])  # <-- FIXED
-        for k in ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"]
-        if k in data and get_close_series(data[k], SYMBOLS[k]) is not None
-    ]
+    # --- Breadth: What % indices above 50d/200d MA
     breadth = {}
-    for win in [50, 200]:
-        b = compute_breadth(major_indices, window=win)
-        print(f"Breadth {win}d: {b}", flush=True)
-        breadth[f"breadth_above_{win}dma_pct"] = b
+    above_50dma, above_200dma, count = 0, 0, 0
+    for name, v in out.items():
+        if isinstance(v, dict) and "last" in v and v.get("trend_50d", None) != "N/A":
+            last = v["last"]
+            symbol = indices[name]
+            df = yf.download(symbol, start=start, end=today, interval="1d", auto_adjust=True, progress=False)
+            if "Close" in df and len(df["Close"].dropna()) >= 200:
+                ma50 = df["Close"].rolling(50).mean().iloc[-1]
+                ma200 = df["Close"].rolling(200).mean().iloc[-1]
+                if last > ma50:
+                    above_50dma += 1
+                if last > ma200:
+                    above_200dma += 1
+                count += 1
+    breadth["breadth_above_50dma_pct"] = int(round(above_50dma / count * 100, 0)) if count else None
+    breadth["breadth_above_200dma_pct"] = int(round(above_200dma / count * 100, 0)) if count else None
 
-    try:
-        vix_30d = out.get("VIX", {}).get("last", np.nan)
-        spx_trend = out.get("S&P500", {}).get("trend_30d", "Unknown")
-        print(f"VIX latest: {vix_30d}, SPX 30d trend: {spx_trend}", flush=True)
-        if not np.isnan(vix_30d) and (vix_30d >= 25 or spx_trend == "Downtrend"):
-            risk_regime = "Risk-Off"
-        elif not np.isnan(vix_30d) and vix_30d <= 15 and spx_trend == "Uptrend":
-            risk_regime = "Risk-On"
-        else:
-            risk_regime = "Neutral"
-    except Exception as e:
-        print(f"Risk regime calc error: {e}", flush=True)
-        risk_regime = "Unknown"
+    # --- Risk regime (very simple rules for demo) ---
+    vix30 = out.get("VIX", {}).get("change_30d_pct", None)
+    spx_trend = out.get("S&P500", {}).get("trend_30d", "N/A")
+    risk_regime = (
+        "Bearish" if vix30 and vix30 > 10 and spx_trend == "Downtrend" else
+        "Bullish" if vix30 and vix30 < -10 and spx_trend == "Uptrend" else
+        "Neutral"
+    )
 
-    news_summary = "No news data yet. (Reserved for future global/regional/local news agent summary.)"
+    # --- Composite Score ---
+    def get_trend(lb, k):
+        t = out.get(k, {}).get(f"trend_{lb}d", "N/A")
+        return trend_to_score(t)
 
+    # Main indices only (equities for now)
+    indices_for_score = ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"]
+    trend_scores = [get_trend(30, k) for k in indices_for_score]
+
+    # VIX: High VIX is bearish
+    vix_last = out.get("VIX", {}).get("last", None)
+    vix_score = 1 - min(vix_last / 40, 1) if vix_last is not None else 0.5
+
+    # Breadth
+    breadth_50 = breadth.get("breadth_above_50dma_pct", 50) / 100
+    breadth_200 = breadth.get("breadth_above_200dma_pct", 50) / 100
+
+    # Simple average (you can weight if you want)
+    composite_score = float(np.round(np.nanmean(trend_scores + [vix_score, breadth_50, breadth_200]), 3))
+    composite_label = (
+        "Bullish" if composite_score >= 0.7
+        else "Bearish" if composite_score <= 0.3
+        else "Neutral"
+    )
+
+    # --- Summary dict ---
     summary = {
-        "as_of": datetime.now().strftime("%Y-%m-%d"),
-        "lookbacks": WINDOWS,
-        **{k.lower(): v for k, v in out.items()},
-        **breadth,
+        "as_of": today.strftime("%Y-%m-%d"),
+        "lookbacks": lookbacks,
+        "out": out,
+        "breadth": breadth,
         "risk_regime": risk_regime,
-        "news": news_summary,
+        "composite_score": composite_score,
+        "composite_label": composite_label,
+        "news": "No news data yet. (Reserved for future global/regional/local news agent summary.)"
     }
-
-    print("\n---- Global Agent Output ----", flush=True)
-    for k, v in summary.items():
-        print(f"{k}: {v}", flush=True)
-
     return summary
 
+# For CLI testing only:
 if __name__ == "__main__":
-    ta_global()
+    result = ta_global()
+    import pprint; pprint.pprint(result)
+
 
 
 
