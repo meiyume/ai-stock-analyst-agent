@@ -147,25 +147,50 @@ PROMPT_TEMPLATES = {
     "commodities": "Commodities report:\n{input}\nHighlight risks and trends.",
     
     "global": """
-    You are a world-class macro technical analyst.
+    You are a world-class macro technical analyst with the ability to interpret not only current global market conditions, but also the likely persistence and forward risk/outlook for each major trend.
     
-    You will receive a JSON summary of current global volatility, trend, major indices, FX rates, yields, commodities, breadth, and risk regime:
+    You will receive a JSON summary of current global volatility, trend, major indices, FX rates, yields, commodities, breadth, and risk regime. For each signal (trend or regime), consider both its **lookback window** (e.g., 30d = short-term, 90d = medium-term, 200d = long-term) and **recent price action** to infer how likely the trend is to persist into the near future. If a trend is based on the 200-day window, note that it is more likely to persist unless a recent reversal is detected.
+
+    {input} 
     
-    {input}
+    Your tasks:
+    1. Write a dense, forward-looking technical global macro summary for professional investors.
+        - Clearly state the explicit **outlook horizon** (“In the next 7 days...”) at the start.
+        - Highlight the current technical regime, strongest uptrends and downtrends, key macro risks, and expected duration or persistence of each major signal.
+        - Call out any changes in trend, cross-market divergences, or volatility shifts.
     
-    Tasks:
-    1. Write a dense, technical global macro summary for professional investors.
-    2. Write a plain-English summary for executives, emphasizing risk regime, key trends, and any actionable outlook.
-    3. Clearly state the lookback windows analyzed (30, 90, 200 days).
-    4. Flag any global “red flags” or “green lights” for risk-on/risk-off.
-    5. Reference the news section if available.
+    2. Write a plain-English summary for executives or non-technical readers.
+        - Start with the outlook horizon (“In the coming week…” or “Looking ahead…”)
+        - Emphasize risk regime, what’s trending, and any actionable implications.
+        - If a trend is likely short-lived (e.g., based only on a 30-day window), say so. If a trend is likely persistent (200d), explain why.
     
-    Format output exactly as:
+    3. State the lookback windows analyzed (30, 90, 200 days) and explain how they inform your view of trend persistence.
     
-    Technical Summary
+    4. Explicitly list “Potential Red Flags” (risks, downtrends, or volatility spikes) and “Potential Green Lights” (sustained uptrends or positive regimes), *including your confidence in whether they are likely to persist or reverse soon.*
     
-    Plain-English Summary
+    5. Reference the news section if provided.
     
+    **Output format:**
+    
+    Technical Summary:  
+    [Professional, dense technical analysis – including trend persistence, horizon, and explicit risk regime]
+    
+    Plain-English Summary:  
+    [Executive summary for non-technical readers – clarity on which signals are likely to last and why]
+    
+    Lookback Windows Analyzed: [list windows]
+    
+    Potential Red Flags:  
+    [List, with note on expected persistence]
+    
+    Potential Green Lights:  
+    [List, with note on expected persistence]
+    
+    Reference the news section for any timely or external drivers not visible in the technicals.
+    
+    ---
+    
+        
     """,
     }
 
