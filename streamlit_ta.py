@@ -1,5 +1,7 @@
 import streamlit as st
 import json
+import plotly.graph_objs as go
+import pandas as pd
 from ta_global import ta_global
 from llm_utils import call_llm
 
@@ -21,6 +23,38 @@ with st.spinner("Loading global technical summary..."):
     except Exception as e:
         st.error(f"Error in ta_global(): {e}")
         st.stop()
+
+# === [NEW] S&P 500 Chart Section ===
+sp500_df = None
+# Try common keys for S&P 500 data in summary
+for key in ['sp500', 's&p500', 'S&P500', 'S&P_500']:
+    if key in summary.get('data', {}):
+        sp500_df = summary['data'][key]
+        break
+
+if isinstance(sp500_df, pd.DataFrame) and not sp500_df.empty:
+    if "Date" in sp500_df.columns:
+        sp500_df = sp500_df.set_index("Date")
+    sp500_df = sp500_df.sort_index().iloc[-90:]  # Show last 90 rows
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=sp500_df.index,
+        y=sp500_df['Close'],
+        mode='lines',
+        name='S&P 500'
+    ))
+    fig.update_layout(
+        title='S&P 500 Closing Prices (Last 90 Days)',
+        xaxis_title='Date',
+        yaxis_title='Close',
+        height=400
+    )
+    st.markdown("#### S&P 500 Chart")
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("S&P 500 chart not available in current summary.")
+
+# === END Chart Section ===
 
 st.subheader("Raw Global Technical Data")
 with st.expander("Show raw summary dict", expanded=False):
@@ -50,7 +84,5 @@ if st.button("Generate LLM Global Summaries", type="primary"):
             st.error(f"LLM error: {e}")
 
 st.caption("If you do not see the summaries, check the console logs for LLM errors or ensure your OpenAI API key is correctly set.")
-
-
 
 
