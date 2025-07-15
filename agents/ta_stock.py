@@ -182,6 +182,8 @@ def analyze(
     anomaly_events = []
 
     summary = {
+        "ticker": ticker,
+        "company_name": company_name,
         "summary": f"{sma_trend} SMA, {macd_signal} MACD, {rsi_signal} RSI, {bollinger_signal} Bollinger, "
                    f"{stochastic_signal} Stochastic, {cmf_signal} CMF, {obv_signal} OBV, "
                    f"{adx_signal} ADX, {atr_signal} ATR",
