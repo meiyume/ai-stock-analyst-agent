@@ -77,10 +77,11 @@ def trend_label(pct):
 def plot_chart(ticker, label, explanation):
     with st.container():
         st.markdown(f"#### {label}")
-        st.caption(explanation)
+        st.caption(f"*{explanation}*")  # Short "what and why" under the title
+
         try:
             end = datetime.today()
-            start = end - timedelta(days=180)
+            start = end - timedelta(days=220)  # Ensure enough data for SMA200
             df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
             if df is None or len(df) < 10:
                 st.info(f"Not enough {label} data to plot.")
@@ -88,8 +89,16 @@ def plot_chart(ticker, label, explanation):
 
             # Flatten MultiIndex columns, if needed
             if isinstance(df.columns, pd.MultiIndex):
-                df.columns = ['_'.join([str(i) for i in col if i]) for col in df.columns.values]
+                df.columns = ['_'.join([str(i) for i in col if i]) for i in df.columns.values]
             df = df.reset_index()
+
+            # Helper to find relevant columns
+            def find_col(possibles, columns):
+                for p in possibles:
+                    for c in columns:
+                        if p in str(c).lower():
+                            return c
+                return None
 
             date_col = find_col(['date', 'datetime', 'index'], df.columns) or df.columns[0]
             close_col = find_col(['close'], df.columns)
@@ -105,32 +114,38 @@ def plot_chart(ticker, label, explanation):
                 st.info(f"Not enough {label} data to plot.")
                 return
 
-            # Calculate SMA20, SMA50
+            # Calculate SMAs
             df["SMA20"] = df[close_col].rolling(window=20).mean()
             df["SMA50"] = df[close_col].rolling(window=50).mean()
+            df["SMA200"] = df[close_col].rolling(window=200).mean()
 
             fig = go.Figure()
             # Main price line
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df[close_col],
-                mode='lines', name=label
+                mode='lines', name=label, yaxis="y1"
             ))
             # SMA20
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df["SMA20"],
-                mode='lines', name='SMA 20', line=dict(dash='dot')
+                mode='lines', name='SMA 20', line=dict(dash='dot', color='blue'), yaxis="y1"
             ))
             # SMA50
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df["SMA50"],
-                mode='lines', name='SMA 50', line=dict(dash='dash')
+                mode='lines', name='SMA 50', line=dict(dash='dash', color='purple'), yaxis="y1"
+            ))
+            # SMA200
+            fig.add_trace(go.Scatter(
+                x=df[date_col], y=df["SMA200"],
+                mode='lines', name='SMA 200', line=dict(dash='solid', color='black', width=2), yaxis="y1"
             ))
             # Volume (secondary axis)
             if volume_col and volume_col in df.columns:
                 fig.add_trace(go.Bar(
                     x=df[date_col], y=df[volume_col],
                     name="Volume", yaxis="y2",
-                    marker_color="rgba(0,160,255,0.16)",
+                    marker_color="rgba(0,160,255,0.18)",
                     opacity=0.5
                 ))
 
@@ -138,38 +153,28 @@ def plot_chart(ticker, label, explanation):
             fig.update_layout(
                 title=label,
                 xaxis_title="Date",
-                yaxis_title="Price",
-                yaxis=dict(title="Price", showgrid=True),
+                yaxis=dict(
+                    title="Price",
+                    showgrid=True,
+                    side="left"
+                ),
                 yaxis2=dict(
-                    title="Volume", overlaying='y', side='right', showgrid=False, rangemode='tozero'
+                    title="Volume",
+                    overlaying='y',
+                    side='right',
+                    showgrid=False,
+                    rangemode='tozero'
                 ),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 template="plotly_white",
                 height=350,
                 bargap=0
             )
-            st.plotly_chart(fig, use_container_width=True)
 
-            # --- Trend summary table ---
-            # Only show if have enough data (min 50 days)
-            if len(df) >= 55:
-                trend_windows = [20, 50]
-                table = []
-                for win in trend_windows:
-                    if len(df) >= win + 1:
-                        pct = (df[close_col].iloc[-1] - df[close_col].iloc[-1 - win]) / df[close_col].iloc[-1 - win] * 100
-                        vol = df[close_col].iloc[-win:].std()
-                        table.append({
-                            "Window": f"{win}d",
-                            "% Change": f"{pct:.2f}%",
-                            "Volatility": f"{vol:.2f}",
-                            "Trend": trend_label(pct / 10)
-                        })
-                if table:
-                    st.markdown("**Recent Trend Table**")
-                    st.table(pd.DataFrame(table))
+            st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.info(f"{label} chart failed to load: {e}")
+
 
 # --- Chart definitions and explanations ---
 chart_list = [
