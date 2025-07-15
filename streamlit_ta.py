@@ -1,17 +1,17 @@
 import streamlit as st
-import pandas as pd
-import yfinance as yf
+import json
 from datetime import datetime, timedelta
+import yfinance as yf
 import plotly.graph_objects as go
-from ta_global import ta_global
+import pandas as pd
+from agents.ta_global import ta_global
 from llm_utils import call_llm
 
 st.set_page_config(page_title="AI Global Technical Macro Analyst", page_icon="🌍")
-
 st.title("🌍 AI Global Macro Technical Analyst Demo")
 st.markdown(
     """
-    This demo fetches global market data, computes technical metrics (multi-horizon), and asks the LLM to summarize
+    This demo fetches global market data, computes technical metrics, and asks the LLM to summarize the global technical outlook
     in both a professional (analyst) and plain-English (executive) format.
     """
 )
@@ -29,17 +29,24 @@ st.subheader("Raw Global Technical Data")
 with st.expander("Show raw summary dict", expanded=False):
     st.json(summary)
 
-# ----------- CHART GENERATION FUNCTION -----------
-def plot_chart(ticker, label, summary_key):
-    with st.container():
-        with st.spinner(f"Loading {label} historical data..."):
+# ========== EQUITIES ==========
+with st.header("Equities"):
+    for label, ticker in [
+        ("S&P 500", "^GSPC"),
+        ("Nasdaq", "^IXIC"),
+        ("EuroStoxx50", "^STOXX50E"),
+        ("Nikkei", "^N225"),
+        ("Hang Seng", "^HSI"),
+        ("FTSE100", "^FTSE"),
+        ("VIX", "^VIX"),
+    ]:
+        with st.expander(f"{label} ({ticker})", expanded=False):
             try:
                 end = datetime.today()
-                start = end - timedelta(days=250)
+                start = end - timedelta(days=180)
                 df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
-                # ---- Flatten MultiIndex if needed ----
                 if isinstance(df.columns, pd.MultiIndex):
-                    df.columns = ['_'.join([str(i) for i in col if i]) for i, col in enumerate(df.columns.values)]
+                    df.columns = ['_'.join([str(i) for i in col if i]) for col in df.columns.values]
                 df = df.reset_index()
                 date_col, close_col = None, None
                 for col in df.columns:
@@ -47,94 +54,145 @@ def plot_chart(ticker, label, summary_key):
                         date_col = col
                     if isinstance(col, str) and "close" in col.lower():
                         close_col = col
-                if not date_col or not close_col:
-                    st.info(f"{label} chart failed to load: columns found: {list(df.columns)}")
+                if not date_col or not close_col or len(df.dropna(subset=[date_col, close_col])) < 5:
+                    st.info(f"Not enough {label} data to plot.")
                 else:
                     df = df.dropna(subset=[date_col, close_col])
-                    if len(df) < 30:
-                        st.info(f"Not enough {label} data to plot.")
-                    else:
-                        # Compute 30/90/200d SMA
-                        df['SMA_30'] = df[close_col].rolling(30).mean()
-                        df['SMA_90'] = df[close_col].rolling(90).mean()
-                        df['SMA_200'] = df[close_col].rolling(200).mean()
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(
-                            x=df[date_col], y=df[close_col],
-                            mode='lines', name=label, line=dict(width=2)
-                        ))
-                        fig.add_trace(go.Scatter(
-                            x=df[date_col], y=df['SMA_30'],
-                            mode='lines', name='SMA 30d'
-                        ))
-                        fig.add_trace(go.Scatter(
-                            x=df[date_col], y=df['SMA_90'],
-                            mode='lines', name='SMA 90d'
-                        ))
-                        fig.add_trace(go.Scatter(
-                            x=df[date_col], y=df['SMA_200'],
-                            mode='lines', name='SMA 200d'
-                        ))
-                        fig.update_layout(
-                            title=f"{label} (Price + 30/90/200d SMA)",
-                            xaxis_title="Date", yaxis_title="Price",
-                            template="plotly_white", height=350
-                        )
-                        st.markdown(f"**{label} (Last 6 Months)**")
-                        st.plotly_chart(fig, use_container_width=True)
-
-                        # --- Show window stats table from summary
-                        stats_data = summary.get(summary_key, {})
-                        stats = []
-                        for window in [30, 90, 200]:
-                            pct = stats_data.get(f'change_{window}d_pct', float('nan'))
-                            vol = stats_data.get(f'vol_{window}d', float('nan'))
-                            trend = stats_data.get(f'trend_{window}d', "-")
-                            stats.append({
-                                "Window": f"{window}d",
-                                "% Change": f"{pct:.2f}%" if pct == pct else "-",
-                                "Volatility": f"{vol:.2%}" if vol == vol else "-",
-                                "Trend": trend
-                            })
-                        df_stats = pd.DataFrame(stats)
-                        st.dataframe(df_stats, use_container_width=True, hide_index=True)
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=df[date_col], y=df[close_col], mode='lines', name=label
+                    ))
+                    fig.update_layout(
+                        title=f"{label} (Last 6 Months)",
+                        xaxis_title="Date", yaxis_title="Price",
+                        template="plotly_white", height=320
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
                 st.info(f"{label} chart failed to load: {e}")
 
-# ----------- CHARTS FOR ALL GLOBAL MAJORS -----------
-chart_configs = [
-    # (ticker, display name, summary key)
-    ("^GSPC", "S&P 500", "s&p500"),
-    ("^VIX", "VIX (Volatility Index)", "vix"),
-    ("^IXIC", "Nasdaq", "nasdaq"),
-    ("^STOXX50E", "Eurostoxx50", "eurostoxx50"),
-    ("^N225", "Nikkei", "nikkei"),
-    ("^HSI", "Hang Seng", "hangseng"),
-    ("^FTSE", "FTSE 100", "ftse100"),
-    ("^TNX", "US 10Y Yield", "us10y"),
-    ("^IRX", "US 2Y Yield", "us2y"),
-    ("DX-Y.NYB", "US Dollar Index (DXY)", "dxy"),
-    ("USDSGD=X", "USD/SGD", "usd_sgd"),
-    ("JPY=X", "USD/JPY", "usd_jpy"),
-    ("EURUSD=X", "EUR/USD", "eur_usd"),
-    ("USDCNH=X", "USD/CNH", "usd_cnh"),
-    ("GC=F", "Gold", "gold"),
-    ("BZ=F", "Brent Oil", "oil_brent"),
-    ("CL=F", "WTI Oil", "oil_wti"),
-    ("HG=F", "Copper", "copper"),
-]
+# ========== FIXED INCOME / RATES ==========
+with st.header("Fixed Income / Rates"):
+    for label, ticker in [
+        ("US 10Y Yield", "^TNX"),
+        ("US 2Y Yield", "^IRX"),
+    ]:
+        with st.expander(f"{label} ({ticker})", expanded=False):
+            try:
+                end = datetime.today()
+                start = end - timedelta(days=180)
+                df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = ['_'.join([str(i) for i in col if i]) for col in df.columns.values]
+                df = df.reset_index()
+                date_col, close_col = None, None
+                for col in df.columns:
+                    if isinstance(col, str) and col.lower() in ["date", "datetime", "index"]:
+                        date_col = col
+                    if isinstance(col, str) and "close" in col.lower():
+                        close_col = col
+                if not date_col or not close_col or len(df.dropna(subset=[date_col, close_col])) < 5:
+                    st.info(f"Not enough {label} data to plot.")
+                else:
+                    df = df.dropna(subset=[date_col, close_col])
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=df[date_col], y=df[close_col], mode='lines', name=label
+                    ))
+                    fig.update_layout(
+                        title=f"{label} (Last 6 Months)",
+                        xaxis_title="Date", yaxis_title="Yield (%)",
+                        template="plotly_white", height=320
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.info(f"{label} chart failed to load: {e}")
 
-for ticker, label, summary_key in chart_configs:
-    st.subheader(label)
-    plot_chart(ticker, label, summary_key)
+# ========== FX ==========
+with st.header("FX"):
+    for label, ticker in [
+        ("DXY Dollar Index", "DX-Y.NYB"),
+        ("USD/SGD", "USDSGD=X"),
+        ("USD/JPY", "JPY=X"),
+        ("EUR/USD", "EURUSD=X"),
+        ("USD/CNH", "USDCNH=X"),
+    ]:
+        with st.expander(f"{label} ({ticker})", expanded=False):
+            try:
+                end = datetime.today()
+                start = end - timedelta(days=180)
+                df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = ['_'.join([str(i) for i in col if i]) for col in df.columns.values]
+                df = df.reset_index()
+                date_col, close_col = None, None
+                for col in df.columns:
+                    if isinstance(col, str) and col.lower() in ["date", "datetime", "index"]:
+                        date_col = col
+                    if isinstance(col, str) and "close" in col.lower():
+                        close_col = col
+                if not date_col or not close_col or len(df.dropna(subset=[date_col, close_col])) < 5:
+                    st.info(f"Not enough {label} data to plot.")
+                else:
+                    df = df.dropna(subset=[date_col, close_col])
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=df[date_col], y=df[close_col], mode='lines', name=label
+                    ))
+                    fig.update_layout(
+                        title=f"{label} (Last 6 Months)",
+                        xaxis_title="Date", yaxis_title="FX Rate",
+                        template="plotly_white", height=320
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.info(f"{label} chart failed to load: {e}")
 
-# ----------- LLM Summaries -----------
+# ========== COMMODITIES ==========
+with st.header("Commodities"):
+    for label, ticker in [
+        ("Gold", "GC=F"),
+        ("Brent Oil", "BZ=F"),
+        ("WTI Oil", "CL=F"),
+        ("Copper", "HG=F"),
+    ]:
+        with st.expander(f"{label} ({ticker})", expanded=False):
+            try:
+                end = datetime.today()
+                start = end - timedelta(days=180)
+                df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = ['_'.join([str(i) for i in col if i]) for col in df.columns.values]
+                df = df.reset_index()
+                date_col, close_col = None, None
+                for col in df.columns:
+                    if isinstance(col, str) and col.lower() in ["date", "datetime", "index"]:
+                        date_col = col
+                    if isinstance(col, str) and "close" in col.lower():
+                        close_col = col
+                if not date_col or not close_col or len(df.dropna(subset=[date_col, close_col])) < 5:
+                    st.info(f"Not enough {label} data to plot.")
+                else:
+                    df = df.dropna(subset=[date_col, close_col])
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=df[date_col], y=df[close_col], mode='lines', name=label
+                    ))
+                    fig.update_layout(
+                        title=f"{label} (Last 6 Months)",
+                        xaxis_title="Date", yaxis_title="Price",
+                        template="plotly_white", height=320
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.info(f"{label} chart failed to load: {e}")
+
+# --- LLM Summaries Section
 st.subheader("LLM-Generated Summaries")
 if st.button("Generate LLM Global Summaries", type="primary"):
-    import json
-    json_summary = json.dumps(summary, indent=2)
     with st.spinner("Querying LLM..."):
         try:
+            json_summary = json.dumps(summary, indent=2)
             llm_output = call_llm("global", json_summary)
             if "Technical Summary" in llm_output and "Plain-English Summary" in llm_output:
                 tech = llm_output.split("Plain-English Summary")[0].replace("Technical Summary", "").strip()
