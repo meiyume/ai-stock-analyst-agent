@@ -93,36 +93,34 @@ def plot_chart(ticker, label, explanation):
                 st.info(f"Not enough {label} data to plot.")
                 return
 
-            # Calculate SMA20, SMA50
+            # Calculate SMA20, SMA50, Volatility20 (20-day stdev of Close)
             df["SMA20"] = df[close_col].rolling(window=20).mean()
             df["SMA50"] = df[close_col].rolling(window=50).mean()
-            # Calculate rolling volatility (20d stdev of Close)
             df["Volatility20"] = df[close_col].rolling(window=20).std()
 
             fig = go.Figure()
             # Main price line
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df[close_col],
-                mode='lines', name=label, yaxis="y1"
+                mode='lines', name=label
             ))
             # SMA20
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df["SMA20"],
-                mode='lines', name='SMA 20', line=dict(dash='dot'), yaxis="y1"
+                mode='lines', name='SMA 20', line=dict(dash='dot')
             ))
             # SMA50
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df["SMA50"],
-                mode='lines', name='SMA 50', line=dict(dash='dash'), yaxis="y1"
+                mode='lines', name='SMA 50', line=dict(dash='dash')
             ))
-            # Volatility overlay (its own axis, auto-scaled)
+            # Volatility overlay (orange dashed line, left axis, no extra y-axis)
             if "Volatility20" in df.columns and not df["Volatility20"].isna().all():
                 fig.add_trace(go.Scatter(
                     x=df[date_col], y=df["Volatility20"],
                     mode='lines', name="Volatility (20d std)",
                     line=dict(color="orange", dash='dashdot', width=2),
-                    opacity=0.85,
-                    yaxis="y3"
+                    opacity=0.85
                 ))
             # Volume (secondary axis)
             if volume_col and volume_col in df.columns:
@@ -133,32 +131,14 @@ def plot_chart(ticker, label, explanation):
                     opacity=0.5
                 ))
 
-            # Layout for triple axis
+            # Layout for dual axis
             fig.update_layout(
                 title=label,
                 xaxis_title="Date",
-                yaxis=dict(
-                    title="Price",
-                    showgrid=True,
-                    side="left"
-                ),
+                yaxis_title="Price",
+                yaxis=dict(title="Price", showgrid=True),
                 yaxis2=dict(
-                    title="Volume",
-                    overlaying='y',
-                    side='right',
-                    showgrid=False,
-                    rangemode='tozero'
-                ),
-                yaxis3=dict(
-                    title="Volatility",
-                    overlaying="y",
-                    side="right",
-                    anchor="free",
-                    position=1.09,  # Place far right (so it doesn't overlap volume)
-                    showgrid=False,
-                    rangemode='tozero',
-                    tickfont=dict(color="orange"),
-                    titlefont=dict(color="orange"),
+                    title="Volume", overlaying='y', side='right', showgrid=False, rangemode='tozero'
                 ),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 template="plotly_white",
@@ -169,8 +149,6 @@ def plot_chart(ticker, label, explanation):
             st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.info(f"{label} chart failed to load: {e}")
-
-
 
 # --- Chart definitions and explanations ---
 chart_list = [
@@ -270,7 +248,6 @@ chart_list = [
 st.subheader("Global Market Charts")
 for chart in chart_list:
     plot_chart(chart["ticker"], chart["label"], chart["explanation"])
-
 
 
 
