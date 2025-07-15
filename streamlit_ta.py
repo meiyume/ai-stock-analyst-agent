@@ -2,191 +2,20 @@ import streamlit as st
 import json
 from datetime import datetime, timedelta
 import pandas as pd
+import yfinance as yf
 import plotly.graph_objects as go
-
 from agents.ta_global import ta_global
 from llm_utils import call_llm
 
-# -- Chart dictionary: label, explanation, and key as returned from ta_global()
-CHARTS = [
-    {
-        "key": "sp500",
-        "label": "S&P 500 (Last 6 Months)",
-        "explanation": "S&P 500 is a broad-based US equity index representing leading companies from every major sector. Analysts use it to gauge overall market sentiment and economic health.",
-    },
-    {
-        "key": "nasdaq",
-        "label": "Nasdaq (Last 6 Months)",
-        "explanation": "Nasdaq represents technology and growth stocks, providing insight into the performance of the tech sector and market risk appetite.",
-    },
-    {
-        "key": "eurostoxx50",
-        "label": "EuroStoxx 50 (Last 6 Months)",
-        "explanation": "EuroStoxx 50 tracks leading blue-chip companies in the Eurozone and is often used as a proxy for European equity sentiment.",
-    },
-    {
-        "key": "nikkei",
-        "label": "Nikkei 225 (Last 6 Months)",
-        "explanation": "Nikkei 225 is the main index of Japanese equities and is a key indicator of Asia-Pacific economic momentum.",
-    },
-    {
-        "key": "hangseng",
-        "label": "Hang Seng Index (Last 6 Months)",
-        "explanation": "Hang Seng Index is the primary barometer of the Hong Kong stock market and reflects the health of China-related equities.",
-    },
-    {
-        "key": "ftse100",
-        "label": "FTSE 100 (Last 6 Months)",
-        "explanation": "FTSE 100 tracks the largest companies on the London Stock Exchange and is a benchmark for the UK economy.",
-    },
-    {
-        "key": "vix",
-        "label": "VIX Volatility Index (Last 6 Months)",
-        "explanation": "VIX measures US stock market volatility. Rising VIX indicates market fear or uncertainty, while low VIX reflects calm markets.",
-    },
-    {
-        "key": "us10y",
-        "label": "US 10Y Treasury Yield (Last 6 Months)",
-        "explanation": "US 10-Year Treasury Yield is a global benchmark for risk-free rates and economic growth expectations.",
-    },
-    {
-        "key": "us2y",
-        "label": "US 2Y Yield (Last 6 Months)",
-        "explanation": "US 2-Year Yield reflects near-term interest rate expectations and monetary policy outlook.",
-    },
-    {
-        "key": "dxy",
-        "label": "US Dollar Index (DXY) (Last 6 Months)",
-        "explanation": "DXY tracks the value of the US dollar versus a basket of major world currencies. A rising DXY indicates USD strength.",
-    },
-    {
-        "key": "usdsgd",
-        "label": "USD/SGD FX Rate (Last 6 Months)",
-        "explanation": "USD/SGD is the exchange rate between US Dollar and Singapore Dollar, relevant for Asian FX flows.",
-    },
-    {
-        "key": "usdcnh",
-        "label": "USD/CNH FX Rate (Last 6 Months)",
-        "explanation": "USD/CNH is the US Dollar to Chinese offshore Yuan, reflecting China's capital flow and trade sentiment.",
-    },
-    {
-        "key": "eur_usd",
-        "label": "EUR/USD FX Rate (Last 6 Months)",
-        "explanation": "EUR/USD is the world's most traded currency pair, key for global capital flows and central bank policy.",
-    },
-    {
-        "key": "gold",
-        "label": "Gold Futures (Last 6 Months)",
-        "explanation": "Gold is a global safe haven and inflation hedge. Its price trends are watched by investors for risk sentiment.",
-    },
-    {
-        "key": "oil_brent",
-        "label": "Brent Crude Oil (Last 6 Months)",
-        "explanation": "Brent oil is a benchmark for global crude prices, influencing inflation, trade, and geopolitical risk.",
-    },
-    {
-        "key": "oil_wti",
-        "label": "WTI Crude Oil (Last 6 Months)",
-        "explanation": "WTI is the key benchmark for North American crude oil, closely tracked by energy analysts and traders.",
-    },
-    {
-        "key": "copper",
-        "label": "Copper Futures (Last 6 Months)",
-        "explanation": "Copper prices are an indicator of global industrial demand and economic cycles.",
-    },
-]
-
-def plot_chart(df, label, explanation):
-    # -- Defensive: flatten multiindex if needed --
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = ['_'.join([str(i) for i in col if i]) for col in df.columns.values]
-    cols = [str(c).lower() for c in df.columns]
-    # -- Find date, close, volume columns robustly --
-    date_col = None
-    close_col = None
-    volume_col = None
-    for c in df.columns:
-        c_str = str(c).lower()
-        if any(x in c_str for x in ["date", "datetime", "index"]):
-            date_col = c
-        if "close" in c_str and "adj" not in c_str:
-            close_col = c
-        if "vol" in c_str and "notional" not in c_str:
-            volume_col = c
-    # Fallbacks
-    if date_col is None: date_col = df.columns[0]
-    if close_col is None:
-        for c in df.columns:
-            if "close" in str(c).lower():
-                close_col = c
-                break
-    if close_col is None:
-        st.info(f"{label}: No close price column found.")
-        return
-
-    # Drop NaN
-    df = df.dropna(subset=[date_col, close_col])
-    if len(df) < 5:
-        st.info(f"Not enough {label} data to plot.")
-        return
-
-    # Calculate SMA 20, SMA 50, and rolling volatility (stdev)
-    df = df.copy()
-    df["sma20"] = df[close_col].rolling(20).mean()
-    df["sma50"] = df[close_col].rolling(50).mean()
-    df["volatility20"] = df[close_col].rolling(20).std()
-    # Prepare chart
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=df[date_col], y=df[close_col], mode='lines', name=label,
-        line=dict(color='royalblue', width=2)
-    ))
-    fig.add_trace(go.Scatter(
-        x=df[date_col], y=df["sma20"], mode='lines', name='SMA 20',
-        line=dict(color='red', dash='dot')
-    ))
-    fig.add_trace(go.Scatter(
-        x=df[date_col], y=df["sma50"], mode='lines', name='SMA 50',
-        line=dict(color='teal', dash='dash')
-    ))
-    # Volatility overlay (as line, 2nd y)
-    fig.add_trace(go.Scatter(
-        x=df[date_col], y=df["volatility20"], name="20d Volatility",
-        mode="lines", line=dict(color="orange", width=1.3), yaxis="y2"
-    ))
-    # Volume as bars (if available)
-    if volume_col:
-        fig.add_trace(go.Bar(
-            x=df[date_col], y=df[volume_col], name="Volume",
-            marker_color='rgba(135,206,250,0.18)', yaxis="y3",
-            opacity=0.6
-        ))
-
-    # Layout: show dual y-axis for volatility, optional for volume
-    fig.update_layout(
-        title=dict(text=f"{label}", x=0.5),
-        xaxis_title="Date",
-        yaxis=dict(title="Price"),
-        yaxis2=dict(title="Volatility (20d)", overlaying="y", side="right", showgrid=False),
-        yaxis3=dict(
-            title="Volume",
-            anchor="free", overlaying="y", side="right",
-            position=1.00, showgrid=False, showticklabels=False, layer="below traces"
-        ) if volume_col else {},
-        legend=dict(orientation="h", x=0, y=1.18),
-        height=320,
-        margin=dict(t=40, b=40)
-    )
-    st.markdown(f"**{label}**")
-    st.caption(explanation)
-    st.plotly_chart(fig, use_container_width=True)
-
-# -- PAGE SETUP --
 st.set_page_config(page_title="AI Global Technical Macro Analyst", page_icon="🌍")
 st.title("🌍 AI Global Macro Technical Analyst Demo")
-st.markdown("""
-This demo fetches global market data, computes technical metrics, and asks the LLM to summarize the global technical outlook in both a professional (analyst) and plain-English (executive) format.
-""")
+
+st.markdown(
+    """
+    This demo fetches global market data, computes technical metrics, and asks the LLM to summarize the global technical outlook
+    in both a professional (analyst) and plain-English (executive) format.
+    """
+)
 
 # --- Get latest global technical summary
 with st.spinner("Loading global technical summary..."):
@@ -197,12 +26,13 @@ with st.spinner("Loading global technical summary..."):
         st.error(f"Error in ta_global(): {e}")
         st.stop()
 
-# --- LLM Summary section FIRST ---
+# --- LLM Summaries at the top
 st.subheader("LLM-Generated Summaries")
+json_summary = json.dumps(summary, indent=2)
+
 if st.button("Generate LLM Global Summaries", type="primary"):
     with st.spinner("Querying LLM..."):
         try:
-            json_summary = json.dumps(summary, indent=2)
             llm_output = call_llm("global", json_summary)
             if "Technical Summary" in llm_output and "Plain-English Summary" in llm_output:
                 tech = llm_output.split("Plain-English Summary")[0].replace("Technical Summary", "").strip()
@@ -217,21 +47,198 @@ if st.button("Generate LLM Global Summaries", type="primary"):
         except Exception as e:
             st.error(f"LLM error: {e}")
 
-# --- CHARTS SECTION ---
-st.subheader("Global Macro Charts")
-for chart in CHARTS:
-    df = summary.get(chart["key"])
-    if isinstance(df, pd.DataFrame):
-        plot_chart(df, chart["label"], chart["explanation"])
-    else:
-        st.info(f"{chart['label']}: No data available.")
+st.caption("If you do not see the summaries, check the console logs for LLM errors or ensure your OpenAI API key is correctly set.")
 
-# --- RAW DATA EXPANDER ---
+# --- Raw Data Section
 st.subheader("Raw Global Technical Data")
 with st.expander("Show raw summary dict", expanded=False):
     st.json(summary)
 
-st.caption("If you do not see the summaries or charts, check the console logs for errors or ensure your OpenAI API key is correctly set.")
+# --- Chart section helper ---
+def find_col(possibles, columns):
+    for p in possibles:
+        for c in columns:
+            if p in str(c).lower():
+                return c
+    return None
+
+def plot_chart(ticker, label, explanation):
+    with st.container():
+        st.markdown(f"#### {label}")
+        st.caption(explanation)
+        try:
+            end = datetime.today()
+            start = end - timedelta(days=180)
+            df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
+            if df is None or len(df) < 10:
+                st.info(f"Not enough {label} data to plot.")
+                return
+
+            # Flatten MultiIndex columns, if needed
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = ['_'.join([str(i) for i in col if i]) for col in df.columns.values]
+            df = df.reset_index()
+
+            date_col = find_col(['date', 'datetime', 'index'], df.columns) or df.columns[0]
+            close_col = find_col(['close'], df.columns)
+            volume_col = find_col(['volume'], df.columns)
+
+            if not date_col or not close_col:
+                st.info(f"{label} chart failed to load: columns found: {list(df.columns)}")
+                return
+
+            # Clean data
+            df = df.dropna(subset=[date_col, close_col])
+            if len(df) < 10:
+                st.info(f"Not enough {label} data to plot.")
+                return
+
+            # Calculate SMA20, SMA50
+            df["SMA20"] = df[close_col].rolling(window=20).mean()
+            df["SMA50"] = df[close_col].rolling(window=50).mean()
+
+            fig = go.Figure()
+            # Main price line
+            fig.add_trace(go.Scatter(
+                x=df[date_col], y=df[close_col],
+                mode='lines', name=label
+            ))
+            # SMA20
+            fig.add_trace(go.Scatter(
+                x=df[date_col], y=df["SMA20"],
+                mode='lines', name='SMA 20', line=dict(dash='dot')
+            ))
+            # SMA50
+            fig.add_trace(go.Scatter(
+                x=df[date_col], y=df["SMA50"],
+                mode='lines', name='SMA 50', line=dict(dash='dash')
+            ))
+            # Volume (secondary axis)
+            if volume_col and volume_col in df.columns:
+                fig.add_trace(go.Bar(
+                    x=df[date_col], y=df[volume_col],
+                    name="Volume", yaxis="y2",
+                    marker_color="rgba(0,160,255,0.16)",
+                    opacity=0.5
+                ))
+
+            # Layout for dual axis
+            fig.update_layout(
+                title=label,
+                xaxis_title="Date",
+                yaxis_title="Price",
+                yaxis=dict(title="Price", showgrid=True),
+                yaxis2=dict(
+                    title="Volume", overlaying='y', side='right', showgrid=False, rangemode='tozero'
+                ),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                template="plotly_white",
+                height=350,
+                bargap=0
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.info(f"{label} chart failed to load: {e}")
+
+# --- Chart definitions and explanations ---
+chart_list = [
+    {
+        "ticker": "^GSPC",
+        "label": "S&P 500 (Last 6 Months)",
+        "explanation": "The S&P 500 is a broad-based index representing large-cap US equities across economic sectors. Analysts study it to assess overall US market health and risk sentiment."
+    },
+    {
+        "ticker": "^VIX",
+        "label": "VIX (Volatility Index)",
+        "explanation": "The VIX reflects expected US stock market volatility (fear/greed). A rising VIX signals heightened investor anxiety."
+    },
+    {
+        "ticker": "^IXIC",
+        "label": "Nasdaq Composite",
+        "explanation": "Tracks over 3,000 technology and growth-oriented companies. Used to monitor tech sector momentum and risk appetite."
+    },
+    {
+        "ticker": "^STOXX50E",
+        "label": "EuroStoxx 50",
+        "explanation": "Major European blue-chip index, often a proxy for Eurozone market health and capital flows."
+    },
+    {
+        "ticker": "^N225",
+        "label": "Nikkei 225",
+        "explanation": "The benchmark for Japanese equities and an indicator of Asia-Pacific risk trends."
+    },
+    {
+        "ticker": "^HSI",
+        "label": "Hang Seng Index",
+        "explanation": "The Hang Seng represents the Hong Kong equity market and is closely watched for signs of China/Asia sentiment shifts."
+    },
+    {
+        "ticker": "^FTSE",
+        "label": "FTSE 100",
+        "explanation": "The FTSE 100 is the primary UK equity index, tracking the largest London-listed companies and reflecting European market trends."
+    },
+    {
+        "ticker": "^TNX",
+        "label": "US 10-Year Treasury Yield",
+        "explanation": "The 10-year yield is a global benchmark for interest rates, influencing borrowing costs and risk assets worldwide."
+    },
+    {
+        "ticker": "^IRX",
+        "label": "US 2-Year Treasury Yield",
+        "explanation": "Short-term US government bond yield. Rising 2-year yields can signal shifting Fed policy expectations."
+    },
+    {
+        "ticker": "DX-Y.NYB",
+        "label": "US Dollar Index (DXY)",
+        "explanation": "DXY measures the US dollar's strength against a basket of major currencies. It affects global trade and capital flows."
+    },
+    {
+        "ticker": "USDSGD=X",
+        "label": "USD/SGD FX Rate",
+        "explanation": "The USD/SGD exchange rate is closely monitored as an indicator of Singapore’s economic health and regional capital flows."
+    },
+    {
+        "ticker": "JPY=X",
+        "label": "USD/JPY FX Rate",
+        "explanation": "Tracks the US dollar against the Japanese yen. Used to gauge risk sentiment and monetary policy trends in Asia."
+    },
+    {
+        "ticker": "EURUSD=X",
+        "label": "EUR/USD FX Rate",
+        "explanation": "The EUR/USD rate is the world's most traded FX pair, serving as a barometer of global macro and policy divergence."
+    },
+    {
+        "ticker": "USDCNH=X",
+        "label": "USD/CNH FX Rate",
+        "explanation": "Reflects the offshore yuan versus the US dollar. A gauge of global investor sentiment towards China."
+    },
+    {
+        "ticker": "GC=F",
+        "label": "Gold Futures",
+        "explanation": "Gold is a traditional safe-haven asset. Its price movement signals inflation and global risk sentiment."
+    },
+    {
+        "ticker": "BZ=F",
+        "label": "Brent Crude Oil",
+        "explanation": "Brent is the world’s key oil price benchmark. It affects inflation, trade balances, and energy markets."
+    },
+    {
+        "ticker": "CL=F",
+        "label": "WTI Crude Oil",
+        "explanation": "WTI is the US oil benchmark, important for tracking energy prices and economic activity."
+    },
+    {
+        "ticker": "HG=F",
+        "label": "Copper Futures",
+        "explanation": "Copper is an industrial bellwether, used to assess the strength of global manufacturing and economic growth."
+    },
+]
+
+# --- Plot all charts ---
+st.subheader("Global Market Charts")
+for chart in chart_list:
+    plot_chart(chart["ticker"], chart["label"], chart["explanation"])
 
 
 
