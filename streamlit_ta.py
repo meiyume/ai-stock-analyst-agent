@@ -3,7 +3,7 @@ import pandas as pd
 import yfinance as yf
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
-from ta_global import ta_global
+from agents.ta_global import ta_global
 from llm_utils import call_llm
 
 st.set_page_config(page_title="AI Global Technical Macro Analyst", page_icon="🌍")
