@@ -9,38 +9,49 @@ def fetch_yf(symbol, period="13mo", interval="1d"):
     print(f"{symbol} rows: {len(data)}", flush=True)
     return data
 
+def get_close_series(d):
+    # Defensive: try Close, then Adj Close, always return a Series or None
+    if "Close" in d and isinstance(d["Close"], pd.Series) and not d["Close"].dropna().empty:
+        return d["Close"].dropna()
+    elif "Adj Close" in d and isinstance(d["Adj Close"], pd.Series) and not d["Adj Close"].dropna().empty:
+        return d["Adj Close"].dropna()
+    else:
+        return None
+
 def compute_pct_change(series, periods):
-    if len(series) < periods + 1:
+    if series is None or len(series) < periods + 1:
         return np.nan
     return (series.iloc[-1] / series.iloc[-(periods + 1)] - 1) * 100
 
 def compute_rolling_vol(series, window):
-    if len(series) < window + 1:
+    if series is None or len(series) < window + 1:
         return np.nan
     returns = series.pct_change()
     vol = returns.rolling(window=window).std().iloc[-1]
     if pd.isna(vol):
         return np.nan
-    return vol * np.sqrt(252)  # annualized
+    return vol * np.sqrt(252)
 
 def compute_trend(series, window):
-    if len(series) < window:
+    if series is None or len(series) < window:
         return "Unknown"
     ma = series.rolling(window).mean()
-    if pd.isna(ma.iloc[-1]):
+    val = ma.iloc[-1]
+    if pd.isna(val):
         return "Unknown"
-    return "Uptrend" if series.iloc[-1] > ma.iloc[-1] else "Downtrend"
+    return "Uptrend" if series.iloc[-1] > val else "Downtrend"
 
 def compute_breadth(indices, window):
     above_ma = 0
     valid = 0
     for s in indices:
-        if len(s) < window:
+        if s is None or len(s) < window:
             continue
         ma = s.rolling(window).mean()
-        if pd.isna(ma.iloc[-1]):
+        val = ma.iloc[-1]
+        if pd.isna(val):
             continue
-        if s.iloc[-1] > ma.iloc[-1]:
+        if s.iloc[-1] > val:
             above_ma += 1
         valid += 1
     if valid == 0:
@@ -94,14 +105,10 @@ def ta_global():
 
     for key, d in data.items():
         try:
-            # --- Robustly get close/adj close price series ---
-            close = d.get("Close")
-            if close is None or close.dropna().empty:
-                close = d.get("Adj Close")
-            if close is None or close.dropna().empty:
+            close = get_close_series(d)
+            if close is None:
                 print(f"WARNING: No usable Close/Adj Close for {key}")
                 continue
-            close = close.dropna()
             metrics = {}
             for win in WINDOWS:
                 suffix = f"{win}d"
@@ -113,14 +120,11 @@ def ta_global():
         except Exception as e:
             print(f"ERROR computing metrics for {key}: {e}", flush=True)
 
+    # Build major_indices list of price series
     major_indices = [
-        # Robust to missing Close/Adj Close
-        (data[k].get("Close") if "Close" in data[k] else data[k].get("Adj Close")).dropna()
+        get_close_series(data[k])
         for k in ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"]
-        if k in data and not data[k].empty and (
-            (data[k].get("Close") is not None and not data[k]["Close"].dropna().empty) or
-            (data[k].get("Adj Close") is not None and not data[k]["Adj Close"].dropna().empty)
-        )
+        if k in data and get_close_series(data[k]) is not None
     ]
     breadth = {}
     for win in [50, 200]:
@@ -159,9 +163,9 @@ def ta_global():
 
     return summary
 
-# Test/debug in terminal
 if __name__ == "__main__":
     ta_global()
+
 
 
 
