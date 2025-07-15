@@ -59,13 +59,23 @@ def call_openai(model, prompt, api_key, temperature=0.2, max_tokens=1024):
     from openai import OpenAI
     import traceback
     client = OpenAI(api_key=api_key)
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
-    return response.choices[0].message.content.strip()
+    print("About to call OpenAI with model:", model)
+    print("Prompt (first 100 chars):", repr(prompt[:100]))
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        print("OpenAI API call succeeded, response object:", response)
+        print("Choices:", getattr(response, "choices", None))
+        print("Returning:", response.choices[0].message.content.strip())
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print("[llm_utils.py][call_openai] OpenAI API error:", e)
+        print(traceback.format_exc())
+        raise
 
 def call_gemini(model, prompt, api_key, **kwargs):
     import google.generativeai as genai
