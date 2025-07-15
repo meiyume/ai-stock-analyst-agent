@@ -93,13 +93,13 @@ def plot_chart(ticker, label, explanation):
                 st.info(f"Not enough {label} data to plot.")
                 return
 
-            # Calculate SMA20, SMA50, Volatility20 (20-day stdev of Close)
+            # Calculate SMA20, SMA50, Volatility (20d stdev)
             df["SMA20"] = df[close_col].rolling(window=20).mean()
             df["SMA50"] = df[close_col].rolling(window=50).mean()
-            df["Volatility20"] = df[close_col].rolling(window=20).std()
+            df["Volatility20"] = df[close_col].rolling(window=20).std() * 20  # Multiply for visibility
 
             fig = go.Figure()
-            # Main price line
+            # Price
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df[close_col],
                 mode='lines', name=label
@@ -114,15 +114,15 @@ def plot_chart(ticker, label, explanation):
                 x=df[date_col], y=df["SMA50"],
                 mode='lines', name='SMA 50', line=dict(dash='dash')
             ))
-            # Volatility overlay (orange dashed line, left axis, no extra y-axis)
+            # Volatility overlay (orange dashed, scaled for visibility)
             if "Volatility20" in df.columns and not df["Volatility20"].isna().all():
                 fig.add_trace(go.Scatter(
                     x=df[date_col], y=df["Volatility20"],
-                    mode='lines', name="Volatility (20d std)",
+                    mode='lines', name="Volatility (20d std, ×20)",
                     line=dict(color="orange", dash='dashdot', width=2),
-                    opacity=0.85
+                    opacity=0.7
                 ))
-            # Volume (secondary axis)
+            # Volume (right y-axis)
             if volume_col and volume_col in df.columns:
                 fig.add_trace(go.Bar(
                     x=df[date_col], y=df[volume_col],
@@ -131,16 +131,29 @@ def plot_chart(ticker, label, explanation):
                     opacity=0.5
                 ))
 
-            # Layout for dual axis
             fig.update_layout(
                 title=label,
                 xaxis_title="Date",
-                yaxis_title="Price",
-                yaxis=dict(title="Price", showgrid=True),
-                yaxis2=dict(
-                    title="Volume", overlaying='y', side='right', showgrid=False, rangemode='tozero'
+                yaxis=dict(
+                    title="Price / Volatility (×20)",
+                    showgrid=True,
+                    side="left",
+                    tickfont=dict(color="#fff"),
+                    titlefont=dict(color="#fff")
                 ),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                yaxis2=dict(
+                    title="Volume",
+                    overlaying='y',
+                    side='right',
+                    showgrid=False,
+                    rangemode='tozero',
+                    tickfont=dict(color="#fff"),
+                    titlefont=dict(color="#fff")
+                ),
+                legend=dict(
+                    orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                    font=dict(color="#fff")
+                ),
                 template="plotly_white",
                 height=350,
                 bargap=0
@@ -149,6 +162,7 @@ def plot_chart(ticker, label, explanation):
             st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.info(f"{label} chart failed to load: {e}")
+
 
 # --- Chart definitions and explanations ---
 chart_list = [
