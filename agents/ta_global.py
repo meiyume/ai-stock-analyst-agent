@@ -9,14 +9,55 @@ def fetch_yf(symbol, period="13mo", interval="1d"):
     print(f"{symbol} rows: {len(data)}", flush=True)
     return data
 
-def get_close_series(d):
-    # Defensive: try Close, then Adj Close, always return a Series or None
-    if "Close" in d and isinstance(d["Close"], pd.Series) and not d["Close"].dropna().empty:
-        return d["Close"].dropna()
-    elif "Adj Close" in d and isinstance(d["Adj Close"], pd.Series) and not d["Adj Close"].dropna().empty:
-        return d["Adj Close"].dropna()
-    else:
+# ... rest of code above unchanged ...
+
+def get_close_series(d, symbol):
+    if d is None or d.empty:
         return None
+    # Try for ('Close', symbol) format
+    try:
+        if ("Close", symbol) in d.columns:
+            s = d[("Close", symbol)].dropna()
+            if not s.empty:
+                return s
+        if ("Adj Close", symbol) in d.columns:
+            s = d[("Adj Close", symbol)].dropna()
+            if not s.empty:
+                return s
+    except Exception:
+        pass
+    # Fallback: try legacy single-level
+    for cname in ["Close", "Adj Close"]:
+        if cname in d.columns:
+            s = d[cname].dropna()
+            if not s.empty:
+                return s
+    return None
+
+# ... inside your for key, d in data.items():
+for key, d in data.items():
+    try:
+        close = get_close_series(d, SYMBOLS[key])
+        if close is None:
+            print(f"WARNING: No usable Close/Adj Close for {key}")
+            continue
+        metrics = {}
+        for win in WINDOWS:
+            suffix = f"{win}d"
+            metrics[f"change_{suffix}_pct"] = compute_pct_change(close, win)
+            metrics[f"vol_{suffix}"] = compute_rolling_vol(close, win)
+            metrics[f"trend_{suffix}"] = compute_trend(close, win)
+        metrics["last"] = float(close.iloc[-1]) if not close.empty else np.nan
+        out[key] = metrics
+    except Exception as e:
+        print(f"ERROR computing metrics for {key}: {e}", flush=True)
+
+# ... when building major_indices
+major_indices = [
+    get_close_series(data[k], SYMBOLS[k])
+    for k in ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"]
+    if k in data and get_close_series(data[k], SYMBOLS[k]) is not None
+]
 
 def compute_pct_change(series, periods):
     if series is None or len(series) < periods + 1:
