@@ -62,7 +62,7 @@ def run_full_technical_analysis(
     sector_summary = ta_sector.analyze(ticker, company_name, horizon, lookback_days, api_key)
     market_summary = ta_market.analyze(ticker, company_name, horizon, lookback_days, api_key)
     commodity_summary = ta_commodity.analyze(ticker, company_name, horizon, lookback_days, api_key)
-    global_summary = ta_global.analyze(ticker, company_name, horizon, lookback_days, api_key)
+    global_summary = ta_global.ta_global()
 
     # Compose composite summary (chief = stock for now)
     chief_risk_score = stock_summary.get("composite_risk_score", 50)
