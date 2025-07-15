@@ -84,6 +84,20 @@ plot_yf_chart("^VIX", "VIX", "VIX (Volatility Index, Last 6 Months)")
 plot_yf_chart("^IXIC", "Nasdaq", "Nasdaq Index (Last 6 Months)")
 plot_yf_chart("^STOXX50E", "EuroStoxx 50", "EuroStoxx 50 Index (Last 6 Months)")
 plot_yf_chart("^N225", "Nikkei 225", "Nikkei 225 Index (Last 6 Months)")
+plot_yf_chart("^HSI", "Hang Seng", "Hang Seng Index (Last 6 Months)")
+plot_yf_chart("^FTSE", "FTSE 100", "FTSE 100 Index (Last 6 Months)")
+plot_yf_chart("^TNX", "US 10Y Yield", "US 10-Year Treasury Yield (Last 6 Months)")
+plot_yf_chart("^IRX", "US 2Y Yield", "US 2-Year Treasury Yield (Last 6 Months)")
+plot_yf_chart("DX-Y.NYB", "DXY", "US Dollar Index (DXY) (Last 6 Months)")
+plot_yf_chart("USDSGD=X", "USD/SGD", "USD/SGD Exchange Rate (Last 6 Months)")
+plot_yf_chart("JPY=X", "USD/JPY", "USD/JPY Exchange Rate (Last 6 Months)")
+plot_yf_chart("EURUSD=X", "EUR/USD", "EUR/USD Exchange Rate (Last 6 Months)")
+plot_yf_chart("USDCNH=X", "USD/CNH", "USD/CNH Exchange Rate (Last 6 Months)")
+plot_yf_chart("GC=F", "Gold", "Gold Futures (Last 6 Months)")
+plot_yf_chart("BZ=F", "Oil Brent", "Brent Crude Oil Futures (Last 6 Months)")
+plot_yf_chart("CL=F", "Oil WTI", "WTI Crude Oil Futures (Last 6 Months)")
+plot_yf_chart("HG=F", "Copper", "Copper Futures (Last 6 Months)")
+
 
 # --- LLM Summaries Section ---
 
