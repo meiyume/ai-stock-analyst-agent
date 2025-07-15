@@ -26,7 +26,8 @@ with st.spinner("Loading global technical summary..."):
     except Exception as e:
         st.error(f"Error in ta_global(): {e}")
         st.stop()
-        
+
+# --- Show composite score/label at the top ---
 score = summary.get("composite_score", None)
 label = summary.get("composite_label", None)
 if score is not None and label:
@@ -106,7 +107,7 @@ def plot_chart(ticker, label, explanation):
 
             # Flatten MultiIndex columns, if needed
             if isinstance(df.columns, pd.MultiIndex):
-                df.columns = ['_'.join([str(i) for i in col if i]) for col in df.columns.values]
+                df.columns = ['_'.join([str(i) for i in col if i]) for i in df.columns.values]
             df = df.reset_index()
 
             date_col = find_col(['date', 'datetime', 'index'], df.columns) or df.columns[0]
@@ -294,6 +295,7 @@ chart_list = [
 st.subheader("Global Market Charts")
 for chart in chart_list:
     plot_chart(chart["ticker"], chart["label"], chart["explanation"])
+
 
 
 
