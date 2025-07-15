@@ -1,9 +1,9 @@
 import streamlit as st
 import json
-import plotly.graph_objs as go
-import pandas as pd
-from ta_global import ta_global
+from agents.ta_global import ta_global      # Adjusted path
 from llm_utils import call_llm
+import yfinance as yf
+import plotly.graph_objects as go
 
 st.set_page_config(page_title="AI Global Technical Macro Analyst", page_icon="🌍")
 
@@ -24,38 +24,32 @@ with st.spinner("Loading global technical summary..."):
         st.error(f"Error in ta_global(): {e}")
         st.stop()
 
-# === [NEW] S&P 500 Chart Section ===
-sp500_df = None
-# Try common keys for S&P 500 data in summary
-for key in ['sp500', 's&p500', 'S&P500', 'S&P_500']:
-    if key in summary.get('data', {}):
-        sp500_df = summary['data'][key]
-        break
+# ==== 1. S&P 500 Chart (added here, below green box) ====
+with st.spinner("Loading S&P 500 historical data..."):
+    try:
+        sp500_hist = yf.download("^GSPC", period="6mo", interval="1d", auto_adjust=True, progress=False)
+        if not sp500_hist.empty:
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=sp500_hist.index,
+                y=sp500_hist["Close"],
+                mode='lines',
+                name='S&P 500'
+            ))
+            fig.update_layout(
+                title="S&P 500 Index (Last 6 Months)",
+                xaxis_title="Date",
+                yaxis_title="Price",
+                template="plotly_white",
+                height=350
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("S&P 500 chart not available in current summary.")
+    except Exception as e:
+        st.info(f"S&P 500 chart failed to load: {e}")
 
-if isinstance(sp500_df, pd.DataFrame) and not sp500_df.empty:
-    if "Date" in sp500_df.columns:
-        sp500_df = sp500_df.set_index("Date")
-    sp500_df = sp500_df.sort_index().iloc[-90:]  # Show last 90 rows
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=sp500_df.index,
-        y=sp500_df['Close'],
-        mode='lines',
-        name='S&P 500'
-    ))
-    fig.update_layout(
-        title='S&P 500 Closing Prices (Last 90 Days)',
-        xaxis_title='Date',
-        yaxis_title='Close',
-        height=400
-    )
-    st.markdown("#### S&P 500 Chart")
-    st.plotly_chart(fig, use_container_width=True)
-else:
-    st.info("S&P 500 chart not available in current summary.")
-
-# === END Chart Section ===
-
+# --- Raw summary dict
 st.subheader("Raw Global Technical Data")
 with st.expander("Show raw summary dict", expanded=False):
     st.json(summary)
@@ -63,7 +57,7 @@ with st.expander("Show raw summary dict", expanded=False):
 # --- Prepare prompt for LLM
 json_summary = json.dumps(summary, indent=2)
 
-# --- Run LLM agent for summary (global)
+# --- LLM Summaries (your original UI below)
 st.subheader("LLM-Generated Summaries")
 if st.button("Generate LLM Global Summaries", type="primary"):
     with st.spinner("Querying LLM..."):
