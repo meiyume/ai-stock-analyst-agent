@@ -89,7 +89,7 @@ def plot_chart(ticker, label, explanation):
 
             # Flatten MultiIndex columns, if needed
             if isinstance(df.columns, pd.MultiIndex):
-                df.columns = ['_'.join([str(i) for i in col if i]) for i in df.columns.values]
+                df.columns = ['_'.join([str(i) for i in col if i]) for col in df.columns.values]
             df = df.reset_index()
 
             # Helper to find relevant columns
@@ -174,6 +174,7 @@ def plot_chart(ticker, label, explanation):
             st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.info(f"{label} chart failed to load: {e}")
+
 
 
 # --- Chart definitions and explanations ---
