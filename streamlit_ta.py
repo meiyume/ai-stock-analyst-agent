@@ -2,6 +2,7 @@ import streamlit as st
 import json
 from datetime import datetime, timedelta
 import pandas as pd
+import numpy as np
 import yfinance as yf
 import plotly.graph_objects as go
 from agents.ta_global import ta_global
@@ -62,15 +63,21 @@ def find_col(possibles, columns):
                 return c
     return None
 
-def infer_trend(row):
-    # Simple logic for uptrend/downtrend/sideways using SMAs
-    if pd.isna(row['SMA20']) or pd.isna(row['SMA50']) or pd.isna(row['SMA200']):
-        return "No Signal"
-    if row['SMA20'] > row['SMA50'] > row['SMA200']:
-        return "Uptrend"
-    if row['SMA20'] < row['SMA50'] < row['SMA200']:
-        return "Downtrend"
-    return "Sideways/Range"
+def calc_trend_info(df, date_col, close_col, window=50):
+    """Returns percentage change, latest price, and trend direction for given window."""
+    if close_col not in df.columns or len(df) < window + 1:
+        return "N/A", "N/A", "N/A"
+    window_df = df.tail(window)
+    if window_df[close_col].isnull().all():
+        return "N/A", "N/A", "N/A"
+    start = window_df[close_col].iloc[0]
+    end = window_df[close_col].iloc[-1]
+    if pd.isna(start) or pd.isna(end):
+        return "N/A", "N/A", "N/A"
+    pct = 100 * (end - start) / start if start != 0 else 0
+    trend = "Uptrend" if end > start else "Downtrend" if end < start else "Flat"
+    latest = f"{end:,.2f}"
+    return f"{pct:+.2f}%", latest, trend
 
 def plot_chart(ticker, label, explanation):
     with st.container():
@@ -138,7 +145,6 @@ def plot_chart(ticker, label, explanation):
                     opacity=0.5
                 ))
 
-            # Layout for dual axis
             fig.update_layout(
                 title=label,
                 xaxis_title="Date",
@@ -155,17 +161,20 @@ def plot_chart(ticker, label, explanation):
 
             st.plotly_chart(fig, use_container_width=True)
 
-            # --- Trend Table (just last day) ---
-            trend_row = df.iloc[-1][['SMA20', 'SMA50', 'SMA200']].to_dict()
-            trend_value = infer_trend(df.iloc[-1])
-            st.markdown("**Simple SMA Trend Table**")
-            trend_data = {
-                "SMA 20": trend_row['SMA20'],
-                "SMA 50": trend_row['SMA50'],
-                "SMA 200": trend_row['SMA200'],
-                "Trend Signal": trend_value
-            }
-            st.table(pd.DataFrame([trend_data]))
+            # --- 4-column Trend Table ---
+            table_windows = [20, 50, 200]
+            table_rows = []
+            for win in table_windows:
+                pct, latest, trend = calc_trend_info(df, date_col, close_col, window=win)
+                table_rows.append({
+                    "Window": f"{win}d",
+                    "% Change": pct,
+                    "Latest": latest,
+                    "Trend": trend
+                })
+            table_df = pd.DataFrame(table_rows)
+            st.markdown("**Trend Table**")
+            st.table(table_df)
 
         except Exception as e:
             st.info(f"{label} chart failed to load: {e}")
@@ -177,13 +186,86 @@ chart_list = [
         "label": "S&P 500 (Last 6 Months)",
         "explanation": "The S&P 500 is a broad-based index representing large-cap US equities across economic sectors. Analysts study it to assess overall US market health and risk sentiment."
     },
-    # ... (rest of your chart_list unchanged)
     {
         "ticker": "^VIX",
         "label": "VIX (Volatility Index)",
         "explanation": "The VIX reflects expected US stock market volatility (fear/greed). A rising VIX signals heightened investor anxiety."
     },
-    # ... Add the rest as before ...
+    {
+        "ticker": "^IXIC",
+        "label": "Nasdaq Composite",
+        "explanation": "Tracks over 3,000 technology and growth-oriented companies. Used to monitor tech sector momentum and risk appetite."
+    },
+    {
+        "ticker": "^STOXX50E",
+        "label": "EuroStoxx 50",
+        "explanation": "Major European blue-chip index, often a proxy for Eurozone market health and capital flows."
+    },
+    {
+        "ticker": "^N225",
+        "label": "Nikkei 225",
+        "explanation": "The benchmark for Japanese equities and an indicator of Asia-Pacific risk trends."
+    },
+    {
+        "ticker": "^HSI",
+        "label": "Hang Seng Index",
+        "explanation": "The Hang Seng represents the Hong Kong equity market and is closely watched for signs of China/Asia sentiment shifts."
+    },
+    {
+        "ticker": "^FTSE",
+        "label": "FTSE 100",
+        "explanation": "The FTSE 100 is the primary UK equity index, tracking the largest London-listed companies and reflecting European market trends."
+    },
+    {
+        "ticker": "^TNX",
+        "label": "US 10-Year Treasury Yield",
+        "explanation": "The 10-year yield is a global benchmark for interest rates, influencing borrowing costs and risk assets worldwide."
+    },
+    {
+        "ticker": "^IRX",
+        "label": "US 2-Year Treasury Yield",
+        "explanation": "Short-term US government bond yield. Rising 2-year yields can signal shifting Fed policy expectations."
+    },
+    {
+        "ticker": "DX-Y.NYB",
+        "label": "US Dollar Index (DXY)",
+        "explanation": "DXY measures the US dollar's strength against a basket of major currencies. It affects global trade and capital flows."
+    },
+    {
+        "ticker": "USDSGD=X",
+        "label": "USD/SGD FX Rate",
+        "explanation": "The USD/SGD exchange rate is closely monitored as an indicator of Singapore’s economic health and regional capital flows."
+    },
+    {
+        "ticker": "JPY=X",
+        "label": "USD/JPY FX Rate",
+        "explanation": "Tracks the US dollar against the Japanese yen. Used to gauge risk sentiment and monetary policy trends in Asia."
+    },
+    {
+        "ticker": "EURUSD=X",
+        "label": "EUR/USD FX Rate",
+        "explanation": "The EUR/USD rate is the world's most traded FX pair, serving as a barometer of global macro and policy divergence."
+    },
+    {
+        "ticker": "USDCNH=X",
+        "label": "USD/CNH FX Rate",
+        "explanation": "Reflects the offshore yuan versus the US dollar. A gauge of global investor sentiment towards China."
+    },
+    {
+        "ticker": "GC=F",
+        "label": "Gold Futures",
+        "explanation": "Gold is a traditional safe-haven asset. Its price movement signals inflation and global risk sentiment."
+    },
+    {
+        "ticker": "BZ=F",
+        "label": "Brent Crude Oil",
+        "explanation": "Brent is the world’s key oil price benchmark. It affects inflation, trade balances, and energy markets."
+    },
+    {
+        "ticker": "CL=F",
+        "label": "WTI Crude Oil",
+        "explanation": "WTI is the US oil benchmark, important for tracking energy prices and economic activity."
+    },
     {
         "ticker": "HG=F",
         "label": "Copper Futures",
@@ -195,7 +277,6 @@ chart_list = [
 st.subheader("Global Market Charts")
 for chart in chart_list:
     plot_chart(chart["ticker"], chart["label"], chart["explanation"])
-
 
 
 
