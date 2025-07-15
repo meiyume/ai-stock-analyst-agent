@@ -1,9 +1,11 @@
 import streamlit as st
 import json
-from agents.ta_global import ta_global      # Adjusted path
-from llm_utils import call_llm
+from datetime import datetime, timedelta
+import pandas as pd
 import yfinance as yf
 import plotly.graph_objects as go
+from agents.ta_global import ta_global
+from llm_utils import call_llm
 
 st.set_page_config(page_title="AI Global Technical Macro Analyst", page_icon="🌍")
 
@@ -24,32 +26,44 @@ with st.spinner("Loading global technical summary..."):
         st.error(f"Error in ta_global(): {e}")
         st.stop()
 
-# ==== 1. S&P 500 Chart (added here, below green box) ====
-with st.spinner("Loading S&P 500 historical data..."):
-    try:
-        sp500_hist = yf.download("^GSPC", period="6mo", interval="1d", auto_adjust=True, progress=False)
-        if not sp500_hist.empty:
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=sp500_hist.index,
-                y=sp500_hist["Close"],
-                mode='lines',
-                name='S&P 500'
-            ))
-            fig.update_layout(
-                title="S&P 500 Index (Last 6 Months)",
-                xaxis_title="Date",
-                yaxis_title="Price",
-                template="plotly_white",
-                height=350
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("S&P 500 chart not available in current summary.")
-    except Exception as e:
-        st.info(f"S&P 500 chart failed to load: {e}")
+# ---- S&P 500 Chart Robust Block ----
+with st.container():
+    with st.spinner("Loading S&P 500 historical data..."):
+        try:
+            end = datetime.today()
+            start = end - timedelta(days=180)
+            sp500_hist = yf.download("^GSPC", start=start, end=end, interval="1d", auto_adjust=True, progress=False)
+            if sp500_hist.empty or "Close" not in sp500_hist.columns:
+                st.info("S&P 500 data unavailable or missing 'Close' column.")
+            else:
+                sp500_hist = sp500_hist.reset_index()
+                # Force Date column to datetime
+                if not pd.api.types.is_datetime64_any_dtype(sp500_hist["Date"]):
+                    sp500_hist["Date"] = pd.to_datetime(sp500_hist["Date"], errors='coerce')
+                # Remove rows with NaN in Date or Close
+                sp500_hist = sp500_hist.dropna(subset=["Date", "Close"])
+                # Only plot if we have enough points
+                if sp500_hist.shape[0] < 5:
+                    st.info("Not enough data to plot S&P 500 chart.")
+                else:
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=sp500_hist["Date"],
+                        y=sp500_hist["Close"],
+                        mode='lines',
+                        name='S&P 500'
+                    ))
+                    fig.update_layout(
+                        title="S&P 500 Index (Last 6 Months)",
+                        xaxis_title="Date",
+                        yaxis_title="Price",
+                        template="plotly_white",
+                        height=350
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.info(f"S&P 500 chart failed to load: {e}")
 
-# --- Raw summary dict
 st.subheader("Raw Global Technical Data")
 with st.expander("Show raw summary dict", expanded=False):
     st.json(summary)
@@ -57,7 +71,7 @@ with st.expander("Show raw summary dict", expanded=False):
 # --- Prepare prompt for LLM
 json_summary = json.dumps(summary, indent=2)
 
-# --- LLM Summaries (your original UI below)
+# --- Run LLM agent for summary (global)
 st.subheader("LLM-Generated Summaries")
 if st.button("Generate LLM Global Summaries", type="primary"):
     with st.spinner("Querying LLM..."):
@@ -78,5 +92,6 @@ if st.button("Generate LLM Global Summaries", type="primary"):
             st.error(f"LLM error: {e}")
 
 st.caption("If you do not see the summaries, check the console logs for LLM errors or ensure your OpenAI API key is correctly set.")
+
 
 
