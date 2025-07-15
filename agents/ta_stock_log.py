@@ -1,0 +1,156 @@
+import yfinance as yf
+import pandas as pd
+import numpy as np
+from datetime import datetime
+
+def fetch_yf(symbol, period="13mo", interval="1d"):
+    print(f"Downloading {symbol} ...", flush=True)
+    data = yf.download(symbol, period=period, interval=interval, progress=False)
+    print(f"{symbol} rows: {len(data)}", flush=True)
+    return data
+
+def compute_pct_change(series, periods):
+    if len(series) < periods + 1:
+        return np.nan
+    return (series.iloc[-1] / series.iloc[-(periods + 1)] - 1) * 100
+
+def compute_rolling_vol(series, window):
+    returns = series.pct_change()
+    vol = returns.rolling(window=window).std().iloc[-1]
+    if pd.isna(vol):
+        return np.nan
+    return vol * np.sqrt(252)  # annualized
+
+def compute_trend(series, window):
+    ma = series.rolling(window).mean()
+    if pd.isna(ma.iloc[-1]):
+        return "Unknown"
+    return "Uptrend" if series.iloc[-1] > ma.iloc[-1] else "Downtrend"
+
+def compute_breadth(indices, window):
+    above_ma = 0
+    valid = 0
+    for s in indices:
+        try:
+            if len(s) >= window:
+                ma = s.rolling(window).mean()
+                if s.iloc[-1] > ma.iloc[-1]:
+                    above_ma += 1
+                valid += 1
+        except Exception as e:
+            print(f"Breadth calculation error: {e}")
+            continue
+    if valid == 0:
+        return np.nan
+    return (above_ma / valid) * 100
+
+def ta_global():
+    SYMBOLS = {
+        "VIX": "^VIX",
+        "S&P500": "^GSPC",
+        "Nasdaq": "^IXIC",
+        "EuroStoxx50": "^STOXX50E",
+        "Nikkei": "^N225",
+        "HangSeng": "^HSI",
+        "FTSE100": "^FTSE",
+        "US10Y": "^TNX",
+        "US2Y": "^IRX",
+        "DXY": "DX-Y.NYB",
+        "USD_SGD": "USDSGD=X",
+        "USD_JPY": "JPY=X",
+        "EUR_USD": "EURUSD=X",
+        "USD_CNH": "USDCNH=X",
+        "Gold": "GC=F",
+        "Oil_Brent": "BZ=F",
+        "Oil_WTI": "CL=F",
+        "Copper": "HG=F",
+    }
+
+    WINDOWS = [30, 90, 200]
+
+    out = {}
+    data = {}
+
+    print("\n---- Starting downloads ----\n", flush=True)
+    for key, symbol in SYMBOLS.items():
+        try:
+            d = fetch_yf(symbol, period="13mo", interval="1d")
+            if d.empty:
+                print(f"WARNING: {symbol} ({key}) is empty!", flush=True)
+                d = fetch_yf(symbol, period="60d", interval="1d")
+                if d.empty:
+                    print(f"ERROR: {symbol} ({key}) is STILL empty after fallback.", flush=True)
+            data[key] = d
+        except Exception as e:
+            print(f"ERROR downloading {key} ({symbol}): {e}", flush=True)
+
+    print("\n---- Checking key symbols ----", flush=True)
+    for key in ["S&P500", "VIX"]:
+        if key in data:
+            print(f"{key} rows: {len(data[key])}, latest: {data[key].index[-1] if not data[key].empty else 'EMPTY'}", flush=True)
+
+    for key, d in data.items():
+        try:
+            close = d["Close"].dropna()
+            metrics = {}
+            for win in WINDOWS:
+                suffix = f"{win}d"
+                metrics[f"change_{suffix}_pct"] = compute_pct_change(close, win)
+                metrics[f"vol_{suffix}"] = compute_rolling_vol(close, win)
+                metrics[f"trend_{suffix}"] = compute_trend(close, win)
+            metrics["last"] = float(close.iloc[-1]) if not close.empty else np.nan
+            out[key] = metrics
+        except Exception as e:
+            print(f"ERROR computing metrics for {key}: {e}", flush=True)
+
+    major_indices = [
+        data[k]["Close"].dropna()
+        for k in ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"]
+        if k in data and not data[k].empty
+    ]
+    breadth = {}
+    for win in [50, 200]:
+        b = compute_breadth(major_indices, window=win)
+        print(f"Breadth {win}d: {b}", flush=True)
+        breadth[f"breadth_above_{win}dma_pct"] = b
+
+    try:
+        vix_30d = out["VIX"]["last"]
+        spx_trend = out["S&P500"]["trend_30d"]
+        print(f"VIX latest: {vix_30d}, SPX 30d trend: {spx_trend}", flush=True)
+        if vix_30d >= 25 or spx_trend == "Downtrend":
+            risk_regime = "Risk-Off"
+        elif vix_30d <= 15 and spx_trend == "Uptrend":
+            risk_regime = "Risk-On"
+        else:
+            risk_regime = "Neutral"
+    except Exception as e:
+        print(f"Risk regime calc error: {e}", flush=True)
+        risk_regime = "Unknown"
+
+    news_summary = "No news data yet. (Reserved for future global/regional/local news agent summary.)"
+
+    summary = {
+        "as_of": datetime.now().strftime("%Y-%m-%d"),
+        "lookbacks": WINDOWS,
+        **{k.lower(): v for k, v in out.items()},
+        **breadth,
+        "risk_regime": risk_regime,
+        "news": news_summary,
+    }
+
+    print("\n---- Global Agent Output ----", flush=True)
+    for k, v in summary.items():
+        print(f"{k}: {v}", flush=True)
+
+    return summary
+
+# Test/debug in terminal
+if __name__ == "__main__":
+    ta_global()
+
+
+
+
+
+
