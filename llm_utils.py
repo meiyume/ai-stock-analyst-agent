@@ -40,6 +40,7 @@ def _provider_worker(provider):
                     q.task_done()
         except Exception as e:
             print(f"[llm_utils] {provider} worker error: {e}")
+            print(traceback.format_())
 
 # --- Initialize queues, semaphores, workers ---
 for provider, lim in PROVIDER_LIMITS.items():
@@ -55,6 +56,7 @@ for provider, lim in PROVIDER_LIMITS.items():
 
 def call_openai(model, prompt, api_key, temperature=0.2, max_tokens=1024):
     from openai import OpenAI
+    import traceback
     client = OpenAI(api_key=api_key)
     response = client.chat.completions.create(
         model=model,
