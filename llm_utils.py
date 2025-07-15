@@ -186,11 +186,7 @@ PROMPT_TEMPLATES = {
     Potential Green Lights:  
     [List, with note on expected persistence]
     
-    Reference the news section for any timely or external drivers not visible in the technicals.
-    
-    ---
-    
-        
+    Reference the news section for any timely or external drivers not visible in the technicals.        
     """,
     }
 
