@@ -161,7 +161,7 @@ PROMPT_TEMPLATES = {
 AGENT_BRAINS = {
     "chief": {
         "provider": "openai",
-        "model": "gpt-4o",
+        "model": "gpt-3.5-turbo",
         "api_key": os.getenv("OPENAI_API_KEY"),
         "prompt_template": PROMPT_TEMPLATES["chief"],
     },
