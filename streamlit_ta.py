@@ -96,7 +96,6 @@ def plot_chart(ticker, label, explanation):
             # Calculate SMA20, SMA50
             df["SMA20"] = df[close_col].rolling(window=20).mean()
             df["SMA50"] = df[close_col].rolling(window=50).mean()
-
             # Calculate rolling volatility (20d stdev of Close)
             df["Volatility20"] = df[close_col].rolling(window=20).std()
 
@@ -116,13 +115,13 @@ def plot_chart(ticker, label, explanation):
                 x=df[date_col], y=df["SMA50"],
                 mode='lines', name='SMA 50', line=dict(dash='dash'), yaxis="y1"
             ))
-            # Volatility overlay (separate axis)
+            # Volatility overlay (its own axis, auto-scaled)
             if "Volatility20" in df.columns and not df["Volatility20"].isna().all():
                 fig.add_trace(go.Scatter(
                     x=df[date_col], y=df["Volatility20"],
                     mode='lines', name="Volatility (20d std)",
                     line=dict(color="orange", dash='dashdot', width=2),
-                    opacity=0.7,
+                    opacity=0.85,
                     yaxis="y3"
                 ))
             # Volume (secondary axis)
@@ -134,7 +133,7 @@ def plot_chart(ticker, label, explanation):
                     opacity=0.5
                 ))
 
-            # Layout for triple axis (price, volume, volatility)
+            # Layout for triple axis
             fig.update_layout(
                 title=label,
                 xaxis_title="Date",
@@ -152,11 +151,14 @@ def plot_chart(ticker, label, explanation):
                 ),
                 yaxis3=dict(
                     title="Volatility",
-                    anchor="free",
                     overlaying="y",
                     side="right",
-                    position=1.08,  # shifts axis to far right
-                    showgrid=False
+                    anchor="free",
+                    position=1.09,  # Place far right (so it doesn't overlap volume)
+                    showgrid=False,
+                    rangemode='tozero',
+                    tickfont=dict(color="orange"),
+                    titlefont=dict(color="orange"),
                 ),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 template="plotly_white",
@@ -167,6 +169,7 @@ def plot_chart(ticker, label, explanation):
             st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.info(f"{label} chart failed to load: {e}")
+
 
 
 # --- Chart definitions and explanations ---
