@@ -26,6 +26,18 @@ with st.spinner("Loading global technical summary..."):
     except Exception as e:
         st.error(f"Error in ta_global(): {e}")
         st.stop()
+        
+score = summary.get("composite_score", None)
+label = summary.get("composite_label", None)
+if score is not None and label:
+    color = {"Bullish": "#38b000", "Bearish": "#d90429", "Neutral": "#fbbf24"}
+    st.markdown(
+        f"<div style='background-color:{color.get(label, '#636363')}; color:white; padding:14px 8px; border-radius:10px; text-align:center; font-size:1.2em;'>"
+        f"<b>🌍 Composite Global Score:</b> {score:.2f} &mdash; <b>{label}</b>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    st.write("")  # spacing
 
 # --- LLM Summaries at the top
 st.subheader("LLM-Generated Summaries")
