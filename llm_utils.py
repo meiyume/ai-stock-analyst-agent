@@ -189,11 +189,11 @@ AGENT_BRAINS = {
         "api_key": os.getenv("GEMINI_API_KEY"),
         "prompt_template": PROMPT_TEMPLATES["commodities"],
     },
-    "globals": {
-        "provider": "claude",
-        "model": "claude-3-opus-20240229",
-        "api_key": os.getenv("CLAUDE_API_KEY"),
-        "prompt_template": PROMPT_TEMPLATES["globals"],
+    "global": {
+        "provider": "openai",
+        "model": "gpt-3.5-turbo",
+        "api_key": os.getenv("OPENAI_API_KEY"),
+        "prompt_template": PROMPT_TEMPLATES["global"],
     },
 }
 
