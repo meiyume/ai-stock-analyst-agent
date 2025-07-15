@@ -1,67 +1,134 @@
-import agents.ta_stock as ta_stock
-import copy
-import plotly.io as pio
-from llm_utils import call_llm
+import yfinance as yf
+import pandas as pd
+import numpy as np
+from datetime import datetime
 
-def parse_dual_summary(llm_output):
-    """
-    Splits the LLM output into technical and plain-English summaries.
-    Expects output to contain both "Technical Summary" and "Plain-English Summary" as section headers.
-    """
-    tech, plain = "", ""
-    if "Technical Summary" in llm_output and "Plain-English Summary" in llm_output:
-        parts = llm_output.split("Plain-English Summary")
-        tech = parts[0].replace("Technical Summary", "").strip()
-        plain = parts[1].strip()
-    else:
-        tech = llm_output
-        plain = llm_output
-    return tech, plain
+def fetch_yf(symbol, period="13mo", interval="1d"):
+    data = yf.download(symbol, period=period, interval=interval, progress=False)
+    return data
 
-def analyze(ticker, company_name=None, horizon="7 Days", lookback_days=None, api_key=None):
-    try:
-        summary = copy.deepcopy(ta_stock.analyze(ticker, company_name, horizon, lookback_days, api_key))
-        if "chart" in summary and summary["chart"] is not None:
-            try:
-                summary["chart"] = pio.from_json(summary["chart"].to_json())
-            except Exception:
-                summary["chart"] = None
-        signals = summary.copy()
-        keys = [
-            "sma_trend", "macd_signal", "bollinger_signal", "rsi_signal",
-            "stochastic_signal", "cmf_signal", "obv_signal", "adx_signal",
-            "atr_signal", "vol_spike", "patterns", "anomaly_events", "horizon", "risk_level"
-        ]
-        slim_signals = {k: signals.get(k) for k in keys}
-        if isinstance(slim_signals.get("patterns"), list):
-            slim_signals["patterns"] = slim_signals["patterns"][:3]
-        if isinstance(slim_signals.get("anomaly_events"), list):
-            slim_signals["anomaly_events"] = slim_signals["anomaly_events"][:3]
+def compute_pct_change(series, periods):
+    if len(series) < periods + 1:
+        return np.nan
+    return (series.iloc[-1] / series.iloc[-(periods + 1)] - 1) * 100
+
+def compute_rolling_vol(series, window):
+    returns = series.pct_change()
+    vol = returns.rolling(window=window).std().iloc[-1]
+    if pd.isna(vol):
+        return np.nan
+    return vol * np.sqrt(252)  # annualized
+
+def compute_trend(series, window):
+    ma = series.rolling(window).mean()
+    if pd.isna(ma.iloc[-1]):
+        return "Unknown"
+    return "Uptrend" if series.iloc[-1] > ma.iloc[-1] else "Downtrend"
+
+def compute_breadth(indices, window):
+    above_ma = 0
+    valid = 0
+    for s in indices:
         try:
-            llm_output = call_llm(
-                agent_name="global",
-                input_text=str(slim_signals)
-            )
-            tech, plain = parse_dual_summary(llm_output)
-            summary["llm_technical_summary"] = tech
-            summary["llm_plain_summary"] = plain
-        except Exception as e:
-            summary["llm_technical_summary"] = f"LLM error: {e}"
-            summary["llm_plain_summary"] = f"LLM error: {e}"
+            if len(s) >= window:
+                ma = s.rolling(window).mean()
+                if s.iloc[-1] > ma.iloc[-1]:
+                    above_ma += 1
+                valid += 1
+        except:
+            continue
+    if valid == 0:
+        return np.nan
+    return (above_ma / valid) * 100
 
-        summary["llm_summary"] = summary.get("llm_technical_summary", summary.get("summary", ""))
-        return summary
-    except Exception as e:
-        import pandas as pd
-        return {
-            "summary": f"⚠️ Global agent failed: {e}",
-            "llm_technical_summary": f"Global agent error: {e}",
-            "llm_plain_summary": f"Global agent error: {e}",
-            "llm_summary": f"Global agent error: {e}",
-            "risk_level": "N/A",
-            "df": pd.DataFrame(),
-            "chart": None,
-        }
+def ta_global():
+    # --- Define symbols (all free via yfinance) ---
+    SYMBOLS = {
+        "VIX": "^VIX",
+        "S&P500": "^GSPC",
+        "Nasdaq": "^IXIC",
+        "EuroStoxx50": "^STOXX50E",
+        "Nikkei": "^N225",
+        "HangSeng": "^HSI",
+        "FTSE100": "^FTSE",
+        "US10Y": "^TNX",
+        "US2Y": "^IRX",
+        "DXY": "DX-Y.NYB",
+        "USD_SGD": "USDSGD=X",
+        "USD_JPY": "JPY=X",
+        "EUR_USD": "EURUSD=X",
+        "USD_CNH": "USDCNH=X",
+        "Gold": "GC=F",
+        "Oil_Brent": "BZ=F",
+        "Oil_WTI": "CL=F",
+        "Copper": "HG=F",
+    }
+
+    WINDOWS = [30, 90, 200]  # Standard global lookback windows
+
+    out = {}
+    data = {}
+
+    # --- Download all data ---
+    for key, symbol in SYMBOLS.items():
+        try:
+            d = fetch_yf(symbol, period="13mo", interval="1d")
+            if d.empty:
+                d = fetch_yf(symbol, period="60d", interval="1d")
+            data[key] = d
+        except Exception as e:
+            pass
+
+    # --- Compute metrics for each asset & window ---
+    for key, d in data.items():
+        try:
+            close = d["Close"].dropna()
+            metrics = {}
+            for win in WINDOWS:
+                suffix = f"{win}d"
+                metrics[f"change_{suffix}_pct"] = compute_pct_change(close, win)
+                metrics[f"vol_{suffix}"] = compute_rolling_vol(close, win)
+                metrics[f"trend_{suffix}"] = compute_trend(close, win)
+            metrics["last"] = float(close.iloc[-1])
+            out[key] = metrics
+        except Exception as e:
+            pass
+
+    # --- Breadth: percent above 50/200 MA for major indices ---
+    major_indices = [data[k]["Close"].dropna() for k in ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"] if k in data and not data[k].empty]
+    breadth = {}
+    for win in [50, 200]:
+        breadth[f"breadth_above_{win}dma_pct"] = compute_breadth(major_indices, window=win)
+
+    # --- Composite risk regime (simple logic) ---
+    try:
+        vix_30d = out["VIX"]["last"]
+        spx_trend = out["S&P500"]["trend_30d"]
+        if vix_30d >= 25 or spx_trend == "Downtrend":
+            risk_regime = "Risk-Off"
+        elif vix_30d <= 15 and spx_trend == "Uptrend":
+            risk_regime = "Risk-On"
+        else:
+            risk_regime = "Neutral"
+    except:
+        risk_regime = "Unknown"
+
+    # --- News placeholder (for future news agents) ---
+    news_summary = "No news data yet. (Reserved for future global/regional/local news agent summary.)"
+
+    # --- Output summary dict ---
+    summary = {
+        "as_of": datetime.now().strftime("%Y-%m-%d"),
+        "lookbacks": WINDOWS,
+        **{k.lower(): v for k, v in out.items()},
+        **breadth,
+        "risk_regime": risk_regime,
+        "news": news_summary,
+    }
+
+    return summary
+
+# No print or Streamlit here; for frontend integration!
 
 
 
