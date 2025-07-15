@@ -29,6 +29,29 @@ st.subheader("Raw Global Technical Data")
 with st.expander("Show raw summary dict", expanded=False):
     st.json(summary)
 
+# ----------- LLM Summaries AT THE TOP -----------
+st.subheader("LLM-Generated Summaries")
+if st.button("Generate LLM Global Summaries", type="primary"):
+    import json
+    json_summary = json.dumps(summary, indent=2)
+    with st.spinner("Querying LLM..."):
+        try:
+            llm_output = call_llm("global", json_summary)
+            if "Technical Summary" in llm_output and "Plain-English Summary" in llm_output:
+                tech = llm_output.split("Plain-English Summary")[0].replace("Technical Summary", "").strip()
+                plain = llm_output.split("Plain-English Summary")[1].strip()
+                st.markdown("**Technical Summary**")
+                st.info(tech)
+                st.markdown("**Plain-English Summary**")
+                st.success(plain)
+            else:
+                st.warning("LLM output did not match expected template. Full output below:")
+                st.code(llm_output)
+        except Exception as e:
+            st.error(f"LLM error: {e}")
+
+st.caption("If you do not see the summaries, check the console logs for LLM errors or ensure your OpenAI API key is correctly set.")
+
 # ----------- CHART GENERATION FUNCTION -----------
 def plot_chart(ticker, label, summary_key):
     with st.container():
@@ -39,7 +62,7 @@ def plot_chart(ticker, label, summary_key):
                 df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
                 # ---- Flatten MultiIndex if needed ----
                 if isinstance(df.columns, pd.MultiIndex):
-                    df.columns = ['_'.join([str(i) for i in col if i]) for i, col in enumerate(df.columns.values)]
+                    df.columns = ['_'.join([str(i) for i in col if i]) for col in df.columns.values]
                 df = df.reset_index()
                 date_col, close_col = None, None
                 for col in df.columns:
@@ -103,7 +126,6 @@ def plot_chart(ticker, label, summary_key):
 
 # ----------- CHARTS FOR ALL GLOBAL MAJORS -----------
 chart_configs = [
-    # (ticker, display name, summary key)
     ("^GSPC", "S&P 500", "s&p500"),
     ("^VIX", "VIX (Volatility Index)", "vix"),
     ("^IXIC", "Nasdaq", "nasdaq"),
@@ -127,29 +149,6 @@ chart_configs = [
 for ticker, label, summary_key in chart_configs:
     st.subheader(label)
     plot_chart(ticker, label, summary_key)
-
-# ----------- LLM Summaries -----------
-st.subheader("LLM-Generated Summaries")
-if st.button("Generate LLM Global Summaries", type="primary"):
-    import json
-    json_summary = json.dumps(summary, indent=2)
-    with st.spinner("Querying LLM..."):
-        try:
-            llm_output = call_llm("global", json_summary)
-            if "Technical Summary" in llm_output and "Plain-English Summary" in llm_output:
-                tech = llm_output.split("Plain-English Summary")[0].replace("Technical Summary", "").strip()
-                plain = llm_output.split("Plain-English Summary")[1].strip()
-                st.markdown("**Technical Summary**")
-                st.info(tech)
-                st.markdown("**Plain-English Summary**")
-                st.success(plain)
-            else:
-                st.warning("LLM output did not match expected template. Full output below:")
-                st.code(llm_output)
-        except Exception as e:
-            st.error(f"LLM error: {e}")
-
-st.caption("If you do not see the summaries, check the console logs for LLM errors or ensure your OpenAI API key is correctly set.")
 
 
 
