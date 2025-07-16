@@ -383,7 +383,7 @@ def plot_chart(ticker, label, explanation):
                 })
             table_df = pd.DataFrame(table_rows)
             st.markdown("**Trend Table**")
-            st.table(table_df)
+            st.dataframe(table_df, hide_index=True)
         except Exception as e:
             st.info(f"{label} chart failed to load: {e}")
 
