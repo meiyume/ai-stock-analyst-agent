@@ -195,11 +195,7 @@ for asset_class in class_display_order:
             df = df[['Name'] + curr_cols]
 
         # --- Show dataframe with Name frozen and no index ---
-        st.dataframe(
-            df,
-            hide_index=True,
-            column_config={
-                "Name": st.column_config.Column("Name", frozen=True)
+        st.dataframe(df, hide_index=True)
             }
         )
 
