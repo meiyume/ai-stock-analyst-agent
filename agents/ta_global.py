@@ -45,12 +45,24 @@ def ta_global():
                 out[name] = {"error": "No data"}
                 continue
             close = df["Close"].dropna()
+            # Ensure close is a Series and not accidentally a DataFrame
+            if isinstance(close, pd.DataFrame):
+                close = close.squeeze()
             trends = {}
             for lb in lookbacks:
                 if len(close) >= lb:
                     val_now = close.iloc[-1]
                     val_then = close.iloc[-lb]
-                    if pd.notnull(val_now) and pd.notnull(val_then) and val_then != 0:
+                    # Force both to float to avoid pandas Series ambiguity bug
+                    try:
+                        val_now = float(val_now)
+                    except Exception:
+                        val_now = np.nan
+                    try:
+                        val_then = float(val_then)
+                    except Exception:
+                        val_then = np.nan
+                    if not pd.isna(val_now) and not pd.isna(val_then) and val_then != 0:
                         change = (val_now - val_then) / val_then * 100
                         trend = (
                             "Uptrend" if change > 2 else
@@ -61,13 +73,17 @@ def ta_global():
                         change, trend = np.nan, "N/A"
                 else:
                     change, trend = np.nan, "N/A"
-                trends[f"change_{lb}d_pct"] = float(np.round(change, 3)) if pd.notnull(change) else None
+                trends[f"change_{lb}d_pct"] = float(np.round(change, 3)) if not pd.isna(change) else None
                 trends[f"trend_{lb}d"] = trend
                 trends[f"vol_{lb}d"] = (
                     float(np.round(close[-lb:].std(), 3))
                     if len(close) >= lb and close[-lb:].notnull().sum() > 1 else None
                 )
-            trends["last"] = float(np.round(close.iloc[-1], 4)) if len(close) > 0 else None
+            # Last close price
+            try:
+                trends["last"] = float(np.round(close.iloc[-1], 4)) if len(close) > 0 else None
+            except Exception:
+                trends["last"] = None
             out[name] = trends
         except Exception as e:
             out[name] = {"error": str(e)}
@@ -76,15 +92,26 @@ def ta_global():
     breadth = {}
     above_50dma, above_200dma, count = 0, 0, 0
     for name, v in out.items():
-        if isinstance(v, dict) and "last" in v:
+        if isinstance(v, dict) and "last" in v and v.get("last") is not None:
             last = v["last"]
             symbol = indices[name]
             try:
                 df_breadth = yf.download(symbol, start=start, end=today, interval="1d", auto_adjust=True, progress=False)
                 close_breadth = df_breadth["Close"].dropna()
+                if isinstance(close_breadth, pd.DataFrame):
+                    close_breadth = close_breadth.squeeze()
                 if len(close_breadth) >= 200:
                     ma50 = close_breadth.rolling(50).mean().iloc[-1]
                     ma200 = close_breadth.rolling(200).mean().iloc[-1]
+                    # Ensure MAs are floats
+                    try:
+                        ma50 = float(ma50)
+                    except Exception:
+                        ma50 = np.nan
+                    try:
+                        ma200 = float(ma200)
+                    except Exception:
+                        ma200 = np.nan
                     if pd.notnull(ma50) and last > ma50:
                         above_50dma += 1
                     if pd.notnull(ma200) and last > ma200:
@@ -144,6 +171,7 @@ def ta_global():
 if __name__ == "__main__":
     result = ta_global()
     import pprint; pprint.pprint(result)
+
 
 
 
