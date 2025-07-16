@@ -196,8 +196,6 @@ for asset_class in class_display_order:
 
         # --- Show dataframe with Name frozen and no index ---
         st.dataframe(df, hide_index=True)
-            }
-        )
 
 st.caption("Assets are grouped by class. Note: Some tickers may not have reliable data (e.g. certain bonds/volatility indices on Yahoo).")
 
