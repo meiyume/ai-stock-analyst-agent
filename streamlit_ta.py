@@ -12,6 +12,9 @@ from llm_utils import call_llm
 st.set_page_config(page_title="AI Global Technical Macro Analyst", page_icon="🌍")
 st.title("🌍 AI Global Macro Technical Analyst Demo")
 
+# Show Streamlit version for troubleshooting
+st.caption(f"Streamlit version: {st.__version__}")
+
 st.markdown(
     """
     This demo fetches global market data, computes technical metrics, and asks the LLM to summarize the global technical outlook
@@ -88,9 +91,6 @@ if explanation:
 if hist_df is not None and not hist_df.empty:
     st.subheader("Historical Composite Market Score")
 
-    # (Optional: more pro, with regime color dots and bands)
-    import plotly.graph_objs as go
-
     regime_colors = {"Bullish": "#38B2AC", "Neutral": "#ECC94B", "Bearish": "#F56565"}
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -106,7 +106,9 @@ if hist_df is not None and not hist_df.empty:
         margin=dict(l=0, r=0, t=30, b=0),
         yaxis=dict(title="Composite Score"),
         showlegend=False,
-        template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white"
+        template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white",
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
     )
     st.plotly_chart(fig, use_container_width=True)
 
@@ -182,16 +184,24 @@ for asset_class in class_display_order:
                 ]
             rows.append(row)
         df = pd.DataFrame(rows, columns=cols)
-        
-        # Show dataframe in Streamlit with Name as first column, no row numbers
+
+        # --- Ensure "Name" is a column, not the index, and is first
+        if 'Name' not in df.columns:
+            df = df.reset_index()
+        df = df.reset_index(drop=True)
+        curr_cols = df.columns.tolist()
+        if curr_cols[0] != 'Name':
+            curr_cols.remove('Name')
+            df = df[['Name'] + curr_cols]
+
+        # --- Show dataframe with Name frozen and no index ---
         st.dataframe(
             df,
             hide_index=True,
             column_config={
-                "Name": st.column_config.Column("Name", frozen=True)  # Only works in Streamlit >= 1.27
+                "Name": st.column_config.Column("Name", frozen=True)
             }
         )
-
 
 st.caption("Assets are grouped by class. Note: Some tickers may not have reliable data (e.g. certain bonds/volatility indices on Yahoo).")
 
@@ -349,7 +359,9 @@ def plot_chart(ticker, label, explanation):
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                 template="plotly_white",
                 height=350,
-                bargap=0
+                bargap=0,
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
             )
 
             st.plotly_chart(fig, use_container_width=True)
@@ -470,7 +482,6 @@ chart_list = [
 st.subheader("Global Market Charts")
 for chart in chart_list:
     plot_chart(chart["ticker"], chart["label"], chart["explanation"])
-
 
 # ---- End ----
 
