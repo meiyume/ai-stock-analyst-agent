@@ -46,12 +46,7 @@ def color_trend(trend):
         return ""
 
 def color_ma(flag):
-    if flag == "✅":
-        return "background-color: #156f2c; color: #fff;"
-    elif flag == "❌":
-        return "background-color: #8b2323; color: #fff;"
-    else:
-        return ""
+    return ""  # No highlight for tick/cross
 
 def safe_fmt(val, pct=False):
     if val is None or pd.isna(val):
