@@ -194,6 +194,7 @@ PROMPT_TEMPLATES = {
     
     Explanation:  
     [Short “why {composite_label}” justification, referencing data and key drivers]
+    [Short “why {risk_regime}” justification, referencing data and key drivers]
     
     Reference the news section for any timely or external drivers not visible in the technicals.
     """,
