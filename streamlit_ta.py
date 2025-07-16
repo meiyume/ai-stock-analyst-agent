@@ -17,8 +17,7 @@ st.caption(f"Streamlit version: {st.__version__}")
 
 st.markdown(
     """
-    This demo fetches global market data, computes technical metrics, and asks the LLM to summarize the global technical outlook
-    in both a professional (analyst) and plain-English (executive) format.
+    This dashboard fetches global market data, computes technical metrics, applies cross-asset regime logic, and asks an LLM to summarize the global outlook in both pro and plain-English style.
     """
 )
 
@@ -42,10 +41,15 @@ if os.path.exists(history_file):
 else:
     st.info("No composite score history found yet.")
 
+# === HEADLINE METRICS & LOGIC ===
 as_of = summary.get("as_of", "N/A")
 composite_score = summary.get("composite_score", None)
 composite_label = summary.get("composite_label", None)
 risk_regime = summary.get("risk_regime", "N/A")
+risk_regime_rationale = summary.get("risk_regime_rationale", "")
+risk_regime_score = summary.get("risk_regime_score", None)
+anomaly_alerts = summary.get("anomaly_alerts", [])
+correlation_matrix = summary.get("correlation_matrix", None)
 out = summary.get("out", {})
 breadth = summary.get("breadth", {})
 
@@ -58,6 +62,7 @@ st.markdown(
     f"<span style='font-weight:600;'>Risk Regime:</span> {risk_regime}  |  <span style='font-weight:600;'>As of:</span> {as_of}",
     unsafe_allow_html=True
 )
+
 # === Rule-based human explanations ===
 composite_score_expl = {
     "Bullish": "A 'Bullish' composite market score means that, overall, the world’s major markets are showing strong, positive signals—most trends look healthy and investors are generally optimistic.",
@@ -70,27 +75,31 @@ risk_regime_expl = {
     "Bearish": "A 'Bearish' risk regime means volatility is rising and major markets are falling. Investors may be nervous, and caution is warranted."
 }
 explanation = ""
-
 if composite_label in composite_score_expl:
     explanation += composite_score_expl[composite_label]
-
 if risk_regime in risk_regime_expl:
-    # Only add a space if both are present
     if explanation:
         explanation += " "
     explanation += risk_regime_expl[risk_regime]
-
 if explanation:
     st.markdown(
         f"<span style='color:gray; font-size:0.80em;'>{explanation}</span>",
         unsafe_allow_html=True
     )
 
+if risk_regime_rationale:
+    st.markdown(
+        f"<span style='color:gray; font-size:0.86em;'>Risk Regime Rationale: {risk_regime_rationale}</span>",
+        unsafe_allow_html=True
+    )
+
+# --- Anomaly Alerts ---
+if anomaly_alerts:
+    st.warning("**Smart Anomaly Alerts:**\n\n" + "\n".join(anomaly_alerts))
 
 # --- Historical Composite Score Chart ---
 if hist_df is not None and not hist_df.empty:
     st.subheader("Historical Composite Market Score")
-
     regime_colors = {"Bullish": "#38B2AC", "Neutral": "#ECC94B", "Bearish": "#F56565"}
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -112,6 +121,31 @@ if hist_df is not None and not hist_df.empty:
     )
     st.plotly_chart(fig, use_container_width=True)
 
+# --- Cross-Asset Correlation Heatmap ---
+if correlation_matrix is not None:
+    st.subheader("Cross-Asset Correlation Heatmap (Last 60 Days)")
+    corr_df = pd.DataFrame(correlation_matrix)
+    fig_corr = go.Figure(
+        data=go.Heatmap(
+            z=corr_df.values,
+            x=corr_df.columns,
+            y=corr_df.index,
+            colorscale="RdBu",
+            zmin=-1, zmax=1,
+            colorbar=dict(title="Corr", tickvals=[-1, -0.5, 0, 0.5, 1])
+        )
+    )
+    fig_corr.update_layout(
+        height=340,
+        margin=dict(l=30, r=30, t=40, b=30),
+        xaxis_title="Asset",
+        yaxis_title="Asset",
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white",
+    )
+    st.plotly_chart(fig_corr, use_container_width=True)
+
 # ===== ASSET CLASS GROUPED TABLES =====
 def safe_fmt(val, pct=False):
     if val is None or pd.isna(val):
@@ -128,7 +162,7 @@ def trend_icon(val):
     elif val == "Sideways":
         return "🟡 Side"
     return val or "N/A"
-    
+
 def highlight_trend(val):
     base = (
         "display:inline-block;"
@@ -184,7 +218,6 @@ for asset_class in class_display_order:
                 ]
             rows.append(row)
         df = pd.DataFrame(rows, columns=cols)
-
         # --- Ensure "Name" is a column, not the index, and is first
         if 'Name' not in df.columns:
             df = df.reset_index()
@@ -193,8 +226,6 @@ for asset_class in class_display_order:
         if curr_cols[0] != 'Name':
             curr_cols.remove('Name')
             df = df[['Name'] + curr_cols]
-
-        # --- Show dataframe with Name frozen and no index ---
         st.dataframe(df, hide_index=True)
 
 st.caption("Assets are grouped by class. Note: Some tickers may not have reliable data (e.g. certain bonds/volatility indices on Yahoo).")
@@ -223,16 +254,12 @@ if st.button("Generate LLM Global Summaries", type="primary"):
                     current_section = "Explanation"
                 elif current_section and line_strip:
                     sections[current_section] += line + "\n"
-
-            # Display: Technical, Plain-English, then Explanation directly under the headline
             if sections["Technical Summary"]:
                 st.markdown("**Technical Summary**")
                 st.info(sections["Technical Summary"].strip())
-
             if sections["Plain-English Summary"]:
                 st.markdown("**Plain-English Summary**")
                 st.success(sections["Plain-English Summary"].strip())
-
             if sections["Explanation"]:
                 st.markdown("<span style='font-size:1.07em;font-weight:600;'>LLM Explanation (Why <b>{}</b> / Regime: <b>{}</b>?):</span>".format(
                     composite_label, risk_regime
@@ -283,57 +310,41 @@ def plot_chart(ticker, label, explanation):
             if df is None or len(df) < 10:
                 st.info(f"Not enough {label} data to plot.")
                 return
-
-            # Flatten MultiIndex columns, if needed
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = ['_'.join([str(i) for i in col if i]) for col in df.columns.values]
             df = df.reset_index()
-
             date_col = find_col(['date', 'datetime', 'index'], df.columns) or df.columns[0]
             close_col = find_col(['close'], df.columns)
             volume_col = find_col(['volume'], df.columns)
-
             if not date_col or not close_col:
                 st.info(f"{label} chart failed to load: columns found: {list(df.columns)}")
                 return
-
-            # Clean data
             df = df.dropna(subset=[date_col, close_col])
             if len(df) < 10:
                 st.info(f"Not enough {label} data to plot.")
                 return
-
-            # --- Calculate SMAs for trend overlays ---
             df["SMA20"] = df[close_col].rolling(window=20).mean()
             df["SMA50"] = df[close_col].rolling(window=50).mean()
             df["SMA200"] = df[close_col].rolling(window=200).mean()
-
-            # --- Clip to last 180 days for chart display only ---
             if len(df) > 180:
                 df = df.iloc[-180:].copy()
-
             fig = go.Figure()
-            # Main price line
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df[close_col],
                 mode='lines', name=label
             ))
-            # SMA20
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df["SMA20"],
                 mode='lines', name='SMA 20', line=dict(dash='dot')
             ))
-            # SMA50
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df["SMA50"],
                 mode='lines', name='SMA 50', line=dict(dash='dash')
             ))
-            # SMA200
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df["SMA200"],
                 mode='lines', name='SMA 200', line=dict(dash='solid', color='black')
             ))
-            # Volume (secondary axis)
             if volume_col and volume_col in df.columns:
                 fig.add_trace(go.Bar(
                     x=df[date_col], y=df[volume_col],
@@ -341,7 +352,6 @@ def plot_chart(ticker, label, explanation):
                     marker_color="rgba(0,160,255,0.16)",
                     opacity=0.5
                 ))
-
             fig.update_layout(
                 title=label,
                 xaxis_title="Date",
@@ -357,10 +367,7 @@ def plot_chart(ticker, label, explanation):
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)',
             )
-
             st.plotly_chart(fig, use_container_width=True)
-
-            # --- 4-column Trend Table (20d, 50d, 200d) ---
             table_windows = [20, 50, 200]
             table_rows = []
             for win in table_windows:
@@ -374,11 +381,9 @@ def plot_chart(ticker, label, explanation):
             table_df = pd.DataFrame(table_rows)
             st.markdown("**Trend Table**")
             st.table(table_df)
-
         except Exception as e:
             st.info(f"{label} chart failed to load: {e}")
 
-# --- Chart definitions and explanations ---
 chart_list = [
     {
         "ticker": "^GSPC",
