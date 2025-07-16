@@ -70,11 +70,11 @@ def safe_fmt(val, pct=False):
 
 def highlight_trend(val):
     if val == "Uptrend":
-        return "background-color: #C6F6D5; font-weight: 600;"
+        return "background-color: #38B2AC; color: #fff; font-weight: 600;"
     elif val == "Downtrend":
-        return "background-color: #FEB2B2; font-weight: 600;"
+        return "background-color: #F56565; color: #fff; font-weight: 600;"
     elif val == "Sideways":
-        return "background-color: #FEFCBF; font-weight: 600;"
+        return "background-color: #ECC94B; color: #333; font-weight: 600;"
     return ""
 
 # Group all assets by class for display
