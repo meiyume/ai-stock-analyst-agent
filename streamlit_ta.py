@@ -70,11 +70,11 @@ def safe_fmt(val, pct=False):
 
 def trend_icon(val):
     if val == "Uptrend":
-        return "⬆️ Uptrend"
+        return "🟢 Uptrend"
     elif val == "Downtrend":
-        return "⬇️ Downtrend"
+        return "🔴 Downtrend"
     elif val == "Sideways":
-        return "➡️ Sideways"
+        return "🟡 Sideways"
     return val or "N/A"
     
 def highlight_trend(val):
