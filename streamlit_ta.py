@@ -97,8 +97,7 @@ if risk_regime_rationale:
 if anomaly_alerts:
     st.warning("**Smart Anomaly Alerts:**\n\n" + "\n".join(anomaly_alerts))
 else:
-    st.info("🕊️ <b>No unusual market stress detected.</b><br>Markets appear calm and no smart anomalies were found in the latest signals.",
-        unsafe_allow_html=True)
+    st.info("🕊️ No unusual market stress detected.\nMarkets appear calm and no smart anomalies were found in the latest signals.")
 
 
 # --- Historical Composite Score Chart ---
