@@ -172,6 +172,7 @@ if st.button("Generate LLM Global Summaries", type="primary"):
         try:
             llm_output = call_llm("global", json_summary, prompt_vars={
                 "composite_label": composite_label or "",
+                "risk_regime": risk_regime or "",
             })
             # Split the LLM output into sections
             sections = {"Technical Summary": "", "Plain-English Summary": "", "Explanation": ""}
