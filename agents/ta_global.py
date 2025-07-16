@@ -41,26 +41,33 @@ def ta_global():
     for name, symbol in indices.items():
         try:
             df = yf.download(symbol, start=start, end=today, interval="1d", auto_adjust=True, progress=False)
-            if df is None or len(df) < 10:
-                out[name.lower()] = {"error": "No data"}
+            if df is None or len(df) < 10 or "Close" not in df:
+                out[name] = {"error": "No data"}
                 continue
             close = df["Close"].dropna()
             trends = {}
             for lb in lookbacks:
                 if len(close) >= lb:
-                    change = (close[-1] - close[-lb]) / close[-lb] * 100
-                    trend = (
-                        "Uptrend" if change > 2 else
-                        "Downtrend" if change < -2 else
-                        "Sideways"
-                    )
+                    val_now = close.iloc[-1]
+                    val_then = close.iloc[-lb]
+                    if pd.notnull(val_now) and pd.notnull(val_then) and val_then != 0:
+                        change = (val_now - val_then) / val_then * 100
+                        trend = (
+                            "Uptrend" if change > 2 else
+                            "Downtrend" if change < -2 else
+                            "Sideways"
+                        )
+                    else:
+                        change, trend = np.nan, "N/A"
                 else:
                     change, trend = np.nan, "N/A"
-                trends[f"change_{lb}d_pct"] = float(np.round(change, 3)) if not np.isnan(change) else None
+                trends[f"change_{lb}d_pct"] = float(np.round(change, 3)) if pd.notnull(change) else None
                 trends[f"trend_{lb}d"] = trend
-                # Add volatility for each window
-                trends[f"vol_{lb}d"] = float(np.round(close[-lb:].std(), 3)) if len(close) >= lb else None
-            trends["last"] = float(np.round(close[-1], 4))
+                trends[f"vol_{lb}d"] = (
+                    float(np.round(close[-lb:].std(), 3))
+                    if len(close) >= lb and close[-lb:].notnull().sum() > 1 else None
+                )
+            trends["last"] = float(np.round(close.iloc[-1], 4)) if len(close) > 0 else None
             out[name] = trends
         except Exception as e:
             out[name] = {"error": str(e)}
@@ -69,18 +76,22 @@ def ta_global():
     breadth = {}
     above_50dma, above_200dma, count = 0, 0, 0
     for name, v in out.items():
-        if isinstance(v, dict) and "last" in v and v.get("trend_50d", None) != "N/A":
+        if isinstance(v, dict) and "last" in v:
             last = v["last"]
             symbol = indices[name]
-            df = yf.download(symbol, start=start, end=today, interval="1d", auto_adjust=True, progress=False)
-            if "Close" in df and len(df["Close"].dropna()) >= 200:
-                ma50 = df["Close"].rolling(50).mean().iloc[-1]
-                ma200 = df["Close"].rolling(200).mean().iloc[-1]
-                if last > ma50:
-                    above_50dma += 1
-                if last > ma200:
-                    above_200dma += 1
-                count += 1
+            try:
+                df_breadth = yf.download(symbol, start=start, end=today, interval="1d", auto_adjust=True, progress=False)
+                close_breadth = df_breadth["Close"].dropna()
+                if len(close_breadth) >= 200:
+                    ma50 = close_breadth.rolling(50).mean().iloc[-1]
+                    ma200 = close_breadth.rolling(200).mean().iloc[-1]
+                    if pd.notnull(ma50) and last > ma50:
+                        above_50dma += 1
+                    if pd.notnull(ma200) and last > ma200:
+                        above_200dma += 1
+                    count += 1
+            except Exception:
+                continue
     breadth["breadth_above_50dma_pct"] = int(round(above_50dma / count * 100, 0)) if count else None
     breadth["breadth_above_200dma_pct"] = int(round(above_200dma / count * 100, 0)) if count else None
 
@@ -88,8 +99,8 @@ def ta_global():
     vix30 = out.get("VIX", {}).get("change_30d_pct", None)
     spx_trend = out.get("S&P500", {}).get("trend_30d", "N/A")
     risk_regime = (
-        "Bearish" if vix30 and vix30 > 10 and spx_trend == "Downtrend" else
-        "Bullish" if vix30 and vix30 < -10 and spx_trend == "Uptrend" else
+        "Bearish" if vix30 is not None and vix30 > 10 and spx_trend == "Downtrend" else
+        "Bullish" if vix30 is not None and vix30 < -10 and spx_trend == "Uptrend" else
         "Neutral"
     )
 
@@ -98,20 +109,19 @@ def ta_global():
         t = out.get(k, {}).get(f"trend_{lb}d", "N/A")
         return trend_to_score(t)
 
-    # Main indices only (equities for now)
     indices_for_score = ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"]
     trend_scores = [get_trend(30, k) for k in indices_for_score]
 
     # VIX: High VIX is bearish
     vix_last = out.get("VIX", {}).get("last", None)
-    vix_score = 1 - min(vix_last / 40, 1) if vix_last is not None else 0.5
+    vix_score = 1 - min(vix_last / 40, 1) if vix_last is not None and vix_last >= 0 else 0.5
 
     # Breadth
-    breadth_50 = breadth.get("breadth_above_50dma_pct", 50) / 100
-    breadth_200 = breadth.get("breadth_above_200dma_pct", 50) / 100
+    breadth_50 = breadth.get("breadth_above_50dma_pct", 50) / 100 if breadth.get("breadth_above_50dma_pct") is not None else 0.5
+    breadth_200 = breadth.get("breadth_above_200dma_pct", 50) / 100 if breadth.get("breadth_above_200dma_pct") is not None else 0.5
 
-    # Simple average (you can weight if you want)
-    composite_score = float(np.round(np.nanmean(trend_scores + [vix_score, breadth_50, breadth_200]), 3))
+    composite_inputs = trend_scores + [vix_score, breadth_50, breadth_200]
+    composite_score = float(np.round(np.nanmean(composite_inputs), 3)) if np.any(pd.notnull(composite_inputs)) else 0.5
     composite_label = (
         "Bullish" if composite_score >= 0.7
         else "Bearish" if composite_score <= 0.3
@@ -131,10 +141,10 @@ def ta_global():
     }
     return summary
 
-# For CLI testing only:
 if __name__ == "__main__":
     result = ta_global()
     import pprint; pprint.pprint(result)
+
 
 
 
