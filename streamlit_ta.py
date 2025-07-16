@@ -68,6 +68,15 @@ def safe_fmt(val, pct=False):
         return f"{val:+.2f}%" if isinstance(val, float) else str(val)
     return f"{val:,.2f}" if isinstance(val, float) else str(val)
 
+def highlight_trend(val):
+    if val == "Uptrend":
+        return "background-color: #C6F6D5; font-weight: 600;"
+    elif val == "Downtrend":
+        return "background-color: #FEB2B2; font-weight: 600;"
+    elif val == "Sideways":
+        return "background-color: #FEFCBF; font-weight: 600;"
+    return ""
+
 # Group all assets by class for display
 grouped = {}
 for name, data in out.items():
@@ -106,7 +115,10 @@ for asset_class in class_display_order:
                 ]
             rows.append(row)
         df = pd.DataFrame(rows, columns=cols)
-        st.dataframe(df, hide_index=True)
+        trend_cols = ["Trend (30D)", "Trend (90D)", "Trend (200D)"]
+        styled_df = df.style.applymap(highlight_trend, subset=trend_cols)
+        st.write(styled_df)
+
 
 st.caption("Assets are grouped by class. Note: Some tickers may not have reliable data (e.g. certain bonds/volatility indices on Yahoo).")
 
