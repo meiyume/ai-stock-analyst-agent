@@ -163,28 +163,47 @@ def style_overview(df):
 st.write(style_overview(overview_df), unsafe_allow_html=True)
 st.caption("Green = bullish, Red = bearish, Yellow = neutral/sideways. Breadth: % of indices above moving average.")
 
-# --- LLM Summaries at the top
+# --- LLM Summaries and Explanation ---
 st.subheader("LLM-Generated Summaries")
 json_summary = json.dumps(summary, indent=2)
 
 if st.button("Generate LLM Global Summaries", type="primary"):
     with st.spinner("Querying LLM..."):
         try:
-            llm_output = call_llm("global", json_summary)
-            if "Technical Summary" in llm_output and "Plain-English Summary" in llm_output:
-                tech = llm_output.split("Plain-English Summary")[0].replace("Technical Summary", "").strip()
-                plain = llm_output.split("Plain-English Summary")[1].strip()
+            llm_output = call_llm("global", json_summary, prompt_vars={
+                "composite_label": composite_label or "",
+            })
+            # Split the LLM output into sections
+            sections = {"Technical Summary": "", "Plain-English Summary": "", "Explanation": ""}
+            current_section = None
+            for line in llm_output.splitlines():
+                line_strip = line.strip()
+                if line_strip.startswith("Technical Summary"):
+                    current_section = "Technical Summary"
+                elif line_strip.startswith("Plain-English Summary"):
+                    current_section = "Plain-English Summary"
+                elif line_strip.startswith("Explanation"):
+                    current_section = "Explanation"
+                elif current_section and line_strip:
+                    sections[current_section] += line + "\n"
+
+            # Display: Technical, Plain-English, then Explanation directly under the headline
+            if sections["Technical Summary"]:
                 st.markdown("**Technical Summary**")
-                st.info(tech)
+                st.info(sections["Technical Summary"].strip())
+
+            if sections["Plain-English Summary"]:
                 st.markdown("**Plain-English Summary**")
-                st.success(plain)
-            else:
-                st.warning("LLM output did not match expected template. Full output below:")
-                st.code(llm_output)
+                st.success(sections["Plain-English Summary"].strip())
+
+            if sections["Explanation"]:
+                st.markdown("<span style='font-size:1.07em;font-weight:600;'>LLM Explanation (Why <b>{}</b>?):</span>".format(composite_label), unsafe_allow_html=True)
+                st.warning(sections["Explanation"].strip())
         except Exception as e:
             st.error(f"LLM error: {e}")
 
 st.caption("If you do not see the summaries, check the console logs for LLM errors or ensure your OpenAI API key is correctly set.")
+
 
 # --- Raw Data Section
 st.subheader("Raw Global Technical Data")
