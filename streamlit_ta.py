@@ -66,14 +66,20 @@ risk_regime_expl = {
     "Neutral": "A 'Neutral' risk regime means there aren’t big warning signs of danger, but there also isn’t a strong signal that it’s a super-safe time. The market isn’t panicky, but it’s not totally carefree either—it’s in a steady, watchful mode.",
     "Bearish": "A 'Bearish' risk regime means volatility is rising and major markets are falling. Investors may be nervous, and caution is warranted."
 }
+explanation = ""
+
 if composite_label in composite_score_expl:
-    st.markdown(
-        f"<span style='color:gray; font-size: 0.80em;'>{composite_score_expl[composite_label]}</span>",
-        unsafe_allow_html=True
-    )
+    explanation += composite_score_expl[composite_label]
+
 if risk_regime in risk_regime_expl:
+    # Only add a space if both are present
+    if explanation:
+        explanation += " "
+    explanation += risk_regime_expl[risk_regime]
+
+if explanation:
     st.markdown(
-        f"<span style='color:gray; font-size: 0.80em;'>{risk_regime_expl[risk_regime]}</span>",
+        f"<span style='color:gray; font-size:0.80em;'>{explanation}</span>",
         unsafe_allow_html=True
     )
 
