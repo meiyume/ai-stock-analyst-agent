@@ -45,21 +45,22 @@ lookbacks = summary.get("lookbacks", [30, 90, 200])
 
 def color_trend(trend):
     if trend == "Uptrend":
-        return "background-color:#c6f5d4;"  # green
+        return "background-color: #156f2c; color: #fff;"  # strong green, white text
     elif trend == "Downtrend":
-        return "background-color:#f7c6c6;"  # red
+        return "background-color: #8b2323; color: #fff;"  # strong red, white text
     elif trend == "Sideways":
-        return "background-color:#f5f2c6;"  # yellow
+        return "background-color: #786300; color: #fff;"  # gold/yellow, white text
     else:
         return ""
 
 def color_ma(flag):
     if flag == "✅":
-        return "background-color:#c6f5d4;"  # green
+        return "background-color: #156f2c; color: #fff;"
     elif flag == "❌":
-        return "background-color:#f7c6c6;"  # red
+        return "background-color: #8b2323; color: #fff;"
     else:
         return ""
+
 
 def get_ma_flag(last, ma):
     if pd.isna(last) or pd.isna(ma):
