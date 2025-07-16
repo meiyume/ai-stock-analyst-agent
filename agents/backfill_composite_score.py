@@ -16,6 +16,29 @@ indices_for_score = [
 ]
 vix_symbol = "^VIX"
 
+def to_scalar(val):
+    # Utility: flatten out any Series, tuple, list, or array to a single value or np.nan
+    if isinstance(val, (pd.Series, np.ndarray, list, tuple)):
+        if len(val) == 0:
+            return np.nan
+        return to_scalar(val[-1])
+    return val
+
+def robust_series(series):
+    # Utility: force to Series and drop NaN
+    if series is None:
+        return pd.Series(dtype=float)
+    if isinstance(series, (pd.DataFrame,)):
+        if "Close" in series.columns:
+            return series["Close"].dropna()
+        elif series.shape[1] > 0:
+            return series.iloc[:, 0].dropna()
+        else:
+            return pd.Series(dtype=float)
+    if isinstance(series, (pd.Series, list, np.ndarray, tuple)):
+        return pd.Series(series).dropna()
+    return pd.Series(dtype=float)
+
 def trend_to_score(trend):
     if trend == "Uptrend":
         return 1
@@ -26,12 +49,20 @@ def trend_to_score(trend):
     return np.nan
 
 def get_trend(series, lb):
-    if len(series) < lb:
+    s = robust_series(series)
+    if len(s) < lb:
         return "N/A"
-    val_now = series.iloc[-1]
-    val_then = series.iloc[-lb]
-    # Check for nan or zero division
-    if pd.isna(val_now) or pd.isna(val_then) or val_then == 0:
+    val_now = to_scalar(s.iloc[-1])
+    val_then = to_scalar(s.iloc[-lb])
+    # Check for nan, None, bad types, or zero division
+    if pd.isna(val_now) or pd.isna(val_then):
+        return "N/A"
+    try:
+        val_now = float(val_now)
+        val_then = float(val_then)
+    except Exception:
+        return "N/A"
+    if val_then == 0:
         return "N/A"
     change = (val_now - val_then) / val_then * 100
     if change > 2:
@@ -47,11 +78,15 @@ def compute_composite_for_date(dt, lookback_days=400):
     end = dt + timedelta(days=1)
     ohlc = {}
     for symbol in indices_for_score + [vix_symbol]:
-        df = yf.download(symbol, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
-        if df is None or len(df) < 10 or "Close" not in df:
+        try:
+            df = yf.download(symbol, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
+            if df is None or len(df) < 10 or "Close" not in df:
+                ohlc[symbol] = pd.Series(dtype=float)
+            else:
+                ohlc[symbol] = df["Close"].dropna()
+        except Exception as e:
+            print(f"WARNING: Data error for {symbol} on {dt.strftime('%Y-%m-%d')}: {e}")
             ohlc[symbol] = pd.Series(dtype=float)
-        else:
-            ohlc[symbol] = df["Close"].dropna()
 
     # Calculate trend scores for each index
     trend_scores = []
@@ -61,28 +96,31 @@ def compute_composite_for_date(dt, lookback_days=400):
         trend_scores.append(trend_to_score(t))
 
     # VIX: High is bearish
-    vix_series = ohlc.get(vix_symbol, pd.Series(dtype=float))
-    vix_last = vix_series.iloc[-1] if len(vix_series) > 0 else None
-    if vix_last is not None and not pd.isna(vix_last):
+    vix_series = robust_series(ohlc.get(vix_symbol, pd.Series(dtype=float)))
+    vix_last = to_scalar(vix_series.iloc[-1]) if len(vix_series) > 0 else np.nan
+    vix_score = 0.5
+    if not pd.isna(vix_last):
         try:
             vix_last_val = float(vix_last)
-            vix_score = 1 - min(vix_last_val / 40, 1) if vix_last_val >= 0 else 0.5
+            vix_score = 1 - min(max(vix_last_val, 0) / 40, 1)
         except Exception:
             vix_score = 0.5
-    else:
-        vix_score = 0.5
 
     # Breadth: % above 50D and 200D MA
     above_50 = []
     above_200 = []
     for symbol in indices_for_score:
-        s = ohlc.get(symbol, pd.Series(dtype=float))
+        s = robust_series(ohlc.get(symbol, pd.Series(dtype=float)))
         if len(s) >= 50:
-            ma_50 = s.rolling(window=50).mean().iloc[-1]
-            above_50.append(float(s.iloc[-1]) > float(ma_50))
+            ma_50 = np.nanmean(s[-50:])
+            price = to_scalar(s.iloc[-1])
+            if not pd.isna(ma_50) and not pd.isna(price):
+                above_50.append(float(price) > float(ma_50))
         if len(s) >= 200:
-            ma_200 = s.rolling(window=200).mean().iloc[-1]
-            above_200.append(float(s.iloc[-1]) > float(ma_200))
+            ma_200 = np.nanmean(s[-200:])
+            price = to_scalar(s.iloc[-1])
+            if not pd.isna(ma_200) and not pd.isna(price):
+                above_200.append(float(price) > float(ma_200))
     breadth_50 = np.mean(above_50) if above_50 else 0.5
     breadth_200 = np.mean(above_200) if above_200 else 0.5
 
