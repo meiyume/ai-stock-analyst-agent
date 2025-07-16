@@ -102,9 +102,15 @@ risk_regime_expl = {
     "Bearish": "A 'Bearish' risk regime means volatility is rising and major markets are falling. Investors may be nervous, and caution is warranted."
 }
 if composite_label in composite_score_expl:
-    st.info(composite_score_expl[composite_label])
+    st.markdown(
+        f"<span style='color:gray; font-size: 0.93em;'>{composite_score_expl[composite_label]}</span>",
+        unsafe_allow_html=True
+    )
 if risk_regime in risk_regime_expl:
-    st.info(risk_regime_expl[risk_regime])
+    st.markdown(
+        f"<span style='color:gray; font-size: 0.93em;'>{risk_regime_expl[risk_regime]}</span>",
+        unsafe_allow_html=True
+    )
 
 # ===== ASSET CLASS GROUPED TABLES =====
 def safe_fmt(val, pct=False):
