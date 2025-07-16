@@ -104,7 +104,7 @@ if hist_df is not None and not hist_df.empty:
     fig.update_layout(
         height=280,
         margin=dict(l=0, r=0, t=30, b=0),
-        yaxis=dict(range=[0, 1], title="Composite Score"),
+        yaxis=dict(title="Composite Score"),
         xaxis=dict(title="Date"),
         showlegend=False,
         template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white"
