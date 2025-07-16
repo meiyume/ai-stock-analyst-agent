@@ -182,9 +182,15 @@ for asset_class in class_display_order:
                 ]
             rows.append(row)
         df = pd.DataFrame(rows, columns=cols)
-        trend_cols = ["Trend (30D)", "Trend (90D)", "Trend (200D)"]
-        styled_df = df.style.applymap(highlight_trend, subset=trend_cols)
-        st.write(styled_df)
+        
+        # Show dataframe in Streamlit with Name as first column, no row numbers
+        st.dataframe(
+            df,
+            hide_index=True,
+            column_config={
+                "Name": st.column_config.Column("Name", frozen=True)  # Only works in Streamlit >= 1.27
+            }
+        )
 
 
 st.caption("Assets are grouped by class. Note: Some tickers may not have reliable data (e.g. certain bonds/volatility indices on Yahoo).")
