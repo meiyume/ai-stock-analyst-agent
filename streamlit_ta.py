@@ -59,8 +59,6 @@ st.markdown(
 # --- Historical Composite Score Chart ---
 if hist_df is not None and not hist_df.empty:
     st.subheader("Historical Composite Market Score")
-    # Quick line chart for at-a-glance trend
-    st.line_chart(hist_df.set_index("date")["composite_score"])
 
     # (Optional: more pro, with regime color dots and bands)
     import plotly.graph_objs as go
