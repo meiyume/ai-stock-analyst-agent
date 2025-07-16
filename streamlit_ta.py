@@ -60,26 +60,7 @@ if composite_label in composite_score_expl:
 if risk_regime in risk_regime_expl:
     st.info(risk_regime_expl[risk_regime])
 
-# ===== OVERVIEW TABLE =====
-major_indices = ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"]
-ticker_map = {
-    "S&P500": "^GSPC", "Nasdaq": "^IXIC", "EuroStoxx50": "^STOXX50E", 
-    "Nikkei": "^N225", "HangSeng": "^HSI", "FTSE100": "^FTSE"
-}
-
-def color_trend(trend):
-    if trend == "Uptrend":
-        return "background-color: #156f2c; color: #fff;"  # dark green
-    elif trend == "Downtrend":
-        return "background-color: #8b2323; color: #fff;"  # dark red
-    elif trend == "Sideways":
-        return "background-color: #786300; color: #fff;"  # gold
-    else:
-        return ""
-
-def color_ma(flag):
-    return ""  # No highlight for MA tick/cross
-
+# ===== ASSET CLASS GROUPED TABLES =====
 def safe_fmt(val, pct=False):
     if val is None or pd.isna(val):
         return "N/A"
@@ -87,81 +68,47 @@ def safe_fmt(val, pct=False):
         return f"{val:+.2f}%" if isinstance(val, float) else str(val)
     return f"{val:,.2f}" if isinstance(val, float) else str(val)
 
-st.markdown("##### Global Market Overview Table")
+# Group all assets by class for display
+grouped = {}
+for name, data in out.items():
+    asset_class = data.get("class", "Other")
+    grouped.setdefault(asset_class, []).append((name, data))
 
-@st.cache_data(show_spinner=False, max_entries=12, ttl=600)
-def fetch_index_data(ticker):
-    end = datetime.today()
-    start = end - timedelta(days=400)
-    df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
-    close = df["Close"].dropna()
-    if isinstance(close, pd.DataFrame):
-        close = close.squeeze()
-    return close
+class_display_order = ["Index", "FX", "Bond", "Commodity", "Volatility", "Other"]
 
-overview_rows = []
-for idx in major_indices:
-    data = out.get(idx, {})
-    try:
-        ticker = ticker_map[idx]
-        close = fetch_index_data(ticker)
-        last = close.iloc[-1] if len(close) > 0 else np.nan
-        ma50 = close.rolling(50).mean().iloc[-1] if len(close) >= 50 else np.nan
-        ma200 = close.rolling(200).mean().iloc[-1] if len(close) >= 200 else np.nan
-        above_50d = "✅" if not pd.isna(last) and not pd.isna(ma50) and last > ma50 else "❌"
-        above_200d = "✅" if not pd.isna(last) and not pd.isna(ma200) and last > ma200 else "❌"
-    except Exception:
-        last, above_50d, above_200d = np.nan, "N/A", "N/A"
-    overview_rows.append({
-        "Index": idx,
-        "Last": safe_fmt(last),
-        "30D Change": safe_fmt(data.get("change_30d_pct", None), pct=True),
-        "Trend (30D)": data.get("trend_30d", "N/A"),
-        "Above 50D MA": above_50d,
-        "Above 200D MA": above_200d,
-    })
+st.markdown("#### Market Overview by Asset Class")
+for asset_class in class_display_order:
+    assets = grouped.get(asset_class, [])
+    if not assets:
+        continue
+    with st.expander(f"{asset_class}s ({len(assets)})", expanded=(asset_class == "Index")):
+        rows = []
+        cols = [
+            "Name", "Last", "30D Change", "90D Change", "200D Change",
+            "Trend (30D)", "Trend (90D)", "Trend (200D)", "Vol (30D)", "Vol (90D)", "Vol (200D)"
+        ]
+        for name, data in assets:
+            if "error" in data:
+                row = [name] + [data.get("error", "")] + [""] * (len(cols)-2)
+            else:
+                row = [
+                    name,
+                    safe_fmt(data.get("last", None)),
+                    safe_fmt(data.get("change_30d_pct", None), pct=True),
+                    safe_fmt(data.get("change_90d_pct", None), pct=True),
+                    safe_fmt(data.get("change_200d_pct", None), pct=True),
+                    data.get("trend_30d", "N/A"),
+                    data.get("trend_90d", "N/A"),
+                    data.get("trend_200d", "N/A"),
+                    safe_fmt(data.get("vol_30d", None)),
+                    safe_fmt(data.get("vol_90d", None)),
+                    safe_fmt(data.get("vol_200d", None)),
+                ]
+            rows.append(row)
+        df = pd.DataFrame(rows, columns=cols)
+        st.dataframe(df, hide_index=True)
 
-# VIX row
-vix = out.get("VIX", {})
-try:
-    vix_close = fetch_index_data("^VIX")
-    vix_last = vix_close.iloc[-1] if len(vix_close) > 0 else np.nan
-except Exception:
-    vix_last = np.nan
-
-overview_rows.append({
-    "Index": "VIX",
-    "Last": safe_fmt(vix_last),
-    "30D Change": safe_fmt(vix.get("change_30d_pct", None), pct=True),
-    "Trend (30D)": vix.get("trend_30d", "N/A"),
-    "Above 50D MA": "N/A",
-    "Above 200D MA": "N/A",
-})
-
-# Breadth row (%)
-overview_rows.append({
-    "Index": "Breadth",
-    "Last": "",
-    "30D Change": "",
-    "Trend (30D)": "",
-    "Above 50D MA": f"{breadth.get('breadth_above_50dma_pct','N/A')}%",
-    "Above 200D MA": f"{breadth.get('breadth_above_200dma_pct','N/A')}%",
-})
-
-overview_df = pd.DataFrame(overview_rows)
-
-def style_overview(df):
-    styled = df.style
-    if "Trend (30D)" in df.columns:
-        styled = styled.applymap(color_trend, subset=["Trend (30D)"])
-    if "Above 50D MA" in df.columns:
-        styled = styled.applymap(color_ma, subset=["Above 50D MA"])
-    if "Above 200D MA" in df.columns:
-        styled = styled.applymap(color_ma, subset=["Above 200D MA"])
-    return styled
-
-st.write(style_overview(overview_df), unsafe_allow_html=True)
-st.caption("Green = bullish, Red = bearish, Yellow = neutral/sideways. Breadth: % of indices above moving average.")
+st.caption("Assets are grouped by class. Note: Some tickers may not have reliable data (e.g. certain bonds/volatility indices on Yahoo).")
 
 # --- LLM Summaries and Explanation ---
 st.subheader("LLM-Generated Summaries")
@@ -198,22 +145,19 @@ if st.button("Generate LLM Global Summaries", type="primary"):
                 st.success(sections["Plain-English Summary"].strip())
 
             if sections["Explanation"]:
-                st.markdown("<span style='font-size:1.07em;font-weight:600;'>LLM Explanation (Why <b>{}</b>?):</span>".format(composite_label), unsafe_allow_html=True)
+                st.markdown("<span style='font-size:1.07em;font-weight:600;'>LLM Explanation (Why <b>{}</b> / Regime: <b>{}</b>?):</span>".format(
+                    composite_label, risk_regime
+                ), unsafe_allow_html=True)
                 st.warning(sections["Explanation"].strip())
         except Exception as e:
             st.error(f"LLM error: {e}")
 
 st.caption("If you do not see the summaries, check the console logs for LLM errors or ensure your OpenAI API key is correctly set.")
 
-
 # --- Raw Data Section
 st.subheader("Raw Global Technical Data")
 with st.expander("Show raw summary dict", expanded=False):
     st.json(summary)
-
-# --- (Optional) Chart and analytics code below ---
-# ... leave as in your current file or add further sections
-
 
 # --- Chart section helper ---
 def find_col(possibles, columns):
@@ -245,7 +189,6 @@ def plot_chart(ticker, label, explanation):
         st.caption(explanation)
         try:
             end = datetime.today()
-            # --- Fetch 400 days of data for reliable rolling windows (SMA 200, etc.) ---
             start = end - timedelta(days=400)
             df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
             if df is None or len(df) < 10:
