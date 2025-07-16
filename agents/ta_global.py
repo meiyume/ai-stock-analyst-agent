@@ -13,13 +13,51 @@ def trend_to_score(trend):
     else:
         return 0.5
 
-def ta_global():
-    import pandas as pd
-    import numpy as np
-    import yfinance as yf
-    from datetime import datetime, timedelta
+def compute_risk_regime(context):
+    """
+    Determines 'Risk-On', 'Risk-Off', or 'Neutral' regime from global asset moves.
+    """
+    equities = np.mean([
+        context.get("S&P500", 0),
+        context.get("Nasdaq", 0)
+    ])
+    bonds = context.get("US10Y", 0)
+    vix = context.get("VIX", 0)
+    dxy = context.get("DXY", 0)
+    gold = context.get("Gold", 0)
+    # Rule-based logic—customize as needed!
+    if equities > 0 and bonds < 0 and vix < 0 and dxy < 0:
+        return ("Bullish", "Equities rising, bonds/vix/dxy falling—risk assets favored.", 1.0)
+    elif equities < 0 and bonds > 0 and vix > 0 and dxy > 0:
+        return ("Bearish", "Equities falling, bonds/vix/dxy rising—risk-off, safety sought.", 0.0)
+    else:
+        return ("Neutral", "Mixed cross-asset signals. Market regime unclear.", 0.5)
 
-    # === 1. Indices (tickers) ===
+def get_anomaly_alerts(context):
+    """
+    Flags unusual or contradictory asset moves.
+    """
+    alerts = []
+    # Equities up + VIX up: rare, often signals stress regime
+    if context.get("S&P500", 0) > 0 and context.get("VIX", 0) > 0:
+        alerts.append("⚠️ Equities and VIX both rising — Market may be entering a stress regime!")
+    if context.get("S&P500", 0) < 0 and context.get("Gold", 0) < 0:
+        alerts.append("⚠️ Both Equities and Gold falling — Synchronous de-risking.")
+    if context.get("Nasdaq", 0) > 1 and context.get("US10Y", 0) > 0.2:
+        alerts.append("⚠️ Tech stocks AND bond yields rising — 'good' growth, but monitor for inflation/rotation risk.")
+    # Add more rules as you discover useful patterns!
+    return alerts
+
+def cross_asset_correlation(prices_df, cols=None, lookback=60):
+    """
+    Returns a correlation DataFrame for selected assets over lookback window.
+    """
+    if cols is None:
+        cols = prices_df.columns
+    recent_df = prices_df[cols].tail(lookback)
+    return recent_df.pct_change().corr()
+
+def ta_global():
     indices = {
         # Major equity indices
         "S&P500": "^GSPC",
@@ -30,12 +68,10 @@ def ta_global():
         "FTSE100": "^FTSE",
         "DJIA": "^DJI",
         "STI": "^STI",
-
         # Volatility indices
         "VIX": "^VIX",
-        "V2X": "^V2TX",  # Europe
-        "MOVE": "^MOVE", # US bonds (if available)
-
+        "V2X": "^V2TX",
+        "MOVE": "^MOVE",
         # FX rates
         "DXY": "DX-Y.NYB",
         "USD_SGD": "USDSGD=X",
@@ -46,14 +82,12 @@ def ta_global():
         "AUD_USD": "AUDUSD=X",
         "USD_KRW": "KRW=X",
         "USD_HKD": "HKD=X",
-
-        # Bond yields (most from Yahoo! Finance, but some may not always be updated)
+        # Bond yields
         "US10Y": "^TNX",
         "US2Y": "^IRX",
         "DE10Y": "^DE10Y",
         "JP10Y": "^JP10Y",
         "SG10Y": "^SG10Y",
-
         # Commodities
         "Gold": "GC=F",
         "Silver": "SI=F",
@@ -64,57 +98,20 @@ def ta_global():
         "Corn": "ZC=F",
         "Wheat": "ZW=F",
     }
-
-    # === 2. Asset class mapping ===
     asset_classes = {
-        # Indices
-        "S&P500": "Index",
-        "Nasdaq": "Index",
-        "EuroStoxx50": "Index",
-        "Nikkei": "Index",
-        "HangSeng": "Index",
-        "FTSE100": "Index",
-        "DJIA": "Index",
-        "STI": "Index",
-
-        # Volatility
-        "VIX": "Volatility",
-        "V2X": "Volatility",
-        "MOVE": "Volatility",
-
-        # FX
-        "DXY": "FX",
-        "USD_SGD": "FX",
-        "USD_JPY": "FX",
-        "EUR_USD": "FX",
-        "USD_CNH": "FX",
-        "GBP_USD": "FX",
-        "AUD_USD": "FX",
-        "USD_KRW": "FX",
-        "USD_HKD": "FX",
-
-        # Bonds
-        "US10Y": "Bond",
-        "US2Y": "Bond",
-        "DE10Y": "Bond",
-        "JP10Y": "Bond",
-        "SG10Y": "Bond",
-
-        # Commodities
-        "Gold": "Commodity",
-        "Silver": "Commodity",
-        "Oil_Brent": "Commodity",
-        "Oil_WTI": "Commodity",
-        "Copper": "Commodity",
-        "NatGas": "Commodity",
-        "Corn": "Commodity",
-        "Wheat": "Commodity",
+        # ... (unchanged, see your original)
+        "S&P500": "Index", "Nasdaq": "Index", "EuroStoxx50": "Index", "Nikkei": "Index", "HangSeng": "Index", "FTSE100": "Index", "DJIA": "Index", "STI": "Index",
+        "VIX": "Volatility", "V2X": "Volatility", "MOVE": "Volatility",
+        "DXY": "FX", "USD_SGD": "FX", "USD_JPY": "FX", "EUR_USD": "FX", "USD_CNH": "FX", "GBP_USD": "FX", "AUD_USD": "FX", "USD_KRW": "FX", "USD_HKD": "FX",
+        "US10Y": "Bond", "US2Y": "Bond", "DE10Y": "Bond", "JP10Y": "Bond", "SG10Y": "Bond",
+        "Gold": "Commodity", "Silver": "Commodity", "Oil_Brent": "Commodity", "Oil_WTI": "Commodity", "Copper": "Commodity", "NatGas": "Commodity", "Corn": "Commodity", "Wheat": "Commodity",
     }
-
     lookbacks = [30, 90, 200]
     out = {}
     today = datetime.today()
     start = today - timedelta(days=400)
+    # For correlation, store all price series (Close) here
+    all_prices = {}
 
     for name, symbol in indices.items():
         try:
@@ -125,6 +122,7 @@ def ta_global():
             close = df["Close"].dropna()
             if isinstance(close, pd.DataFrame):
                 close = close.squeeze()
+            all_prices[name] = close  # For correlation matrix
             trends = {}
             for lb in lookbacks:
                 if len(close) >= lb:
@@ -159,14 +157,12 @@ def ta_global():
                 trends["last"] = float(np.round(close.iloc[-1], 4)) if len(close) > 0 else None
             except Exception:
                 trends["last"] = None
-            # Add asset class here!
             trends["class"] = asset_classes.get(name, "Other")
             out[name] = trends
         except Exception as e:
             out[name] = {"error": str(e), "class": asset_classes.get(name, "Other")}
 
-
-    # --- Breadth: What % indices above 50d/200d MA
+    # --- Breadth: % indices above 50d/200d MA
     breadth = {}
     above_50dma, above_200dma, count = 0, 0, 0
     for name, v in out.items():
@@ -181,7 +177,6 @@ def ta_global():
                 if len(close_breadth) >= 200:
                     ma50 = close_breadth.rolling(50).mean().iloc[-1]
                     ma200 = close_breadth.rolling(200).mean().iloc[-1]
-                    # Ensure MAs are floats
                     try:
                         ma50 = float(ma50)
                     except Exception:
@@ -200,28 +195,48 @@ def ta_global():
     breadth["breadth_above_50dma_pct"] = int(round(above_50dma / count * 100, 0)) if count else None
     breadth["breadth_above_200dma_pct"] = int(round(above_200dma / count * 100, 0)) if count else None
 
-    # --- Risk regime (very simple rules for demo) ---
-    vix30 = out.get("VIX", {}).get("change_30d_pct", None)
-    spx_trend = out.get("S&P500", {}).get("trend_30d", "N/A")
-    risk_regime = (
-        "Bearish" if vix30 is not None and vix30 > 10 and spx_trend == "Downtrend" else
-        "Bullish" if vix30 is not None and vix30 < -10 and spx_trend == "Uptrend" else
-        "Neutral"
-    )
+    # --- Cross-asset daily % changes for regime and anomaly logic ---
+    def get_pct_change(key, days=1):
+        series = all_prices.get(key, None)
+        if series is not None and len(series) > days:
+            try:
+                return ((series.iloc[-1] - series.iloc[-1 - days]) / series.iloc[-1 - days]) * 100
+            except Exception:
+                return 0.0
+        return 0.0
 
-    # --- Composite Score ---
+    context = {
+        "S&P500": get_pct_change("S&P500"),
+        "Nasdaq": get_pct_change("Nasdaq"),
+        "US10Y": get_pct_change("US10Y"),
+        "VIX": get_pct_change("VIX"),
+        "DXY": get_pct_change("DXY"),
+        "Gold": get_pct_change("Gold"),
+    }
+
+    # --- Risk regime (modular, robust) ---
+    risk_regime, risk_regime_rationale, risk_regime_score = compute_risk_regime(context)
+
+    # --- Smart anomaly alerts ---
+    anomaly_alerts = get_anomaly_alerts(context)
+
+    # --- Cross-asset correlation heatmap (last 60 days, major assets) ---
+    major_assets = ["S&P500", "Nasdaq", "US10Y", "VIX", "DXY", "Gold", "Oil_Brent", "Copper"]
+    prices_df = pd.DataFrame({k: all_prices[k] for k in major_assets if k in all_prices})
+    correlation_matrix = None
+    if not prices_df.empty and prices_df.shape[1] > 1:
+        correlation_matrix = cross_asset_correlation(prices_df, cols=prices_df.columns, lookback=60)
+        correlation_matrix = correlation_matrix.round(2)
+
+    # --- Composite Score (unchanged) ---
     def get_trend(lb, k):
         t = out.get(k, {}).get(f"trend_{lb}d", "N/A")
         return trend_to_score(t)
 
     indices_for_score = ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"]
     trend_scores = [get_trend(30, k) for k in indices_for_score]
-
-    # VIX: High VIX is bearish
     vix_last = out.get("VIX", {}).get("last", None)
     vix_score = 1 - min(vix_last / 40, 1) if vix_last is not None and vix_last >= 0 else 0.5
-
-    # Breadth
     breadth_50 = breadth.get("breadth_above_50dma_pct", 50) / 100 if breadth.get("breadth_above_50dma_pct") is not None else 0.5
     breadth_200 = breadth.get("breadth_above_200dma_pct", 50) / 100 if breadth.get("breadth_above_200dma_pct") is not None else 0.5
 
@@ -236,7 +251,6 @@ def ta_global():
     # --- Persist composite score history to CSV ---
     history_file = "composite_score_history.csv"
     today_str = today.strftime("%Y-%m-%d")
-
     write_row = True
     if os.path.exists(history_file):
         with open(history_file, "r") as f:
@@ -244,7 +258,6 @@ def ta_global():
             last = lines[-1] if lines else ""
             if last and last.startswith(today_str):
                 write_row = False
-
     if write_row:
         with open(history_file, "a", newline="") as f:
             writer = csv.writer(f)
@@ -257,7 +270,6 @@ def ta_global():
                 risk_regime if risk_regime else "",
             ])
 
-    
     # --- Summary dict ---
     summary = {
         "as_of": today.strftime("%Y-%m-%d"),
@@ -265,8 +277,12 @@ def ta_global():
         "out": out,
         "breadth": breadth,
         "risk_regime": risk_regime,
+        "risk_regime_rationale": risk_regime_rationale,
+        "risk_regime_score": risk_regime_score,
         "composite_score": composite_score,
         "composite_label": composite_label,
+        "anomaly_alerts": anomaly_alerts,
+        "correlation_matrix": correlation_matrix.to_dict() if correlation_matrix is not None else None,
         "news": "No news data yet. (Reserved for future global/regional/local news agent summary.)"
     }
     return summary
@@ -274,9 +290,6 @@ def ta_global():
 if __name__ == "__main__":
     result = ta_global()
     import pprint; pprint.pprint(result)
-
-
-
 
 
 
