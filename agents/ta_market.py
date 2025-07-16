@@ -1,68 +1,106 @@
-import agents.ta_stock as ta_stock
-import copy
-import plotly.io as pio
-from llm_utils import call_llm
+import yfinance as yf
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
 
-def parse_dual_summary(llm_output):
-    """
-    Splits the LLM output into technical and plain-English summaries.
-    Expects output to contain both "Technical Summary" and "Plain-English Summary" as section headers.
-    """
-    tech, plain = "", ""
-    if "Technical Summary" in llm_output and "Plain-English Summary" in llm_output:
-        parts = llm_output.split("Plain-English Summary")
-        tech = parts[0].replace("Technical Summary", "").strip()
-        plain = parts[1].strip()
+def trend_direction(change_pct, threshold=2):
+    if pd.isna(change_pct):
+        return "N/A"
+    if change_pct > threshold:
+        return "Uptrend"
+    elif change_pct < -threshold:
+        return "Downtrend"
     else:
-        tech = llm_output
-        plain = llm_output
-    return tech, plain
+        return "Sideways"
 
-def analyze(ticker, company_name=None, horizon="7 Days", lookback_days=None, api_key=None):
-    try:
-        summary = copy.deepcopy(
-            ta_stock.analyze(ticker, company_name, horizon, lookback_days, api_key)
-        )
-        if "chart" in summary and summary["chart"] is not None:
-            try:
-                summary["chart"] = pio.from_json(summary["chart"].to_json())
-            except Exception:
-                summary["chart"] = None
-        signals = summary.copy()
-        keys = [
-            "sma_trend", "macd_signal", "bollinger_signal", "rsi_signal",
-            "stochastic_signal", "cmf_signal", "obv_signal", "adx_signal",
-            "atr_signal", "vol_spike", "patterns", "anomaly_events", "horizon", "risk_level"
-        ]
-        slim_signals = {k: signals.get(k) for k in keys}
-        if isinstance(slim_signals.get("patterns"), list):
-            slim_signals["patterns"] = slim_signals["patterns"][:3]
-        if isinstance(slim_signals.get("anomaly_events"), list):
-            slim_signals["anomaly_events"] = slim_signals["anomaly_events"][:3]
+def get_market_baskets():
+    # Define market/sector/factor tickers here
+    return {
+        "S&P 500": "SPY",
+        "Nasdaq 100": "QQQ",
+        "EuroStoxx 50": "FEZ",
+        "Nikkei 225": "EWJ",
+        "FTSE 100": "EWU",
+        "Hang Seng": "EWH",
+        "Emerging Mkts": "EEM",
+        "US Tech": "XLK",
+        "US Financials": "XLF",
+        "US Energy": "XLE",
+        "US Industrials": "XLI",
+        "US Healthcare": "XLV",
+        "US Utilities": "XLU",
+        "US Value": "IVE",
+        "US Growth": "IVW",
+        "US Small Cap": "IWM",
+        "US Bonds": "AGG",
+        "Gold": "GLD",
+        "Oil": "USO",
+    }
+
+def ta_market(lookbacks=[30, 90, 200]):
+    baskets = get_market_baskets()
+    today = datetime.today()
+    start = today - timedelta(days=400)
+    out = {}
+    all_prices = {}
+
+    for name, ticker in baskets.items():
         try:
-            llm_output = call_llm(
-                agent_name="market",
-                input_text=str(slim_signals)
-            )
-            tech, plain = parse_dual_summary(llm_output)
-            summary["llm_technical_summary"] = tech
-            summary["llm_plain_summary"] = plain
+            df = yf.download(ticker, start=start, end=today, interval="1d", auto_adjust=True, progress=False)
+            if df is None or len(df) < 10 or "Close" not in df:
+                out[name] = {"error": "No data"}
+                continue
+            close = df["Close"].dropna()
+            all_prices[name] = close
+            signals = {}
+            for lb in lookbacks:
+                if len(close) >= lb:
+                    now = close.iloc[-1]
+                    then = close.iloc[-lb]
+                    change = (now - then) / then * 100 if then != 0 else np.nan
+                    signals[f"change_{lb}d_pct"] = float(np.round(change, 3))
+                    signals[f"trend_{lb}d"] = trend_direction(change)
+                    signals[f"vol_{lb}d"] = float(np.round(close[-lb:].std(), 3))
+                else:
+                    signals[f"change_{lb}d_pct"] = None
+                    signals[f"trend_{lb}d"] = "N/A"
+                    signals[f"vol_{lb}d"] = None
+            signals["last"] = float(np.round(close.iloc[-1], 3)) if len(close) > 0 else None
+            out[name] = signals
         except Exception as e:
-            summary["llm_technical_summary"] = f"LLM error: {e}"
-            summary["llm_plain_summary"] = f"LLM error: {e}"
+            out[name] = {"error": str(e)}
 
-        summary["llm_summary"] = summary.get("llm_technical_summary", summary.get("summary", ""))
-        return summary
-    except Exception as e:
-        import pandas as pd
-        return {
-            "summary": f"⚠️ Market agent failed: {e}",
-            "llm_technical_summary": f"Market agent error: {e}",
-            "llm_plain_summary": f"Market agent error: {e}",
-            "llm_summary": f"Market agent error: {e}",
-            "risk_level": "N/A",
-            "df": pd.DataFrame(),
-            "chart": None,
-        }
+    # --- Breadth: % of baskets in uptrend (30d) ---
+    uptrend_count = 0
+    total_count = 0
+    for v in out.values():
+        if v.get("trend_30d", "N/A") == "Uptrend":
+            uptrend_count += 1
+        if "trend_30d" in v:
+            total_count += 1
+    breadth_30d_pct = int(100 * uptrend_count / total_count) if total_count else None
+
+    # --- Relative rotation (vs S&P 500 or SPY) ---
+    rel_perf = {}
+    spy_close = all_prices.get("S&P 500", None)
+    if spy_close is not None:
+        for name, series in all_prices.items():
+            # 30d relative: basket 30d change - SPY 30d change
+            if len(series) >= 30 and len(spy_close) >= 30:
+                rel = ((series.iloc[-1] - series.iloc[-30]) / series.iloc[-30]) - ((spy_close.iloc[-1] - spy_close.iloc[-30]) / spy_close.iloc[-30])
+                rel_perf[name] = float(np.round(rel * 100, 2))
+
+    summary = {
+        "as_of": today.strftime("%Y-%m-%d"),
+        "out": out,
+        "breadth_30d_pct": breadth_30d_pct,
+        "rel_perf_30d": rel_perf,
+        "all_prices": all_prices,
+    }
+    return summary
+
+if __name__ == "__main__":
+    result = ta_market()
+    import pprint; pprint.pprint(result)
 
 
