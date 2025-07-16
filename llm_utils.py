@@ -178,10 +178,10 @@ PROMPT_TEMPLATES = {
 
     **Output format:**
     
-    Technical Summary:  
+    Technical Summary  
     [Professional, dense technical analysis – including trend persistence, horizon, and explicit risk regime]
     
-    Plain-English Summary:  
+    Plain-English Summary  
     [Executive summary for non-technical readers – clarity on which signals are likely to last and why]
     
     Lookback Windows Analyzed: [list windows]
