@@ -14,25 +14,50 @@ def trend_to_score(trend):
 def ta_global():
     # List of indices to fetch
     indices = {
+        # Major equity indices
         "S&P500": "^GSPC",
-        "VIX": "^VIX",
         "Nasdaq": "^IXIC",
         "EuroStoxx50": "^STOXX50E",
         "Nikkei": "^N225",
         "HangSeng": "^HSI",
         "FTSE100": "^FTSE",
-        "US10Y": "^TNX",
-        "US2Y": "^IRX",
+        "DJIA": "^DJI",
+        "STI": "^STI",
+
+        # Volatility indices
+        "VIX": "^VIX",
+        "V2X": "^V2TX",  # Europe
+        "MOVE": "^MOVE", # US bonds (if available)
+
+        # FX rates
         "DXY": "DX-Y.NYB",
         "USD_SGD": "USDSGD=X",
         "USD_JPY": "JPY=X",
         "EUR_USD": "EURUSD=X",
         "USD_CNH": "USDCNH=X",
+        "GBP_USD": "GBPUSD=X",
+        "AUD_USD": "AUDUSD=X",
+        "USD_KRW": "KRW=X",
+        "USD_HKD": "HKD=X",
+
+        # Bond yields (most from Yahoo! Finance, but some may not always be updated)
+        "US10Y": "^TNX",     # US 10Y yield (x10, so 40 means 4.0%)
+        "US2Y": "^IRX",      # US 2Y yield (x100, so 450 means 4.5%)
+        "DE10Y": "^DE10Y",   # Germany 10Y (Bund, may not always be available)
+        "JP10Y": "^JP10Y",   # Japan 10Y (may not always be available)
+        "SG10Y": "^SG10Y",   # Singapore 10Y (if available)
+
+        # Commodities
         "Gold": "GC=F",
+        "Silver": "SI=F",
         "Oil_Brent": "BZ=F",
         "Oil_WTI": "CL=F",
         "Copper": "HG=F",
+        "NatGas": "NG=F",
+        "Corn": "ZC=F",
+        "Wheat": "ZW=F",
     }
+
     lookbacks = [30, 90, 200]
     out = {}
     today = datetime.today()
