@@ -12,7 +12,12 @@ def trend_to_score(trend):
         return 0.5
 
 def ta_global():
-    # List of indices to fetch
+    import pandas as pd
+    import numpy as np
+    import yfinance as yf
+    from datetime import datetime, timedelta
+
+    # === 1. Indices (tickers) ===
     indices = {
         # Major equity indices
         "S&P500": "^GSPC",
@@ -41,11 +46,11 @@ def ta_global():
         "USD_HKD": "HKD=X",
 
         # Bond yields (most from Yahoo! Finance, but some may not always be updated)
-        "US10Y": "^TNX",     # US 10Y yield (x10, so 40 means 4.0%)
-        "US2Y": "^IRX",      # US 2Y yield (x100, so 450 means 4.5%)
-        "DE10Y": "^DE10Y",   # Germany 10Y (Bund, may not always be available)
-        "JP10Y": "^JP10Y",   # Japan 10Y (may not always be available)
-        "SG10Y": "^SG10Y",   # Singapore 10Y (if available)
+        "US10Y": "^TNX",
+        "US2Y": "^IRX",
+        "DE10Y": "^DE10Y",
+        "JP10Y": "^JP10Y",
+        "SG10Y": "^SG10Y",
 
         # Commodities
         "Gold": "GC=F",
@@ -58,6 +63,52 @@ def ta_global():
         "Wheat": "ZW=F",
     }
 
+    # === 2. Asset class mapping ===
+    asset_classes = {
+        # Indices
+        "S&P500": "Index",
+        "Nasdaq": "Index",
+        "EuroStoxx50": "Index",
+        "Nikkei": "Index",
+        "HangSeng": "Index",
+        "FTSE100": "Index",
+        "DJIA": "Index",
+        "STI": "Index",
+
+        # Volatility
+        "VIX": "Volatility",
+        "V2X": "Volatility",
+        "MOVE": "Volatility",
+
+        # FX
+        "DXY": "FX",
+        "USD_SGD": "FX",
+        "USD_JPY": "FX",
+        "EUR_USD": "FX",
+        "USD_CNH": "FX",
+        "GBP_USD": "FX",
+        "AUD_USD": "FX",
+        "USD_KRW": "FX",
+        "USD_HKD": "FX",
+
+        # Bonds
+        "US10Y": "Bond",
+        "US2Y": "Bond",
+        "DE10Y": "Bond",
+        "JP10Y": "Bond",
+        "SG10Y": "Bond",
+
+        # Commodities
+        "Gold": "Commodity",
+        "Silver": "Commodity",
+        "Oil_Brent": "Commodity",
+        "Oil_WTI": "Commodity",
+        "Copper": "Commodity",
+        "NatGas": "Commodity",
+        "Corn": "Commodity",
+        "Wheat": "Commodity",
+    }
+
     lookbacks = [30, 90, 200]
     out = {}
     today = datetime.today()
@@ -67,10 +118,9 @@ def ta_global():
         try:
             df = yf.download(symbol, start=start, end=today, interval="1d", auto_adjust=True, progress=False)
             if df is None or len(df) < 10 or "Close" not in df:
-                out[name] = {"error": "No data"}
+                out[name] = {"error": "No data", "class": asset_classes.get(name, "Other")}
                 continue
             close = df["Close"].dropna()
-            # Ensure close is a Series and not accidentally a DataFrame
             if isinstance(close, pd.DataFrame):
                 close = close.squeeze()
             trends = {}
@@ -78,7 +128,6 @@ def ta_global():
                 if len(close) >= lb:
                     val_now = close.iloc[-1]
                     val_then = close.iloc[-lb]
-                    # Force both to float to avoid pandas Series ambiguity bug
                     try:
                         val_now = float(val_now)
                     except Exception:
@@ -104,14 +153,16 @@ def ta_global():
                     float(np.round(close[-lb:].std(), 3))
                     if len(close) >= lb and close[-lb:].notnull().sum() > 1 else None
                 )
-            # Last close price
             try:
                 trends["last"] = float(np.round(close.iloc[-1], 4)) if len(close) > 0 else None
             except Exception:
                 trends["last"] = None
+            # Add asset class here!
+            trends["class"] = asset_classes.get(name, "Other")
             out[name] = trends
         except Exception as e:
-            out[name] = {"error": str(e)}
+            out[name] = {"error": str(e), "class": asset_classes.get(name, "Other")}
+
 
     # --- Breadth: What % indices above 50d/200d MA
     breadth = {}
