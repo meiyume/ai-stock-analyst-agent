@@ -150,8 +150,8 @@ PROMPT_TEMPLATES = {
     You are a world-class macro technical analyst with the ability to interpret not only current global market conditions, but also the likely persistence and forward risk/outlook for each major trend.
     
     You will receive a JSON summary of current global volatility, trend, major indices, FX rates, yields, commodities, breadth, and risk regime. For each signal (trend or regime), consider both its **lookback window** (e.g., 30d = short-term, 90d = medium-term, 200d = long-term) and **recent price action** to infer how likely the trend is to persist into the near future. If a trend is based on the 200-day window, note that it is more likely to persist unless a recent reversal is detected.
-
-    {input} 
+    
+    {input}
     
     Your tasks:
     1. Write a dense, forward-looking technical global macro summary for professional investors.
@@ -170,6 +170,11 @@ PROMPT_TEMPLATES = {
     
     5. Reference the news section if provided.
     
+    **New:**  
+    6. In a final section, explain *in 2-4 sentences* why the composite market score is **{composite_label}**.  
+        - Reference key drivers such as: which indices or assets are up/down, breadth readings, volatility, and any notable divergences.  
+        - Clearly justify the label using specific facts from the summary. If the regime is Neutral, mention what is mixed or uncertain.
+    
     **Output format:**
     
     Technical Summary:  
@@ -186,7 +191,10 @@ PROMPT_TEMPLATES = {
     Potential Green Lights:  
     [List, with note on expected persistence]
     
-    Reference the news section for any timely or external drivers not visible in the technicals.        
+    Explanation:  
+    [Short “why {composite_label}” justification, referencing data and key drivers]
+    
+    Reference the news section for any timely or external drivers not visible in the technicals.
     """,
     }
 
