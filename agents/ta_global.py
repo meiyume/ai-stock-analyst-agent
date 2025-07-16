@@ -1,6 +1,8 @@
 import yfinance as yf
 import numpy as np
 import pandas as pd
+import os
+import csv
 from datetime import datetime, timedelta
 
 def trend_to_score(trend):
@@ -231,6 +233,31 @@ def ta_global():
         else "Neutral"
     )
 
+    # --- Persist composite score history to CSV ---
+    history_file = "composite_score_history.csv"
+    today_str = today.strftime("%Y-%m-%d")
+
+    write_row = True
+    if os.path.exists(history_file):
+        with open(history_file, "r") as f:
+            lines = f.readlines()
+            last = lines[-1] if lines else ""
+            if last and last.startswith(today_str):
+                write_row = False
+
+    if write_row:
+        with open(history_file, "a", newline="") as f:
+            writer = csv.writer(f)
+            if os.stat(history_file).st_size == 0:
+                writer.writerow(["date", "composite_score", "composite_label", "risk_regime"])
+            writer.writerow([
+                today_str,
+                composite_score if composite_score is not None else "",
+                composite_label if composite_label else "",
+                risk_regime if risk_regime else "",
+            ])
+
+    
     # --- Summary dict ---
     summary = {
         "as_of": today.strftime("%Y-%m-%d"),
