@@ -55,6 +55,28 @@ st.markdown(
     f"<span style='font-weight:600;'>Risk Regime:</span> {risk_regime}  |  <span style='font-weight:600;'>As of:</span> {as_of}",
     unsafe_allow_html=True
 )
+# === Rule-based human explanations ===
+composite_score_expl = {
+    "Bullish": "A 'Bullish' composite market score means that, overall, the world’s major markets are showing strong, positive signals—most trends look healthy and investors are generally optimistic.",
+    "Neutral": "A 'Neutral' composite market score means markets are mixed, with no clear trend dominating. Investors are taking a wait-and-see approach, and there’s no strong push up or down.",
+    "Bearish": "A 'Bearish' composite market score means the world’s major markets are showing weak or negative signals—trends are generally unhealthy and investors may be cautious or pessimistic."
+}
+risk_regime_expl = {
+    "Bullish": "A 'Bullish' risk regime means volatility is falling and major markets are rising. Investors are confident and risk-taking is encouraged.",
+    "Neutral": "A 'Neutral' risk regime means there aren’t big warning signs of danger, but there also isn’t a strong signal that it’s a super-safe time. The market isn’t panicky, but it’s not totally carefree either—it’s in a steady, watchful mode.",
+    "Bearish": "A 'Bearish' risk regime means volatility is rising and major markets are falling. Investors may be nervous, and caution is warranted."
+}
+if composite_label in composite_score_expl:
+    st.markdown(
+        f"<span style='color:gray; font-size: 0.80em;'>{composite_score_expl[composite_label]}</span>",
+        unsafe_allow_html=True
+    )
+if risk_regime in risk_regime_expl:
+    st.markdown(
+        f"<span style='color:gray; font-size: 0.80em;'>{risk_regime_expl[risk_regime]}</span>",
+        unsafe_allow_html=True
+    )
+
 
 # --- Historical Composite Score Chart ---
 if hist_df is not None and not hist_df.empty:
@@ -89,28 +111,6 @@ if hist_df is not None and not hist_df.empty:
         template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white"
     )
     st.plotly_chart(fig, use_container_width=True)
-
-# === Rule-based human explanations ===
-composite_score_expl = {
-    "Bullish": "A 'Bullish' composite market score means that, overall, the world’s major markets are showing strong, positive signals—most trends look healthy and investors are generally optimistic.",
-    "Neutral": "A 'Neutral' composite market score means markets are mixed, with no clear trend dominating. Investors are taking a wait-and-see approach, and there’s no strong push up or down.",
-    "Bearish": "A 'Bearish' composite market score means the world’s major markets are showing weak or negative signals—trends are generally unhealthy and investors may be cautious or pessimistic."
-}
-risk_regime_expl = {
-    "Bullish": "A 'Bullish' risk regime means volatility is falling and major markets are rising. Investors are confident and risk-taking is encouraged.",
-    "Neutral": "A 'Neutral' risk regime means there aren’t big warning signs of danger, but there also isn’t a strong signal that it’s a super-safe time. The market isn’t panicky, but it’s not totally carefree either—it’s in a steady, watchful mode.",
-    "Bearish": "A 'Bearish' risk regime means volatility is rising and major markets are falling. Investors may be nervous, and caution is warranted."
-}
-if composite_label in composite_score_expl:
-    st.markdown(
-        f"<span style='color:gray; font-size: 0.93em;'>{composite_score_expl[composite_label]}</span>",
-        unsafe_allow_html=True
-    )
-if risk_regime in risk_regime_expl:
-    st.markdown(
-        f"<span style='color:gray; font-size: 0.93em;'>{risk_regime_expl[risk_regime]}</span>",
-        unsafe_allow_html=True
-    )
 
 # ===== ASSET CLASS GROUPED TABLES =====
 def safe_fmt(val, pct=False):
