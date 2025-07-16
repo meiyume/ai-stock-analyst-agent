@@ -69,12 +69,20 @@ def safe_fmt(val, pct=False):
     return f"{val:,.2f}" if isinstance(val, float) else str(val)
 
 def highlight_trend(val):
+    base = (
+        "display:inline-block;"
+        "padding: 2px 10px;"
+        "border-radius: 12px;"
+        "margin: 2px auto;"
+        "min-width: 80px;"
+        "text-align:center;"
+    )
     if val == "Uptrend":
-        return "background-color: #38B2AC; color: #fff; font-weight: 600;"
+        return base + "background-color: #38B2AC; color: #fff; font-weight: 600;"
     elif val == "Downtrend":
-        return "background-color: #F56565; color: #fff; font-weight: 600;"
+        return base + "background-color: #F56565; color: #fff; font-weight: 600;"
     elif val == "Sideways":
-        return "background-color: #ECC94B; color: #333; font-weight: 600;"
+        return base + "background-color: #ECC94B; color: #333; font-weight: 600;"
     return ""
 
 # Group all assets by class for display
