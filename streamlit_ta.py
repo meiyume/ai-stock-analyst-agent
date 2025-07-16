@@ -39,7 +39,7 @@ st.markdown(
     f"#### <span style='font-size:1.3em;'>Composite Market Score: <b>{composite_score if composite_score is not None else 'N/A'}</b> ({composite_label if composite_label else 'N/A'})</span>",
     unsafe_allow_html=True,
 )
-st.caption(f"**Risk Regime:** {risk_regime}  |  <b>As of:</b> {as_of}")
+st.caption(f"**Risk Regime:** {risk_regime}  |  As of: {as_of}")
 
 # ===== OVERVIEW TABLE =====
 major_indices = ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"]
