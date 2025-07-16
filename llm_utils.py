@@ -170,11 +170,12 @@ PROMPT_TEMPLATES = {
     
     5. Reference the news section if provided.
     
-    **New:**  
-    6. In a final section, explain *in 2-4 sentences* why the composite market score is **{composite_label}**.  
-        - Reference key drivers such as: which indices or assets are up/down, breadth readings, volatility, and any notable divergences.  
-        - Clearly justify the label using specific facts from the summary. If the regime is Neutral, mention what is mixed or uncertain.
-    
+    6. In a final section, explain *in 2-4 sentences*:
+    - Why the composite market score is **{composite_label}**.
+    - And why the risk regime is **{risk_regime}**.
+    Reference key drivers such as: which indices or assets are up/down, breadth readings, volatility, and any notable divergences.
+    Clearly justify both labels using specific facts from the summary. If the regime is Neutral, mention what is mixed or uncertain.
+
     **Output format:**
     
     Technical Summary:  
