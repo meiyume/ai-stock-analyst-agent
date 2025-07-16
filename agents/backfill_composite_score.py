@@ -5,8 +5,15 @@ import os
 import csv
 import yfinance as yf
 
-# Use your existing index/asset list, or simplify for demo
-indices_for_score = ["^GSPC", "^IXIC", "^STOXX50E", "^N225", "^HSI", "^FTSE"]  # S&P500, Nasdaq, EuroStoxx50, Nikkei, HangSeng, FTSE100
+# List of indices to include in the composite score (use Yahoo! tickers)
+indices_for_score = [
+    "^GSPC",        # S&P500
+    "^IXIC",        # Nasdaq
+    "^STOXX50E",    # EuroStoxx50
+    "^N225",        # Nikkei
+    "^HSI",         # HangSeng
+    "^FTSE"         # FTSE100
+]
 vix_symbol = "^VIX"
 
 def trend_to_score(trend):
@@ -21,9 +28,10 @@ def trend_to_score(trend):
 def get_trend(series, lb):
     if len(series) < lb:
         return "N/A"
-    val_now = float(series.iloc[-1])
-    val_then = float(series.iloc[-lb])
-    if val_then == 0 or pd.isna(val_now) or pd.isna(val_then):
+    val_now = series.iloc[-1]
+    val_then = series.iloc[-lb]
+    # Check for nan or zero division
+    if pd.isna(val_now) or pd.isna(val_then) or val_then == 0:
         return "N/A"
     change = (val_now - val_then) / val_then * 100
     if change > 2:
@@ -34,7 +42,7 @@ def get_trend(series, lb):
         return "Sideways"
 
 def compute_composite_for_date(dt, lookback_days=400):
-    # Download all required data in one go for efficiency
+    # Download all required data in one go
     start = dt - timedelta(days=lookback_days)
     end = dt + timedelta(days=1)
     ohlc = {}
@@ -52,12 +60,19 @@ def compute_composite_for_date(dt, lookback_days=400):
         t = get_trend(s, 30)
         trend_scores.append(trend_to_score(t))
 
-    # VIX
+    # VIX: High is bearish
     vix_series = ohlc.get(vix_symbol, pd.Series(dtype=float))
     vix_last = vix_series.iloc[-1] if len(vix_series) > 0 else None
-    vix_score = 1 - min(vix_last / 40, 1) if vix_last is not None and vix_last >= 0 else 0.5
+    if vix_last is not None and not pd.isna(vix_last):
+        try:
+            vix_last_val = float(vix_last)
+            vix_score = 1 - min(vix_last_val / 40, 1) if vix_last_val >= 0 else 0.5
+        except Exception:
+            vix_score = 0.5
+    else:
+        vix_score = 0.5
 
-    # Breadth: for simplicity, % indices above 50D and 200D MA
+    # Breadth: % above 50D and 200D MA
     above_50 = []
     above_200 = []
     for symbol in indices_for_score:
@@ -78,8 +93,6 @@ def compute_composite_for_date(dt, lookback_days=400):
         else "Bearish" if composite_score <= 0.3
         else "Neutral"
     )
-
-    # For simplicity, set regime as label
     risk_regime = composite_label
 
     return {
@@ -90,13 +103,16 @@ def compute_composite_for_date(dt, lookback_days=400):
     }
 
 # ---- MAIN: Run for past N days ----
-N = 60  # Last 60 days (set as you wish)
+N = 60  # Last 60 days; change as needed
 results = []
+
+print("Script started")
 for i in range(N):
-    dt = datetime.today() - timedelta(days=N-i-1)
+    dt = datetime.today() - timedelta(days=N - i - 1)
     print(f"Calculating for {dt.strftime('%Y-%m-%d')}")
     r = compute_composite_for_date(dt)
     results.append(r)
+print("Calculation complete, writing to CSV...")
 
 # Write to CSV (overwrite or create)
 csv_file = "composite_score_history.csv"
@@ -107,3 +123,4 @@ with open(csv_file, "w", newline="") as f:
         writer.writerow(r)
 
 print("Historical composite score CSV written:", csv_file)
+
