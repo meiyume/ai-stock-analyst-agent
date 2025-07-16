@@ -27,7 +27,6 @@ with st.spinner("Loading global technical summary..."):
         st.error(f"Error in ta_global(): {e}")
         st.stop()
 
-# ===== HEADLINE: Composite Score and Label =====
 as_of = summary.get("as_of", "N/A")
 composite_score = summary.get("composite_score", None)
 composite_label = summary.get("composite_label", None)
@@ -35,28 +34,31 @@ risk_regime = summary.get("risk_regime", "N/A")
 out = summary.get("out", {})
 breadth = summary.get("breadth", {})
 
-# --- Human-friendly explanations for Composite Score ---
+# ===== HEADLINE =====
+st.markdown(
+    f"#### <span style='font-size:1.3em;'>Composite Market Score: <b>{composite_score if composite_score is not None else 'N/A'}</b> ({composite_label if composite_label else 'N/A'})</span>",
+    unsafe_allow_html=True,
+)
+st.markdown(
+    f"<span style='font-weight:600;'>Risk Regime:</span> {risk_regime}  |  <span style='font-weight:600;'>As of:</span> {as_of}",
+    unsafe_allow_html=True
+)
+
+# === Rule-based human explanations ===
 composite_score_expl = {
     "Bullish": "A 'Bullish' composite market score means that, overall, the world’s major markets are showing strong, positive signals—most trends look healthy and investors are generally optimistic.",
     "Neutral": "A 'Neutral' composite market score means markets are mixed, with no clear trend dominating. Investors are taking a wait-and-see approach, and there’s no strong push up or down.",
     "Bearish": "A 'Bearish' composite market score means the world’s major markets are showing weak or negative signals—trends are generally unhealthy and investors may be cautious or pessimistic."
 }
-
-# --- Human-friendly explanations for Risk Regime ---
 risk_regime_expl = {
     "Bullish": "A 'Bullish' risk regime means volatility is falling and major markets are rising. Investors are confident and risk-taking is encouraged.",
     "Neutral": "A 'Neutral' risk regime means there aren’t big warning signs of danger, but there also isn’t a strong signal that it’s a super-safe time. The market isn’t panicky, but it’s not totally carefree either—it’s in a steady, watchful mode.",
     "Bearish": "A 'Bearish' risk regime means volatility is rising and major markets are falling. Investors may be nervous, and caution is warranted."
 }
-
-st.info(composite_score_expl.get(composite_label, ""))
-st.info(risk_regime_expl.get(risk_regime, ""))
-
-st.markdown(
-    f"#### <span style='font-size:1.3em;'>Composite Market Score: <b>{composite_score if composite_score is not None else 'N/A'}</b> ({composite_label if composite_label else 'N/A'})</span>",
-    unsafe_allow_html=True,
-)
-st.caption(f"**Risk Regime:** {risk_regime}  |  As of: {as_of}")
+if composite_label in composite_score_expl:
+    st.info(composite_score_expl[composite_label])
+if risk_regime in risk_regime_expl:
+    st.info(risk_regime_expl[risk_regime])
 
 # ===== OVERVIEW TABLE =====
 major_indices = ["S&P500", "Nasdaq", "EuroStoxx50", "Nikkei", "HangSeng", "FTSE100"]
@@ -188,6 +190,10 @@ st.caption("If you do not see the summaries, check the console logs for LLM erro
 st.subheader("Raw Global Technical Data")
 with st.expander("Show raw summary dict", expanded=False):
     st.json(summary)
+
+# --- (Optional) Chart and analytics code below ---
+# ... leave as in your current file or add further sections
+
 
 # --- Chart section helper ---
 def find_col(possibles, columns):
