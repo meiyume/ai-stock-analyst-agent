@@ -101,13 +101,6 @@ if hist_df is not None and not hist_df.empty:
         text=hist_df["composite_label"],
         name="Composite Score"
     ))
-    # Add background regime bands
-    fig.add_shape(type="rect", x0=hist_df["date"].min(), y0=0.7, x1=hist_df["date"].max(), y1=1.0,
-                  fillcolor="#38B2AC", opacity=0.09, layer="below", line_width=0)
-    fig.add_shape(type="rect", x0=hist_df["date"].min(), y0=0.3, x1=hist_df["date"].max(), y1=0.7,
-                  fillcolor="#ECC94B", opacity=0.07, layer="below", line_width=0)
-    fig.add_shape(type="rect", x0=hist_df["date"].min(), y0=0, x1=hist_df["date"].max(), y1=0.3,
-                  fillcolor="#F56565", opacity=0.09, layer="below", line_width=0)
     fig.update_layout(
         height=280,
         margin=dict(l=0, r=0, t=30, b=0),
