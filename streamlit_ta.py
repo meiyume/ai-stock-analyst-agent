@@ -133,7 +133,7 @@ for asset_class in class_display_order:
             rows.append(row)
         df = pd.DataFrame(rows, columns=cols)
         trend_cols = ["Trend (30D)", "Trend (90D)", "Trend (200D)"]
-        styled_df = df.style.applymap(trend_icon, subset=trend_cols)
+        styled_df = df.style.applymap(highlight_trend, subset=trend_cols)
         st.write(styled_df)
 
 
