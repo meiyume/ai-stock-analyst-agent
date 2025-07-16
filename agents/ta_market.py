@@ -4,7 +4,7 @@ import numpy as np
 from datetime import datetime, timedelta
 
 def trend_direction(change_pct, threshold=2):
-    if pd.isna(change_pct):
+    if pd.isna(change_pct) or change_pct is None:
         return "N/A"
     if change_pct > threshold:
         return "Uptrend"
@@ -37,6 +37,16 @@ def get_market_baskets():
         "Oil": "USO",
     }
 
+def safe_float(val, default=None, precision=3):
+    """Safe float conversion with optional rounding and default fallback."""
+    try:
+        out = float(val)
+        if np.isnan(out):
+            return default
+        return round(out, precision)
+    except Exception:
+        return default
+
 def ta_market(lookbacks=[30, 90, 200]):
     baskets = get_market_baskets()
     today = datetime.today()
@@ -47,48 +57,76 @@ def ta_market(lookbacks=[30, 90, 200]):
     for name, ticker in baskets.items():
         try:
             df = yf.download(ticker, start=start, end=today, interval="1d", auto_adjust=True, progress=False)
-            if df is None or len(df) < 10 or "Close" not in df:
+            # Defensive checks: dataframe type, min rows, 'Close' col
+            if not isinstance(df, pd.DataFrame) or len(df) < 10 or "Close" not in df.columns:
                 out[name] = {"error": "No data"}
                 continue
             close = df["Close"].dropna()
+            if isinstance(close, pd.DataFrame):
+                close = close.squeeze()
+            if close.empty or len(close) < 2:
+                out[name] = {"error": "Insufficient close data"}
+                continue
             all_prices[name] = close
+
             signals = {}
             for lb in lookbacks:
                 if len(close) >= lb:
-                    now = close.iloc[-1]
-                    then = close.iloc[-lb]
-                    change = (now - then) / then * 100 if then != 0 else np.nan
-                    signals[f"change_{lb}d_pct"] = float(np.round(change, 3))
-                    signals[f"trend_{lb}d"] = trend_direction(change)
-                    signals[f"vol_{lb}d"] = float(np.round(close[-lb:].std(), 3))
+                    now = safe_float(close.iloc[-1])
+                    then = safe_float(close.iloc[-lb])
+                    # Handle missing or zero division
+                    if then is None or then == 0:
+                        change = np.nan
+                        trend = "N/A"
+                        vol = None
+                    else:
+                        change = (now - then) / then * 100 if now is not None else np.nan
+                        trend = trend_direction(change)
+                        # Defensive: std on enough data and not all same
+                        subset = close[-lb:]
+                        vol = safe_float(subset.std(), precision=3) if subset.notnull().sum() > 1 else None
+                    signals[f"change_{lb}d_pct"] = safe_float(change)
+                    signals[f"trend_{lb}d"] = trend
+                    signals[f"vol_{lb}d"] = vol
                 else:
                     signals[f"change_{lb}d_pct"] = None
                     signals[f"trend_{lb}d"] = "N/A"
                     signals[f"vol_{lb}d"] = None
-            signals["last"] = float(np.round(close.iloc[-1], 3)) if len(close) > 0 else None
+            # Defensive: last price
+            signals["last"] = safe_float(close.iloc[-1])
             out[name] = signals
         except Exception as e:
-            out[name] = {"error": str(e)}
+            out[name] = {"error": f"{type(e).__name__}: {e}"}
 
     # --- Breadth: % of baskets in uptrend (30d) ---
     uptrend_count = 0
     total_count = 0
     for v in out.values():
-        if v.get("trend_30d", "N/A") == "Uptrend":
+        trend = v.get("trend_30d", "N/A")
+        if trend == "Uptrend":
             uptrend_count += 1
-        if "trend_30d" in v:
+        if "trend_30d" in v and trend != "N/A":
             total_count += 1
     breadth_30d_pct = int(100 * uptrend_count / total_count) if total_count else None
 
     # --- Relative rotation (vs S&P 500 or SPY) ---
     rel_perf = {}
     spy_close = all_prices.get("S&P 500", None)
-    if spy_close is not None:
-        for name, series in all_prices.items():
-            # 30d relative: basket 30d change - SPY 30d change
-            if len(series) >= 30 and len(spy_close) >= 30:
-                rel = ((series.iloc[-1] - series.iloc[-30]) / series.iloc[-30]) - ((spy_close.iloc[-1] - spy_close.iloc[-30]) / spy_close.iloc[-30])
-                rel_perf[name] = float(np.round(rel * 100, 2))
+    for name, series in all_prices.items():
+        try:
+            # Defensive checks
+            if spy_close is None or len(series) < 30 or len(spy_close) < 30:
+                continue
+            series_now = safe_float(series.iloc[-1])
+            series_then = safe_float(series.iloc[-30])
+            spy_now = safe_float(spy_close.iloc[-1])
+            spy_then = safe_float(spy_close.iloc[-30])
+            if None in [series_now, series_then, spy_now, spy_then] or series_then == 0 or spy_then == 0:
+                continue
+            rel = ((series_now - series_then) / series_then) - ((spy_now - spy_then) / spy_then)
+            rel_perf[name] = round(rel * 100, 2)
+        except Exception:
+            continue
 
     summary = {
         "as_of": today.strftime("%Y-%m-%d"),
@@ -102,5 +140,6 @@ def ta_market(lookbacks=[30, 90, 200]):
 if __name__ == "__main__":
     result = ta_market()
     import pprint; pprint.pprint(result)
+
 
 
