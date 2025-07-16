@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 import json
 from datetime import datetime, timedelta
 import pandas as pd
@@ -27,6 +28,17 @@ with st.spinner("Loading global technical summary..."):
         st.error(f"Error in ta_global(): {e}")
         st.stop()
 
+# --- Load composite score history ---
+history_file = "composite_score_history.csv"
+hist_df = None
+if os.path.exists(history_file):
+    try:
+        hist_df = pd.read_csv(history_file, parse_dates=["date"])
+    except Exception as e:
+        st.warning(f"Could not load composite score history: {e}")
+else:
+    st.info("No composite score history found yet.")
+
 as_of = summary.get("as_of", "N/A")
 composite_score = summary.get("composite_score", None)
 composite_label = summary.get("composite_label", None)
@@ -43,6 +55,42 @@ st.markdown(
     f"<span style='font-weight:600;'>Risk Regime:</span> {risk_regime}  |  <span style='font-weight:600;'>As of:</span> {as_of}",
     unsafe_allow_html=True
 )
+
+# --- Historical Composite Score Chart ---
+if hist_df is not None and not hist_df.empty:
+    st.subheader("Historical Composite Market Score")
+    # Quick line chart for at-a-glance trend
+    st.line_chart(hist_df.set_index("date")["composite_score"])
+
+    # (Optional: more pro, with regime color dots and bands)
+    import plotly.graph_objs as go
+
+    regime_colors = {"Bullish": "#38B2AC", "Neutral": "#ECC94B", "Bearish": "#F56565"}
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=hist_df["date"], y=hist_df["composite_score"],
+        mode="lines+markers",
+        line=dict(color="#3182ce", width=2),
+        marker=dict(size=7, color=[regime_colors.get(l, "#888") for l in hist_df["composite_label"]]),
+        text=hist_df["composite_label"],
+        name="Composite Score"
+    ))
+    # Add background regime bands
+    fig.add_shape(type="rect", x0=hist_df["date"].min(), y0=0.7, x1=hist_df["date"].max(), y1=1.0,
+                  fillcolor="#38B2AC", opacity=0.09, layer="below", line_width=0)
+    fig.add_shape(type="rect", x0=hist_df["date"].min(), y0=0.3, x1=hist_df["date"].max(), y1=0.7,
+                  fillcolor="#ECC94B", opacity=0.07, layer="below", line_width=0)
+    fig.add_shape(type="rect", x0=hist_df["date"].min(), y0=0, x1=hist_df["date"].max(), y1=0.3,
+                  fillcolor="#F56565", opacity=0.09, layer="below", line_width=0)
+    fig.update_layout(
+        height=280,
+        margin=dict(l=0, r=0, t=30, b=0),
+        yaxis=dict(range=[0, 1], title="Composite Score"),
+        xaxis=dict(title="Date"),
+        showlegend=False,
+        template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly_white"
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 # === Rule-based human explanations ===
 composite_score_expl = {
