@@ -12,10 +12,9 @@ from llm_utils import call_llm
 from datetime import datetime, timedelta
 
 def render_market_tab():
-    st.set_page_config(page_title="Technical Analyst AI Agent", page_icon="🌍")
     st.markdown("""
     <h1 style='margin-bottom: 0.3em;'>Technical Analyst AI Agent 🤖<br>
-    - Global Macro</h1>
+    - Regional Markets</h1>
     """, unsafe_allow_html=True)
 
     st.markdown(
