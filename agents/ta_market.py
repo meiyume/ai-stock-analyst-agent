@@ -338,13 +338,47 @@ def ta_market(lookbacks=[30, 90, 200]):
         "risk_regime_rationale": risk_regime_rationale,
         "risk_regime_score": risk_regime_score,
         "anomaly_alerts": anomaly_alerts,
-        "correlation_matrix": correlation_matrix.to_dict() if correlation_matrix is not None else None
+        "correlation_matrix": correlation_matrix.to_dict() if correlation_matrix is not None else None,
+        "composite_score_history": composite_score_history
     }
     return summary
 
 if __name__ == "__main__":
     result = ta_market()
-    import pprint; pprint.pprint(result)
+    # Show historical composite score chart if available
+    hist_df = result.get("composite_score_history")
+    if hist_df is not None and not hist_df.empty:
+        import plotly.graph_objects as go
+
+        regime_colors = {"Bullish": "#38B2AC", "Neutral": "#ECC94B", "Bearish": "#F56565"}
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=hist_df["date"], y=hist_df["composite_score"],
+            mode="lines+markers",
+            line=dict(color="#3182ce", width=2),
+            marker=dict(size=7, color=[regime_colors.get(l, "#888") for l in hist_df["composite_label"]]),
+            text=hist_df["composite_label"],
+            name="Composite Score"
+        ))
+        # Optional: background regime bands
+        fig.add_shape(type="rect", x0=hist_df["date"].min(), y0=0.7, x1=hist_df["date"].max(), y1=1.0,
+                      fillcolor="#38B2AC", opacity=0.09, layer="below", line_width=0)
+        fig.add_shape(type="rect", x0=hist_df["date"].min(), y0=0.3, x1=hist_df["date"].max(), y1=0.7,
+                      fillcolor="#ECC94B", opacity=0.07, layer="below", line_width=0)
+        fig.add_shape(type="rect", x0=hist_df["date"].min(), y0=0, x1=hist_df["date"].max(), y1=0.3,
+                      fillcolor="#F56565", opacity=0.09, layer="below", line_width=0)
+        fig.update_layout(
+            height=280,
+            margin=dict(l=0, r=0, t=30, b=0),
+            yaxis=dict(range=[0, 1], title="Composite Score"),
+            showlegend=False,
+            template="plotly_white",
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+        )
+        fig.show()
+    else:
+        print("No historical composite score data found.")
 
 
 
