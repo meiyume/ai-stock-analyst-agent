@@ -222,9 +222,9 @@ AGENT_BRAINS = {
         "prompt_template": PROMPT_TEMPLATES["sector"],
     },
     "market": {
-        "provider": "gemini",
-        "model": "gemini-1.5-pro",
-        "api_key": os.getenv("GEMINI_API_KEY"),
+        "provider": "openai",
+        "model": "gpt-3.5-turbo",
+        "api_key": os.getenv("OPENAI_API_KEY"),
         "prompt_template": PROMPT_TEMPLATES["market"],
     },
     "commodities": {
