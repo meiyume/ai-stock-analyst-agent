@@ -5,6 +5,7 @@ from agents.ta_market import ta_market
 import yfinance as yf
 from datetime import datetime, timedelta
 import json
+from llm_utils import call_llm, safe_llm_input
 
 def plot_index_chart(ticker, label, window=180, min_points=20):
     """Robustly plot a line chart with SMA overlays, defensive to all data/column issues."""
@@ -169,47 +170,23 @@ def render_market_tab():
             unsafe_allow_html=True
         )
 
-    from llm_utils import call_llm, safe_llm_input
-    import json
-    
-    # 1️⃣ Build a super minimal summary for testing
-    test_summary = {
+    # --- LLM Summaries and Explanation ---
+    st.subheader("LLM-Generated Market Summaries")
+    # Universal: Clean and serialize all market data for LLM, but trim aggressively!
+    safe_summary = safe_llm_input({
         "composite_score": composite_score,
         "composite_label": composite_label,
         "risk_regime": risk_regime,
         "alerts": alerts[:2] if alerts else [],
         "as_of": as_of,
-    }
-    
-    # 2️⃣ Sanitize and serialize for LLM
-    safe_test = safe_llm_input(test_summary, max_list_len=2, max_dict_len=5)
-    json_test = json.dumps(safe_test, indent=2, default=str)
-    st.code(json_test, language="json")
-    st.write(f"Test LLM JSON length: {len(json_test)} characters")
-    
-    # 3️⃣ LLM call
-    if st.button("Generate Minimal LLM Market Summary", key="min_llm_btn"):
-        with st.spinner("Testing LLM with minimal summary..."):
-            try:
-                llm_output = call_llm("market", json_test, prompt_vars={
-                    "composite_label": composite_label or "",
-                    "risk_regime": risk_regime or "",
-                })
-                st.write("Minimal LLM output:", llm_output)
-            except Exception as e:
-                st.error(f"LLM error (minimal test): {e}")
-
-    # --- LLM Summaries and Explanation ---
-    from llm_utils import safe_llm_input, call_llm
-    import json
-    
-    st.subheader("LLM-Generated Market Summaries")
-    
-    # Defensive: Clean and serialize all market data for LLM
-    safe_summary = safe_llm_input(mkt_summary, max_list_len=5, max_dict_len=5)
+        "composite_score_history": (
+            hist_df.tail(3).to_dict(orient="records") if hist_df is not None and not hist_df.empty else []
+        ),
+        "breadth": breadth,
+        # add other tiny summary stats if desired
+    }, max_list_len=5, max_dict_len=5)
     json_summary = json.dumps(safe_summary, indent=2, default=str)
-    # --- st.code(json_summary, language="json")  # Optional: Preview for debugging
-    
+
     if st.button("Generate LLM Market Summaries", type="primary"):
         with st.spinner("Querying LLM for market outlook..."):
             try:
@@ -249,9 +226,8 @@ def render_market_tab():
             except Exception as e:
                 import traceback
                 st.error(f"LLM error: {e}\n\n{traceback.format_exc()}")
-    
-    st.caption("If you do not see the summaries, check the console logs for LLM errors or ensure your OpenAI API key is correctly set.")
 
+    st.caption("If you do not see the summaries, check the console logs for LLM errors or ensure your OpenAI API key is correctly set.")
 
     # --- Raw Data Section
     st.subheader("Raw Market Technical Data")
