@@ -228,6 +228,7 @@ if st.button("Generate Report", type="primary"):
                 "composite_label": composite_label or "",
                 "risk_regime": risk_regime or "",
             })
+            st.session_state["llm_global_summary"] = llm_output
             # Split the LLM output into sections
             sections = {"Technical Summary": "", "Plain-English Summary": "", "Explanation": ""}
             current_section = None
