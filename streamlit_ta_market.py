@@ -169,6 +169,36 @@ def render_market_tab():
             unsafe_allow_html=True
         )
 
+    from llm_utils import call_llm, safe_llm_input
+    import json
+    
+    # 1️⃣ Build a super minimal summary for testing
+    test_summary = {
+        "composite_score": composite_score,
+        "composite_label": composite_label,
+        "risk_regime": risk_regime,
+        "alerts": alerts[:2] if alerts else [],
+        "as_of": as_of,
+    }
+    
+    # 2️⃣ Sanitize and serialize for LLM
+    safe_test = safe_llm_input(test_summary, max_list_len=2, max_dict_len=5)
+    json_test = json.dumps(safe_test, indent=2, default=str)
+    st.code(json_test, language="json")
+    st.write(f"Test LLM JSON length: {len(json_test)} characters")
+    
+    # 3️⃣ LLM call
+    if st.button("Generate Minimal LLM Market Summary", key="min_llm_btn"):
+        with st.spinner("Testing LLM with minimal summary..."):
+            try:
+                llm_output = call_llm("market", json_test, prompt_vars={
+                    "composite_label": composite_label or "",
+                    "risk_regime": risk_regime or "",
+                })
+                st.write("Minimal LLM output:", llm_output)
+            except Exception as e:
+                st.error(f"LLM error (minimal test): {e}")
+
     # --- LLM Summaries and Explanation ---
     from llm_utils import safe_llm_input, call_llm
     import json
