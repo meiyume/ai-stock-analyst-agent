@@ -143,7 +143,37 @@ PROMPT_TEMPLATES = {
 
     "stock":    "Technical analysis for {ticker}:\n{input}\nSummarize in plain English.",
     "sector":   "Sector performance summary:\n{input}\nExplain main drivers.",
-    "market":   "Market overview:\n{input}\nProvide key insights.",
+    
+    "market": """
+    You are the Chief Technical Analyst for an Asia/SGX-focused fund.
+    
+    You will receive a JSON summary containing:
+    - Today's composite score and risk regime
+    - The last 60 days of composite score history
+    - Breadth statistics (how many indices above SMA50/SMA200)
+    - Relative performance vs S&P 500
+    - Alerts (anomalies, regime shifts)
+    - Cross-asset correlation
+    
+    Your job:
+    1. Write a concise market technical outlook in plain English, for a busy executive. Mention key shifts (bullish/neutral/bearish), regime changes, breadth, any unusual correlations, and alert on big risks.
+    2. If market conditions are especially strong or risky, call them out explicitly.
+    3. End with an action-oriented bullet ("What to watch next week" or "AI Outlook").
+    4. Output BOTH:
+       - a Markdown summary for the dashboard (max 150 words)
+       - a structured JSON object:
+         {{
+            "headline": "...",
+            "summary": "...",
+            "regime": "...",
+            "outlook": "...",
+            "risk_level": "...",
+            "action": "..."
+         }}
+    Input:
+    {input}
+    """,
+
     "commodities": "Commodities report:\n{input}\nHighlight risks and trends.",
     
     "global": """
