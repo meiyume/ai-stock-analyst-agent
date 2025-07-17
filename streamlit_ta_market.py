@@ -4,6 +4,49 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from agents.ta_market import ta_market
+import yfinance as yf
+from datetime import datetime, timedelta
+
+def plot_index_chart(ticker, label, window=180):
+    """Plots a compact line chart with SMA overlays for the given index."""
+    try:
+        end = datetime.today()
+        start = end - timedelta(days=window + 30)
+        df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
+        if df is None or "Close" not in df.columns or df["Close"].dropna().empty:
+            st.info(f"Not enough data to plot {label}.")
+            return
+        df = df.dropna(subset=["Close"])
+        df = df.tail(window)
+        df["SMA20"] = df["Close"].rolling(window=20).mean()
+        df["SMA50"] = df["Close"].rolling(window=50).mean()
+        df["SMA200"] = df["Close"].rolling(window=200).mean()
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df["Close"], mode="lines", name=label,
+            line=dict(width=2, color="#3182ce")
+        ))
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df["SMA20"], mode="lines", name="SMA 20", line=dict(width=1, dash='dot', color="#8fd3fe")
+        ))
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df["SMA50"], mode="lines", name="SMA 50", line=dict(width=1, dash='dash', color="#38B2AC")
+        ))
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df["SMA200"], mode="lines", name="SMA 200", line=dict(width=1, dash='solid', color="#222")
+        ))
+        fig.update_layout(
+            title=label,
+            height=230,
+            margin=dict(l=10, r=10, t=40, b=10),
+            legend=dict(orientation="h", yanchor="top", y=0.95, xanchor="right", x=1),
+            template="plotly_white",
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        st.warning(f"Chart error ({label}): {e}")
 
 def render_market_tab():
     st.header("📈 AI Market / Sector Technical Dashboard")
@@ -61,6 +104,14 @@ def render_market_tab():
             f"<span style='color:gray; font-size:0.86em;'>Risk Regime Rationale: {risk_regime_rationale}</span>",
             unsafe_allow_html=True
         )
+
+    # --- Show 2 key index charts (STI, AAXJ) ---
+    st.markdown("#### Key Index Charts")
+    col1, col2 = st.columns(2)
+    with col1:
+        plot_index_chart("^STI", "Straits Times Index (STI)")
+    with col2:
+        plot_index_chart("AAXJ", "Asia ex Japan ETF (AAXJ)")
 
     # --- Alerts & Anomalies ---
     if anomaly_alerts or alerts:
@@ -124,7 +175,7 @@ def render_market_tab():
             yaxis_title="Outperformance vs S&P500 (%)",
             margin=dict(l=30, r=30, t=30, b=40),
             height=320,
-            plot_bgcolor='rgba(0,0,0,0)',   # Lighter for differentiation
+            plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
             template="plotly_white",
         )
@@ -158,3 +209,4 @@ def render_market_tab():
     st.caption("Baskets include SGX/Asia indices, regional ETFs, and global context. Composite score, risk regime, and alerts use only available data.")
 
 # ---- End ----
+
