@@ -2,6 +2,7 @@ import yfinance as yf
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
+import os
 
 def trend_to_score(trend):
     if trend == "Uptrend":
@@ -12,14 +13,10 @@ def trend_to_score(trend):
         return 0.5
 
 def compute_risk_regime(context):
-    """
-    Market-specific: Determines 'Risk-On', 'Risk-Off', or 'Neutral' for regional market baskets.
-    """
     equities = np.mean([context.get("Straits Times Index", 0), context.get("MSCI Singapore ETF", 0),
                         context.get("MSCI Asia ex Japan ETF", 0), context.get("Hang Seng Index", 0)])
     gold = context.get("Gold", 0)
     usd = context.get("US Dollar Index", 0)
-    # Simple rule: equities up + gold/FX flat/down = risk-on; equities down + gold/FX up = risk-off
     if equities > 0.5 and gold < 0 and usd < 0:
         return ("Risk-On", "Asia/SGX equities rising, gold and USD falling—risk assets favored.", 1.0)
     elif equities < 0.3 and gold > 0 and usd > 0:
@@ -29,7 +26,6 @@ def compute_risk_regime(context):
 
 def get_anomaly_alerts(context):
     alerts = []
-    # Equities up + Gold up: unusual, sometimes regime shift
     if context.get("Straits Times Index", 0) > 0.5 and context.get("Gold", 0) > 0:
         alerts.append("⚠️ STI and Gold both rising — Possible flight to safety within a risk-on rally.")
     if context.get("Hang Seng Index", 0) < 0 and context.get("Brent Oil", 0) < 0:
@@ -46,7 +42,6 @@ def cross_asset_correlation(prices_df, cols=None, lookback=60):
 
 def get_market_baskets():
     return {
-        # --- SGX/Asia/ASEAN focused ---
         "Straits Times Index": "^STI",
         "MSCI Singapore ETF": "EWS",
         "FTSE ASEAN 40 (SGX)": "QL1.SI",
@@ -55,7 +50,6 @@ def get_market_baskets():
         "MSCI Emerging Asia ETF": "EEMA",
         "Nikkei 225": "^N225",
         "MSCI China ETF": "MCHI",
-        # --- Global/US context ---
         "MSCI World ETF": "URTH",
         "S&P 500": "^GSPC",
         "Nasdaq 100": "^NDX",
@@ -99,6 +93,19 @@ def compute_zscore(series, window=90):
     zscore = (series - mean) / std.replace(0, np.nan)
     return zscore
 
+def load_composite_history(history_file="market_composite_score_history.csv"):
+    if not os.path.exists(history_file):
+        return None
+    try:
+        df = pd.read_csv(history_file, parse_dates=["date"])
+        df = df.dropna(subset=["date", "composite_score"])
+        df["composite_score"] = df["composite_score"].apply(safe_float)
+        df["composite_label"] = df["composite_label"].fillna("Neutral")
+        return df
+    except Exception as e:
+        print(f"Error loading {history_file}: {e}")
+        return None
+
 def ta_market(lookbacks=[30, 90, 200]):
     baskets = get_market_baskets()
     today = datetime.today()
@@ -121,7 +128,6 @@ def ta_market(lookbacks=[30, 90, 200]):
                 continue
             all_prices[name] = close
 
-            # --- Indicators ---
             sma20 = compute_sma(close, 20)
             sma50 = compute_sma(close, 50)
             sma200 = compute_sma(close, 200)
@@ -153,7 +159,6 @@ def ta_market(lookbacks=[30, 90, 200]):
                         subset = close[-lb:]
                         vol = safe_float(subset.std(), precision=3) if subset.notnull().sum() > 1 else None
                     signals[f"change_{lb}d_pct"] = safe_float(change)
-                    # For compatibility with composite scoring, use string trend
                     if change is not None and not np.isnan(change):
                         if change > 2:
                             trend_lbl = "Uptrend"
@@ -204,7 +209,6 @@ def ta_market(lookbacks=[30, 90, 200]):
             signals["newlow_200d"] = is_newlow_200d
             signals["last"] = curr
 
-            # Alerts
             alerts = []
             if curr_rsi is not None:
                 if curr_rsi > 70:
@@ -284,7 +288,6 @@ def ta_market(lookbacks=[30, 90, 200]):
         score_components.append(breadth["pct_newhigh_30d"] / 100)
     if breadth.get("pct_newlow_30d") is not None:
         score_components.append(1 - (breadth["pct_newlow_30d"] / 100))
-    # Penalty for volatility regime
     vol_penalty = 0
     for v in out.values():
         if v.get("vol_zscore", 0) and v.get("vol_zscore") > 2:
@@ -298,7 +301,6 @@ def ta_market(lookbacks=[30, 90, 200]):
     else:
         composite_label = "Neutral"
 
-    # --- Market regime ---
     def get_pct_change(name, days=1):
         series = all_prices.get(name, None)
         if series is not None and len(series) > days:
@@ -318,6 +320,9 @@ def ta_market(lookbacks=[30, 90, 200]):
     }
     risk_regime, risk_regime_rationale, risk_regime_score = compute_risk_regime(context)
     anomaly_alerts = get_anomaly_alerts(context)
+
+    # --- Load historical composite score for charting ---
+    composite_score_history = load_composite_history("market_composite_score_history.csv")
 
     # --- Summary dict ---
     summary = {
