@@ -124,8 +124,8 @@ def render_market_tab():
             yaxis_title="Outperformance vs S&P500 (%)",
             margin=dict(l=30, r=30, t=30, b=40),
             height=320,
-            plot_bgcolor='rgba(245,250,255,0.98)',   # Lighter for differentiation
-            paper_bgcolor='rgba(245,250,255,0.98)',
+            plot_bgcolor='rgba(0,0,0,0)',   # Lighter for differentiation
+            paper_bgcolor='rgba(0,0,0,0)',
             template="plotly_white",
         )
         st.plotly_chart(fig_rel, use_container_width=True)
@@ -149,8 +149,8 @@ def render_market_tab():
             margin=dict(l=30, r=30, t=40, b=30),
             xaxis_title="Asset",
             yaxis_title="Asset",
-            plot_bgcolor='rgba(245,250,255,0.97)',
-            paper_bgcolor='rgba(245,250,255,0.97)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
             template="plotly_white"
         )
         st.plotly_chart(fig_corr, use_container_width=True)
