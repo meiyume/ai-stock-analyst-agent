@@ -476,7 +476,7 @@ chart_list = [
     },
     {
         "ticker": "HG=F",
-        "label": "Copper Futures",
+        # === "label": "Copper Futures",
         "explanation": "Copper is an industrial bellwether, used to assess the strength of global manufacturing and economic growth."
     },
 ]
