@@ -55,8 +55,8 @@ breadth = summary.get("breadth", {})
 
 # ===== HEADLINE =====
 st.markdown(
-    f"#### <span style='font-size:1.3em;'>Composite Market Score: <b>{composite_score if composite_score is not None else 'N/A'}<br> ({composite_label if composite_label else 'N/A'})</span></br>
-    <span style='font-size:1.0em;'>Risk Regime: <b>{risk_regime}</b></span>",
+    f"#### <span style='font-size:1.3em;'>Composite Market Score: <b>{composite_score if composite_score is not None else 'N/A'}</b> ({composite_label if composite_label else 'N/A'})</span><br>"
+    f"<span style='font-size:1.0em;'>Risk Regime: <b>{risk_regime}</b></span>",
     unsafe_allow_html=True,
 )
 st.markdown(
