@@ -9,6 +9,8 @@ Plug-and-play: agents call call_llm() for all LLM access—configuration is full
 import os
 import threading
 import queue
+import pandas as pd
+import numpy as np
 from concurrent.futures import Future
     
 # === PROVIDER CONCURRENCY LIMITS ===
@@ -94,6 +96,37 @@ def call_claude(model, prompt, api_key, **kwargs):
         messages=[{"role": "user", "content": prompt}]
     )
     return response.content[0].text.strip()
+
+# === UNIVERSAL SAFE INPUTS ===
+
+def safe_llm_input(obj, max_list_len=100, max_dict_len=100):
+    """
+    Recursively convert all elements to JSON-safe types for LLM input.
+    - Converts DataFrames to list of dicts (max N rows)
+    - Converts numpy objects to float/int
+    - Trims lists/dicts to avoid huge payloads
+    - Converts all keys to str
+    """
+    if isinstance(obj, pd.DataFrame):
+        return obj.tail(max_list_len).to_dict(orient="records")
+    elif isinstance(obj, (pd.Series, list, tuple, set)):
+        return [safe_llm_input(x, max_list_len, max_dict_len) for x in list(obj)[:max_list_len]]
+    elif isinstance(obj, dict):
+        return {str(k): safe_llm_input(v, max_list_len, max_dict_len)
+                for k, v in list(obj.items())[:max_dict_len]}
+    elif isinstance(obj, (np.integer, np.floating)):
+        return obj.item()
+    elif isinstance(obj, (np.ndarray,)):
+        return obj.tolist()
+    elif isinstance(obj, (bytes, bytearray)):
+        return str(obj)
+    elif isinstance(obj, (str, int, float, bool)) or obj is None:
+        return obj
+    else:
+        try:
+            return str(obj)
+        except Exception:
+            return "UNSERIALIZABLE_OBJECT"
 
 # === PROMPT TEMPLATES ===
 
