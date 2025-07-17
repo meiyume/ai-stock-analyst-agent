@@ -6,9 +6,15 @@ import plotly.graph_objects as go
 from agents.ta_market import ta_market
 
 def render_market_tab():
-    st.header("Market / Sector Technical Dashboard")
+    st.header("📈 AI Market / Sector Technical Dashboard")
 
-    # --- Fetch market/sector/factor summary
+    st.markdown(
+        """
+        The Market tab analyzes Asia/SGX, global, and thematic baskets with pro-grade technicals, outperformance, and cross-asset correlation—all built for investor and portfolio context.
+        """
+    )
+
+    # --- Fetch market summary ---
     with st.spinner("Loading market/sector/factor technicals..."):
         try:
             mkt_summary = ta_market()
@@ -17,34 +23,52 @@ def render_market_tab():
             st.error(f"Error in ta_market(): {e}")
             st.stop()
 
-    mkt_out = mkt_summary["out"]
-    mkt_as_of = mkt_summary["as_of"]
-    breadth = mkt_summary["breadth"]
-    rel_perf = mkt_summary["rel_perf_30d"]
+    # --- HEADLINE & LOGIC ---
+    as_of = mkt_summary.get("as_of", "N/A")
     composite_score = mkt_summary.get("composite_score")
     composite_label = mkt_summary.get("composite_label")
     risk_regime = mkt_summary.get("risk_regime")
     risk_regime_rationale = mkt_summary.get("risk_regime_rationale")
     anomaly_alerts = mkt_summary.get("anomaly_alerts", [])
     alerts = mkt_summary.get("alerts", [])
+    breadth = mkt_summary.get("breadth", {})
+    rel_perf = mkt_summary.get("rel_perf_30d", {})
     corr_matrix = mkt_summary.get("correlation_matrix")
+    mkt_out = mkt_summary.get("out", {})
 
-    # --- Headline & composite/risk regime
+    # === HEADLINE ===
     st.markdown(
-        f"**As of:** {mkt_as_of} &nbsp;|&nbsp; "
-        f"**Composite Score:** {composite_score:.2f} ({composite_label}) &nbsp;|&nbsp; "
-        f"**Risk Regime:** {risk_regime}"
+        f"#### <span style='font-size:1.3em;'>Composite Market Score: <b>{composite_score if composite_score is not None else 'N/A'}</b> ({composite_label if composite_label else 'N/A'})</span>",
+        unsafe_allow_html=True,
     )
+    st.markdown(
+        f"<span style='font-weight:600;'>Risk Regime:</span> {risk_regime}  |  <span style='font-weight:600;'>As of:</span> {as_of}",
+        unsafe_allow_html=True
+    )
+    # Brief explanation (optional—adjust for your logic)
+    composite_score_expl = {
+        "Bullish": "A 'Bullish' composite score means most regional indices are in strong uptrends and above key moving averages.",
+        "Neutral": "A 'Neutral' composite score signals mixed technicals—some indices strong, others flat or weak.",
+        "Bearish": "A 'Bearish' composite score means most baskets are trending down or below key averages—caution is warranted."
+    }
+    if composite_label in composite_score_expl:
+        st.markdown(
+            f"<span style='color:gray; font-size:0.80em;'>{composite_score_expl[composite_label]}</span>",
+            unsafe_allow_html=True
+        )
     if risk_regime_rationale:
-        st.caption(f"_{risk_regime_rationale}_")
+        st.markdown(
+            f"<span style='color:gray; font-size:0.86em;'>Risk Regime Rationale: {risk_regime_rationale}</span>",
+            unsafe_allow_html=True
+        )
 
-    # --- Alerts and anomalies
+    # --- Alerts & Anomalies ---
     if anomaly_alerts or alerts:
-        st.warning("  \n".join([*anomaly_alerts, *alerts]), icon="🚨")
+        st.warning("**Smart Anomaly Alerts:**\n\n" + "\n".join([*anomaly_alerts, *alerts]))
     else:
-        st.info("🕊️ No significant anomalies detected. Market appears calm.")
+        st.info("🕊️ No significant market anomalies detected. Market appears calm.")
 
-    # --- Breadth dashboard
+    # --- Breadth Dashboard ---
     st.markdown("**Breadth Summary:**")
     st.write(pd.DataFrame([breadth]))
 
@@ -86,7 +110,7 @@ def render_market_tab():
     mkt_df = pd.DataFrame(rows, columns=cols)
     st.dataframe(mkt_df, hide_index=True)
 
-    # --- Relative Rotation (bar chart) ---
+    # --- Relative Outperformance vs S&P500 (Bar Chart) ---
     if rel_perf:
         st.markdown("**Relative Outperformance vs S&P 500 (Last 30D)**")
         rel_perf_df = pd.DataFrame(list(rel_perf.items()), columns=["Name", "Relative Perf (30D, %)"])
@@ -100,18 +124,37 @@ def render_market_tab():
             yaxis_title="Outperformance vs S&P500 (%)",
             margin=dict(l=30, r=30, t=30, b=40),
             height=320,
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(245,250,255,0.98)',   # Lighter for differentiation
+            paper_bgcolor='rgba(245,250,255,0.98)',
             template="plotly_white",
         )
         st.plotly_chart(fig_rel, use_container_width=True)
 
-    # --- Correlation heatmap ---
+    # --- Cross-Asset Correlation Heatmap (with different color scheme) ---
     if corr_matrix:
         st.markdown("**Cross-Asset Correlation (Last 60 Days)**")
         corr_df = pd.DataFrame(corr_matrix)
-        st.dataframe(corr_df.style.background_gradient(axis=None, cmap='coolwarm'), height=350)
+        fig_corr = go.Figure(
+            data=go.Heatmap(
+                z=corr_df.values,
+                x=corr_df.columns,
+                y=corr_df.index,
+                colorscale="Viridis",    # Different from global tab
+                zmin=-1, zmax=1,
+                colorbar=dict(title="Corr", tickvals=[-1, -0.5, 0, 0.5, 1])
+            )
+        )
+        fig_corr.update_layout(
+            height=340,
+            margin=dict(l=30, r=30, t=40, b=30),
+            xaxis_title="Asset",
+            yaxis_title="Asset",
+            plot_bgcolor='rgba(245,250,255,0.97)',
+            paper_bgcolor='rgba(245,250,255,0.97)',
+            template="plotly_white"
+        )
+        st.plotly_chart(fig_corr, use_container_width=True)
 
-    st.caption("Baskets include SGX/Asia indices, regional ETFs, and global context. Relative performance is versus S&P500. Composite score, risk regime, and alerts use only available data.")
+    st.caption("Baskets include SGX/Asia indices, regional ETFs, and global context. Composite score, risk regime, and alerts use only available data.")
 
-
+# ---- End ----
