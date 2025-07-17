@@ -57,27 +57,15 @@ for provider, lim in PROVIDER_LIMITS.items():
 # === LLM PROVIDER WRAPPERS ===
 
 def call_openai(model, prompt, api_key, temperature=0.2, max_tokens=1024):
-    print(">>>>>>>> call_openai CALLED <<<<<<<<")
     from openai import OpenAI
-    import traceback
     client = OpenAI(api_key=api_key)
-    print("About to call OpenAI with model:", model)
-    print("Prompt (first 100 chars):", repr(prompt[:100]))
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        print("OpenAI API call succeeded, response object:", response)
-        print("Choices:", getattr(response, "choices", None))
-        print("Returning:", response.choices[0].message.content.strip())
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print("[llm_utils.py][call_openai] OpenAI API error:", e)
-        print(traceback.format_exc())
-        raise
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    return response.choices[0].message.content.strip()
 
 def call_gemini(model, prompt, api_key, **kwargs):
     import google.generativeai as genai
@@ -127,6 +115,33 @@ def safe_llm_input(obj, max_list_len=100, max_dict_len=100):
             return str(obj)
         except Exception:
             return "UNSERIALIZABLE_OBJECT"
+# === ESSENTIALS INPUT ===
+def build_llm_market_summary(mkt_summary):
+    """
+    Build a minimal, LLM-friendly market summary dict for AI explanations.
+    Only keeps the most essential and recent fields for fast, reliable LLM responses.
+    """
+    composite_score_history = mkt_summary.get("composite_score_history")
+    # If DataFrame, convert to list of dicts (last 3 rows)
+    if isinstance(composite_score_history, pd.DataFrame):
+        history_data = composite_score_history.tail(3).to_dict(orient="records")
+    elif isinstance(composite_score_history, list):
+        history_data = composite_score_history[-3:]
+    else:
+        history_data = []
+
+    result = {
+        "composite_score": mkt_summary.get("composite_score"),
+        "composite_label": mkt_summary.get("composite_label"),
+        "risk_regime": mkt_summary.get("risk_regime"),
+        "alerts": mkt_summary.get("alerts", [])[:2],
+        "as_of": mkt_summary.get("as_of"),
+        "breadth": mkt_summary.get("breadth", {}),
+        "composite_score_history": history_data,
+        "relative_performance": dict(list(mkt_summary.get("rel_perf_30d", {}).items())[:3]) if "rel_perf_30d" in mkt_summary else {},
+        "anomaly_alerts": mkt_summary.get("anomaly_alerts", [])[:2],
+    }
+    return result
 
 # === PROMPT TEMPLATES ===
 
@@ -134,7 +149,6 @@ PROMPT_TEMPLATES = {
     "chief": """
     You are the Chief AI Investment Analyst for a global asset management firm.
     You will receive a JSON object with the following structure:
-    
     {{
       "composite_risk_score": float,     # overall composite risk score (0–1)
       "risk_level": string,              # overall risk label
@@ -145,16 +159,13 @@ PROMPT_TEMPLATES = {
       "commodity": {{ ... }},            # signals, summary, risk_level for key commodities
       "global": {{ ... }}                # signals, summary, risk_level for global factors
     }}
-
     {input}
-    
     Each agent (stock, sector, market, commodity, global) provides:
     - a "summary" string,
     - risk level,
     - signals like "sma_trend", "macd_signal", "bollinger_signal", "rsi_signal",
       "stochastic_signal", "cmf_signal", "obv_signal", "adx_signal", "atr_signal",
       "vol_spike", "patterns" (max 3), "anomaly_events" (max 3), etc.
-    
     Your tasks:
     1. **Validation:** For each agent, cross-check the summary against its signals. Flag any summaries that are unsupported or inconsistent with the signals, and explain how you adjusted your confidence or weighting.
     2. **Weighting:** Dynamically weigh the input of each agent depending on the strength, consensus, or contradiction among their signals.
@@ -162,14 +173,10 @@ PROMPT_TEMPLATES = {
         - Write a **Technical Summary** for analysts. Begin with the explicit outlook horizon (e.g. "Technical 7-Day Outlook: ..."). Integrate signals, highlight composite risk, and call out any red/green flags. Be dense and professional.
         - Write a **Plain-English Summary** for executives. Begin with the horizon ("In the next 7 days, ..."). Use simple language. Emphasize major opportunities, warnings, and actionable recommendations.
         - Explicitly state the overall risk level, and mention any “red flags” or “green lights” for investors.
-    
     Be transparent: Briefly explain how you weighed/adjusted agent opinions, and call out any hallucinations, inconsistencies, or notable disagreements.
-    
     Format your output exactly as:
-    
     Technical Summary:
     ...
-    
     Plain-English Summary:
     ...
     """,
