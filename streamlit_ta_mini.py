@@ -1,6 +1,6 @@
 import streamlit as st
 from openai import OpenAI
-from na_stock import news_agent_stock
+from agents.na_stock import news_agent_stock
 
 st.title("📰 Stock/Sector News Analyst")
 ticker = st.text_input("Enter Stock Ticker (e.g., U11.SI):")
