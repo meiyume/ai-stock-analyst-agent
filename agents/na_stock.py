@@ -93,13 +93,18 @@ def fetch_stock_sector_news_expanded(
         res = fetch_stock_sector_news(q, max_articles=max_articles, api_key=newsapi_key, from_days_ago=from_days_ago)
         if not res and serpapi_key:
             if verbose:
-                print(f"NewsAPI empty. Querying SerpAPI for: {q}")
+                print(f"NewsAPI empty. Querying SerpAPI Google News for: {q}")
             res = fetch_news_serpapi(q, serpapi_key=serpapi_key, num=max_articles)
+        if not res and serpapi_key:
+            if verbose:
+                print(f"SerpAPI Google News empty. Querying SerpAPI Google Web for: {q}")
+            res = fetch_web_search_serpapi(q, serpapi_key=serpapi_key, num=max_articles)
         for article in res:
             if article["title"] and article["title"] not in seen_titles:
                 news.append(article)
                 seen_titles.add(article["title"])
     return news
+
 
 def fetch_web_search_serpapi(query, serpapi_key, num=10):
     try:
