@@ -9,8 +9,8 @@ import plotly.graph_objects as go
 from agents.ta_global import ta_global
 from llm_utils import call_llm
 
-st.set_page_config(page_title="AI Global Technical Macro Analyst", page_icon="🌍")
-st.title("🌍 AI Global Macro Technical Analyst Demo")
+st.set_page_config(page_title="Global Macro AI Technical Analyst", page_icon="🌍")
+st.title("🌍 Global Macro AI Technical Analyst")
 
 # Show Streamlit version for troubleshooting
 st.caption(f"Streamlit version: {st.__version__}")
