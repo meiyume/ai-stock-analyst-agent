@@ -330,7 +330,7 @@ def plot_chart(ticker, label, explanation):
             ))
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df["SMA200"],
-                mode='lines', name='SMA 200', line=dict(dash='solid')
+                mode='lines', name='SMA 200', line=dict(dash='longdash')
             ))
             if volume_col and volume_col in df.columns:
                 fig.add_trace(go.Bar(
