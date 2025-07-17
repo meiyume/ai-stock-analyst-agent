@@ -2,13 +2,14 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from agents.ta_market import ta_market
-import yfinance as yf
-from datetime import datetime, timedelta
-import json
 from llm_utils import call_llm, safe_llm_input
+import json
 
 def plot_index_chart(ticker, label, window=180, min_points=20):
-    """Robustly plot a line chart with SMA overlays, defensive to all data/column issues."""
+    """Plot a line chart for an index using the cleaned, universal format."""
+    # This version expects all downstream data from universal pipeline, but for ad-hoc demo charts, still fetches yfinance (for now)
+    import yfinance as yf
+    from datetime import datetime, timedelta
     try:
         end = datetime.today()
         start = end - timedelta(days=window + 60)
@@ -16,34 +17,28 @@ def plot_index_chart(ticker, label, window=180, min_points=20):
         if df is None or not isinstance(df, pd.DataFrame) or df.empty:
             st.info(f"Not enough data to plot {label} (empty dataframe).")
             return
-        # Flatten MultiIndex columns (if any)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = [
                 "_".join([str(i) for i in col if i and i != "None"]) for col in df.columns.values
             ]
-        # Find 'close' column(s) (case-insensitive, works for 'Adj Close', 'Close*', etc.)
         close_cols = [c for c in df.columns if isinstance(c, str) and "close" in c.lower()]
         if not close_cols:
             st.warning(f"Chart error ({label}): No close price column found. Columns: {list(df.columns)}")
             return
         close_col = close_cols[0]
-        # Drop NaN, check minimum history
         df = df.dropna(subset=[close_col])
         if len(df) < min_points:
             st.info(f"Not enough {label} data (only {len(df)} valid points).")
             return
         df = df.tail(window).copy()
-        # Calculate SMAs only if enough data
         for sma_win in [20, 50, 200]:
             if len(df) >= sma_win:
                 df[f"SMA{sma_win}"] = df[close_col].rolling(window=sma_win).mean()
             else:
                 df[f"SMA{sma_win}"] = float('nan')
-        # Check again for valid points after SMAs
         if df[close_col].isnull().all():
             st.info(f"All values in close column for {label} are NaN.")
             return
-        # Build chart
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=df.index, y=df[close_col], mode="lines", name=label,
@@ -71,7 +66,6 @@ def plot_index_chart(ticker, label, window=180, min_points=20):
 
 def render_market_tab():
     st.header("📈 AI Market / Sector Technical Dashboard")
-
     st.markdown(
         """
         The Market tab analyzes Asia/SGX, global, and thematic baskets with pro-grade technicals, outperformance, and cross-asset correlation—all built for investor and portfolio context.
@@ -172,7 +166,6 @@ def render_market_tab():
 
     # --- LLM Summaries and Explanation ---
     st.subheader("LLM-Generated Market Summaries")
-    # Universal: Clean and serialize all market data for LLM, but trim aggressively!
     safe_summary = safe_llm_input({
         "composite_score": composite_score,
         "composite_label": composite_label,
@@ -183,7 +176,6 @@ def render_market_tab():
             hist_df.tail(3).to_dict(orient="records") if hist_df is not None and not hist_df.empty else []
         ),
         "breadth": breadth,
-        # add other tiny summary stats if desired
     }, max_list_len=5, max_dict_len=5)
     json_summary = json.dumps(safe_summary, indent=2, default=str)
 
@@ -194,7 +186,6 @@ def render_market_tab():
                     "composite_label": composite_label or "",
                     "risk_regime": risk_regime or "",
                 })
-                # Split the LLM output into sections
                 sections = {"Technical Summary": "", "Plain-English Summary": "", "Explanation": ""}
                 current_section = None
                 for line in llm_output.splitlines():
@@ -338,7 +329,3 @@ def render_market_tab():
     st.caption("Baskets include SGX/Asia indices, regional ETFs, and global context. Composite score, risk regime, and alerts use only available data.")
 
 # ---- End ----
-
-
-
-
