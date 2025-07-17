@@ -6,8 +6,6 @@ from llm_utils import call_llm, safe_llm_input
 import json
 
 def plot_index_chart(ticker, label, window=180, min_points=20):
-    """Plot a line chart for an index using the cleaned, universal format."""
-    # This version expects all downstream data from universal pipeline, but for ad-hoc demo charts, still fetches yfinance (for now)
     import yfinance as yf
     from datetime import datetime, timedelta
     try:
@@ -166,6 +164,7 @@ def render_market_tab():
 
     # --- LLM Summaries and Explanation ---
     st.subheader("LLM-Generated Market Summaries")
+    # Only send essential fields! No "out", "all_prices", etc.
     safe_summary = safe_llm_input({
         "composite_score": composite_score,
         "composite_label": composite_label,
@@ -310,7 +309,7 @@ def render_market_tab():
                 z=corr_df.values,
                 x=corr_df.columns,
                 y=corr_df.index,
-                colorscale="Viridis",    # Different from global tab
+                colorscale="Viridis",
                 zmin=-1, zmax=1,
                 colorbar=dict(title="Corr", tickvals=[-1, -0.5, 0, 0.5, 1])
             )
@@ -329,3 +328,4 @@ def render_market_tab():
     st.caption("Baskets include SGX/Asia indices, regional ETFs, and global context. Composite score, risk regime, and alerts use only available data.")
 
 # ---- End ----
+
