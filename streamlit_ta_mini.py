@@ -10,7 +10,7 @@ from agents.ta_global import ta_global
 from llm_utils import call_llm
 
 st.set_page_config(page_title="Global Macro AI Technical Analyst", page_icon="🌍")
-st.title("🌍 Global Macro AI Technical Analyst")
+st.title("🤖 Technical Analyst AI Agent")
 
 # Show Streamlit version for troubleshooting
 st.caption(f"Streamlit version: {st.__version__}")
