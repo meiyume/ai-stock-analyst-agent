@@ -196,9 +196,9 @@ def render_market_tab():
     
         # Pastel green to pastel red (custom)
         pastel_scale = [
-            [0.0, "#B6E2D3"],   # pastel green
+            [0.0, "#F7B6B6"],   # pastel red
             [0.5, "#F7F6E7"],   # very light neutral
-            [1.0, "#F7B6B6"],   # pastel red
+            [1.0, "#B6E2D3"],   # pastel green
         ]
     
         fig = px.bar(
