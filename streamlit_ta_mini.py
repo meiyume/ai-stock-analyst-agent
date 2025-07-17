@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import plotly.graph_objects as go
+from agents.ta_market import ta_market
 from llm_utils import call_llm
 from datetime import datetime, timedelta
 
