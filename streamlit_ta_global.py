@@ -3,13 +3,13 @@
 import streamlit as st
 import os
 import json
-from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 import yfinance as yf
 import plotly.graph_objects as go
 from agents.ta_global import ta_global
 from llm_utils import call_llm
+from datetime import datetime, timedelta
 
 st.set_page_config(page_title="Technical Analyst AI Agent", page_icon="🌍")
 st.markdown("""
