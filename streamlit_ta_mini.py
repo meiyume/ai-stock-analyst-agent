@@ -218,7 +218,7 @@ for asset_class in class_display_order:
 st.caption("Assets are grouped by class. Note: Some tickers may not have reliable data (e.g. certain bonds/volatility indices on Yahoo).")
 
 # --- LLM Summaries and Explanation ---
-st.subheader("LLM-Generated Summaries")
+st.subheader("AI Agent Summaries")
 json_summary = json.dumps(summary, indent=2)
 
 if st.button("Generate LLM Global Summaries", type="primary"):
@@ -248,7 +248,7 @@ if st.button("Generate LLM Global Summaries", type="primary"):
                 st.markdown("**Plain-English Summary**")
                 st.success(sections["Plain-English Summary"].strip())
             if sections["Explanation"]:
-                st.markdown("<span style='font-size:1.07em;font-weight:600;'>Why Composite Score is <b>{}</b> and Regime is <b>{}</b>?):</span>".format(
+                st.markdown("<span style='font-size:1.07em;font-weight:600;'>Why Composite Score is <b>{}</b> and Regime is <b>{}</b>?</span>".format(
                     composite_label, risk_regime
                 ), unsafe_allow_html=True)
                 st.warning(sections["Explanation"].strip())
