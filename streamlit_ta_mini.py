@@ -1,5 +1,5 @@
 import streamlit as st
-from na_stock import news_agent_stock
+from agents.na_stock import news_agent_stock
 
 st.set_page_config(page_title="News Analyst: Stock/Sector", page_icon="📰")
 
