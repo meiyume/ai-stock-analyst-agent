@@ -248,7 +248,7 @@ def render_global_tab():
     summary_for_llm = {k: v for k, v in summary.items() if k not in exclude_keys}
     json_summary = json.dumps(safe_json(summary_for_llm), indent=2)
     
-    if st.button("Generate Report", type="primary"):
+    if st.button("Generate Report", type="primary", key="generate_report_global"):
         with st.spinner("Querying LLM..."):
             try:
                 llm_output = call_llm("global", json_summary, prompt_vars={
