@@ -9,8 +9,6 @@ Plug-and-play: agents call call_llm() for all LLM access—configuration is full
 import os
 import threading
 import queue
-import pandas as pd
-import numpy as np
 from concurrent.futures import Future
     
 # === PROVIDER CONCURRENCY LIMITS ===
@@ -57,15 +55,27 @@ for provider, lim in PROVIDER_LIMITS.items():
 # === LLM PROVIDER WRAPPERS ===
 
 def call_openai(model, prompt, api_key, temperature=0.2, max_tokens=1024):
+    print(">>>>>>>> call_openai CALLED <<<<<<<<")
     from openai import OpenAI
+    import traceback
     client = OpenAI(api_key=api_key)
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
-    return response.choices[0].message.content.strip()
+    print("About to call OpenAI with model:", model)
+    print("Prompt (first 100 chars):", repr(prompt[:100]))
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        print("OpenAI API call succeeded, response object:", response)
+        print("Choices:", getattr(response, "choices", None))
+        print("Returning:", response.choices[0].message.content.strip())
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print("[llm_utils.py][call_openai] OpenAI API error:", e)
+        print(traceback.format_exc())
+        raise
 
 def call_gemini(model, prompt, api_key, **kwargs):
     import google.generativeai as genai
@@ -85,70 +95,13 @@ def call_claude(model, prompt, api_key, **kwargs):
     )
     return response.content[0].text.strip()
 
-# === UNIVERSAL SAFE INPUTS ===
-
-def safe_llm_input(obj, max_list_len=100, max_dict_len=100):
-    """
-    Recursively convert all elements to JSON-safe types for LLM input.
-    - Converts DataFrames to list of dicts (max N rows)
-    - Converts numpy objects to float/int
-    - Trims lists/dicts to avoid huge payloads
-    - Converts all keys to str
-    """
-    if isinstance(obj, pd.DataFrame):
-        return obj.tail(max_list_len).to_dict(orient="records")
-    elif isinstance(obj, (pd.Series, list, tuple, set)):
-        return [safe_llm_input(x, max_list_len, max_dict_len) for x in list(obj)[:max_list_len]]
-    elif isinstance(obj, dict):
-        return {str(k): safe_llm_input(v, max_list_len, max_dict_len)
-                for k, v in list(obj.items())[:max_dict_len]}
-    elif isinstance(obj, (np.integer, np.floating)):
-        return obj.item()
-    elif isinstance(obj, (np.ndarray,)):
-        return obj.tolist()
-    elif isinstance(obj, (bytes, bytearray)):
-        return str(obj)
-    elif isinstance(obj, (str, int, float, bool)) or obj is None:
-        return obj
-    else:
-        try:
-            return str(obj)
-        except Exception:
-            return "UNSERIALIZABLE_OBJECT"
-# === ESSENTIALS INPUT ===
-def build_llm_market_summary(mkt_summary):
-    """
-    Build a minimal, LLM-friendly market summary dict for AI explanations.
-    Only keeps the most essential and recent fields for fast, reliable LLM responses.
-    """
-    composite_score_history = mkt_summary.get("composite_score_history")
-    # If DataFrame, convert to list of dicts (last 3 rows)
-    if isinstance(composite_score_history, pd.DataFrame):
-        history_data = composite_score_history.tail(3).to_dict(orient="records")
-    elif isinstance(composite_score_history, list):
-        history_data = composite_score_history[-3:]
-    else:
-        history_data = []
-
-    result = {
-        "composite_score": mkt_summary.get("composite_score"),
-        "composite_label": mkt_summary.get("composite_label"),
-        "risk_regime": mkt_summary.get("risk_regime"),
-        "alerts": mkt_summary.get("alerts", [])[:2],
-        "as_of": mkt_summary.get("as_of"),
-        "breadth": mkt_summary.get("breadth", {}),
-        "composite_score_history": history_data,
-        "relative_performance": dict(list(mkt_summary.get("rel_perf_30d", {}).items())[:3]) if "rel_perf_30d" in mkt_summary else {},
-        "anomaly_alerts": mkt_summary.get("anomaly_alerts", [])[:2],
-    }
-    return result
-
 # === PROMPT TEMPLATES ===
 
 PROMPT_TEMPLATES = {
     "chief": """
     You are the Chief AI Investment Analyst for a global asset management firm.
     You will receive a JSON object with the following structure:
+    
     {{
       "composite_risk_score": float,     # overall composite risk score (0–1)
       "risk_level": string,              # overall risk label
@@ -159,13 +112,16 @@ PROMPT_TEMPLATES = {
       "commodity": {{ ... }},            # signals, summary, risk_level for key commodities
       "global": {{ ... }}                # signals, summary, risk_level for global factors
     }}
+
     {input}
+    
     Each agent (stock, sector, market, commodity, global) provides:
     - a "summary" string,
     - risk level,
     - signals like "sma_trend", "macd_signal", "bollinger_signal", "rsi_signal",
       "stochastic_signal", "cmf_signal", "obv_signal", "adx_signal", "atr_signal",
       "vol_spike", "patterns" (max 3), "anomaly_events" (max 3), etc.
+    
     Your tasks:
     1. **Validation:** For each agent, cross-check the summary against its signals. Flag any summaries that are unsupported or inconsistent with the signals, and explain how you adjusted your confidence or weighting.
     2. **Weighting:** Dynamically weigh the input of each agent depending on the strength, consensus, or contradiction among their signals.
@@ -173,47 +129,21 @@ PROMPT_TEMPLATES = {
         - Write a **Technical Summary** for analysts. Begin with the explicit outlook horizon (e.g. "Technical 7-Day Outlook: ..."). Integrate signals, highlight composite risk, and call out any red/green flags. Be dense and professional.
         - Write a **Plain-English Summary** for executives. Begin with the horizon ("In the next 7 days, ..."). Use simple language. Emphasize major opportunities, warnings, and actionable recommendations.
         - Explicitly state the overall risk level, and mention any “red flags” or “green lights” for investors.
+    
     Be transparent: Briefly explain how you weighed/adjusted agent opinions, and call out any hallucinations, inconsistencies, or notable disagreements.
+    
     Format your output exactly as:
+    
     Technical Summary:
     ...
+    
     Plain-English Summary:
     ...
     """,
 
     "stock":    "Technical analysis for {ticker}:\n{input}\nSummarize in plain English.",
     "sector":   "Sector performance summary:\n{input}\nExplain main drivers.",
-    
-    "market": """
-    You are the Chief Technical Analyst for an Asia/SGX-focused fund.
-    
-    You will receive a JSON summary containing:
-    - Today's composite score and risk regime
-    - The last 60 days of composite score history
-    - Breadth statistics (how many indices above SMA50/SMA200)
-    - Relative performance vs S&P 500
-    - Alerts (anomalies, regime shifts)
-    - Cross-asset correlation
-    
-    Your job:
-    1. Write a concise market technical outlook in plain English, for a busy executive. Mention key shifts (bullish/neutral/bearish), regime changes, breadth, any unusual correlations, and alert on big risks.
-    2. If market conditions are especially strong or risky, call them out explicitly.
-    3. End with an action-oriented bullet ("What to watch next week" or "AI Outlook").
-    4. Output BOTH:
-       - a Markdown summary for the dashboard (max 150 words)
-       - a structured JSON object:
-         {{
-            "headline": "...",
-            "summary": "...",
-            "regime": "...",
-            "outlook": "...",
-            "risk_level": "...",
-            "action": "..."
-         }}
-    Input:
-    {input}
-    """,
-
+    "market":   "Market overview:\n{input}\nProvide key insights.",
     "commodities": "Commodities report:\n{input}\nHighlight risks and trends.",
     
     "global": """
@@ -292,9 +222,9 @@ AGENT_BRAINS = {
         "prompt_template": PROMPT_TEMPLATES["sector"],
     },
     "market": {
-        "provider": "openai",
-        "model": "gpt-3.5-turbo",
-        "api_key": os.getenv("OPENAI_API_KEY"),
+        "provider": "gemini",
+        "model": "gemini-1.5-pro",
+        "api_key": os.getenv("GEMINI_API_KEY"),
         "prompt_template": PROMPT_TEMPLATES["market"],
     },
     "commodities": {
