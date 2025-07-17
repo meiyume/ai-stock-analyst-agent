@@ -380,7 +380,7 @@ def plot_chart(ticker, label, explanation):
                     "Window": f"{win}d",
                     "% Change": pct,
                     "Latest": latest,
-                    "Trend": trend
+                    "Trend": trend_icon(trend)
                 })
             table_df = pd.DataFrame(table_rows)
             st.markdown("**Trend Table**")
