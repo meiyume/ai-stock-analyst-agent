@@ -38,7 +38,7 @@ def cross_asset_correlation(prices_df, cols=None, lookback=60):
     if cols is None:
         cols = prices_df.columns
     recent_df = prices_df[cols].tail(lookback)
-    return recent_df.pct_change().corr()
+    return recent_df.pct_change(fill_method=None).corr()
 
 def get_market_baskets():
     return {
@@ -118,7 +118,7 @@ def ta_market(lookbacks=[30, 90, 200]):
         try:
             df = yf.download(ticker, start=start, end=today, interval="1d", auto_adjust=True, progress=False)
             if not isinstance(df, pd.DataFrame) or len(df) < 20 or "Close" not in df.columns:
-                out[name] = {"error": "No data"}
+                out[name] = {"error": "No data or delisted (check ticker: '{}')".format(ticker)}
                 continue
             close = df["Close"].dropna()
             if isinstance(close, pd.DataFrame):
