@@ -101,6 +101,31 @@ def fetch_stock_sector_news_expanded(
                 seen_titles.add(article["title"])
     return news
 
+def fetch_web_search_serpapi(query, serpapi_key, num=10):
+    try:
+        from serpapi import GoogleSearch
+    except ImportError:
+        raise ImportError("You need to `pip install google-search-results` for SerpAPI support.")
+    params = {
+        "engine": "google",
+        "q": query,
+        "api_key": serpapi_key,
+        "num": num,
+        "hl": "en",
+    }
+    results = GoogleSearch(params).get_dict()
+    organic_results = results.get("organic_results", [])
+    return [
+        {
+            "title": r.get("title", ""),
+            "publishedAt": "",  # Google web doesn't have published date in API
+            "source": r.get("displayed_link", ""),
+            "url": r.get("link", ""),
+            "description": r.get("snippet", ""),
+        }
+        for r in organic_results
+    ]
+    
 # --- 5. Summarize with OpenAI LLM (>=1.0.0 syntax) ---
 def summarize_news_with_llm(headlines, company_name, sector_name=None, openai_client=None):
     if not headlines:
