@@ -170,12 +170,17 @@ def render_market_tab():
         )
 
     # --- LLM Summaries and Explanation ---
+    from llm_utils import safe_llm_input, call_llm
+    import json
+    
     st.subheader("LLM-Generated Market Summaries")
-    market_summary = dict(mkt_summary)  # Make a shallow copy for editing if needed
-    json_summary = json.dumps(market_summary, indent=2, default=str)
-
+    
+    # Defensive: Clean and serialize all market data for LLM
+    safe_summary = safe_llm_input(mkt_summary)
+    json_summary = json.dumps(safe_summary, indent=2, default=str)
+    st.code(json_summary, language="json")  # Optional: Preview for debugging
+    
     if st.button("Generate LLM Market Summaries", type="primary"):
-        from llm_utils import call_llm
         with st.spinner("Querying LLM for market outlook..."):
             try:
                 llm_output = call_llm("market", json_summary, prompt_vars={
@@ -202,14 +207,21 @@ def render_market_tab():
                     st.markdown("**Plain-English Summary**")
                     st.success(sections["Plain-English Summary"].strip())
                 if sections["Explanation"]:
-                    st.markdown("<span style='font-size:1.07em;font-weight:600;'>LLM Explanation (Why <b>{}</b> / Regime: <b>{}</b>?):</span>".format(
-                        composite_label, risk_regime
-                    ), unsafe_allow_html=True)
+                    st.markdown(
+                        "<span style='font-size:1.07em;font-weight:600;'>LLM Explanation (Why <b>{}</b> / Regime: <b>{}</b>?):</span>".format(
+                            composite_label, risk_regime
+                        ),
+                        unsafe_allow_html=True
+                    )
                     st.warning(sections["Explanation"].strip())
+                if not any(sections.values()):
+                    st.warning("LLM did not return any summary. Check LLM prompt or input structure.")
             except Exception as e:
-                st.error(f"LLM error: {e}")
-
+                import traceback
+                st.error(f"LLM error: {e}\n\n{traceback.format_exc()}")
+    
     st.caption("If you do not see the summaries, check the console logs for LLM errors or ensure your OpenAI API key is correctly set.")
+
 
     # --- Raw Data Section
     st.subheader("Raw Market Technical Data")
