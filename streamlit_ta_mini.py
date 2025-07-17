@@ -17,7 +17,7 @@ st.markdown("""
 
 st.markdown(
     """
-    This dashboard fetches global market data, computes technical metrics, applies cross-asset regime logic, and asks an LLM to summarize the global outlook in both pro and plain-English style.
+    Fetches global market data, computes technical metrics, applies cross-asset regime logic, and summarizes global outlook in both pro and plain-English style.
     """
 )
 
