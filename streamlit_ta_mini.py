@@ -221,7 +221,7 @@ st.caption("Assets are grouped by class. Note: Some tickers may not have reliabl
 st.subheader("AI-Agent Summaries")
 json_summary = json.dumps(summary, indent=2)
 
-if st.button("Generate", type="primary"):
+if st.button("Generate Report", type="primary"):
     with st.spinner("Querying LLM..."):
         try:
             llm_output = call_llm("global", json_summary, prompt_vars={
@@ -255,7 +255,7 @@ if st.button("Generate", type="primary"):
         except Exception as e:
             st.error(f"LLM error: {e}")
 
-st.caption("If you do not see the summaries, check the console logs for LLM errors or ensure your OpenAI API key is correctly set.")
+st.caption("Note: AI generated content can be incorrect or misleading.")
 
 # --- Raw Data Section
 st.subheader("Raw Global Technical Data")
