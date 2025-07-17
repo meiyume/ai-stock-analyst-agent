@@ -1,17 +1,48 @@
 import yfinance as yf
-import pandas as pd
 import numpy as np
+import pandas as pd
 from datetime import datetime, timedelta
 
-def trend_direction(change_pct, threshold=2):
-    if pd.isna(change_pct) or change_pct is None:
-        return "N/A"
-    if change_pct > threshold:
-        return "Uptrend"
-    elif change_pct < -threshold:
-        return "Downtrend"
+def trend_to_score(trend):
+    if trend == "Uptrend":
+        return 1.0
+    elif trend == "Downtrend":
+        return 0.0
     else:
-        return "Sideways"
+        return 0.5
+
+def compute_risk_regime(context):
+    """
+    Market-specific: Determines 'Risk-On', 'Risk-Off', or 'Neutral' for regional market baskets.
+    """
+    equities = np.mean([context.get("Straits Times Index", 0), context.get("MSCI Singapore ETF", 0),
+                        context.get("MSCI Asia ex Japan ETF", 0), context.get("Hang Seng Index", 0)])
+    gold = context.get("Gold", 0)
+    usd = context.get("US Dollar Index", 0)
+    # Simple rule: equities up + gold/FX flat/down = risk-on; equities down + gold/FX up = risk-off
+    if equities > 0.5 and gold < 0 and usd < 0:
+        return ("Risk-On", "Asia/SGX equities rising, gold and USD falling—risk assets favored.", 1.0)
+    elif equities < 0.3 and gold > 0 and usd > 0:
+        return ("Risk-Off", "Asia/SGX equities falling, gold and USD rising—risk-off, safety sought.", 0.0)
+    else:
+        return ("Neutral", "Mixed market signals. No clear regional regime.", 0.5)
+
+def get_anomaly_alerts(context):
+    alerts = []
+    # Equities up + Gold up: unusual, sometimes regime shift
+    if context.get("Straits Times Index", 0) > 0.5 and context.get("Gold", 0) > 0:
+        alerts.append("⚠️ STI and Gold both rising — Possible flight to safety within a risk-on rally.")
+    if context.get("Hang Seng Index", 0) < 0 and context.get("Brent Oil", 0) < 0:
+        alerts.append("⚠️ Hang Seng and Oil both falling — Synchronous de-risking in Asia and commodities.")
+    if context.get("MSCI Singapore ETF", 0) > 1 and context.get("US Dollar Index", 0) > 0.2:
+        alerts.append("⚠️ Singapore equities AND USD both rising — Watch for capital rotation or regional stress.")
+    return alerts
+
+def cross_asset_correlation(prices_df, cols=None, lookback=60):
+    if cols is None:
+        cols = prices_df.columns
+    recent_df = prices_df[cols].tail(lookback)
+    return recent_df.pct_change().corr()
 
 def get_market_baskets():
     return {
@@ -74,8 +105,6 @@ def ta_market(lookbacks=[30, 90, 200]):
     start = today - timedelta(days=450)
     out = {}
     all_prices = {}
-    all_highs = {}
-    all_lows = {}
     alert_msgs = []
 
     for name, ticker in baskets.items():
@@ -102,15 +131,12 @@ def ta_market(lookbacks=[30, 90, 200]):
             vol_90d = close.rolling(90).std()
             vol_z = compute_zscore(vol_30d, 90)
 
-            # --- New highs/lows ---
             high_30d = close.rolling(30).max()
             low_30d = close.rolling(30).min()
             high_90d = close.rolling(90).max()
             low_90d = close.rolling(90).min()
             high_200d = close.rolling(200).max()
             low_200d = close.rolling(200).min()
-            all_highs[name] = {"30d": high_30d, "90d": high_90d, "200d": high_200d}
-            all_lows[name] = {"30d": low_30d, "90d": low_90d, "200d": low_200d}
 
             signals = {}
             for lb in lookbacks:
@@ -123,29 +149,34 @@ def ta_market(lookbacks=[30, 90, 200]):
                         vol = None
                     else:
                         change = (now - then) / then * 100 if now is not None else np.nan
-                        trend = trend_direction(change)
+                        trend = trend_to_score(change)
                         subset = close[-lb:]
                         vol = safe_float(subset.std(), precision=3) if subset.notnull().sum() > 1 else None
                     signals[f"change_{lb}d_pct"] = safe_float(change)
-                    signals[f"trend_{lb}d"] = trend
+                    # For compatibility with composite scoring, use string trend
+                    if change is not None and not np.isnan(change):
+                        if change > 2:
+                            trend_lbl = "Uptrend"
+                        elif change < -2:
+                            trend_lbl = "Downtrend"
+                        else:
+                            trend_lbl = "Sideways"
+                    else:
+                        trend_lbl = "N/A"
+                    signals[f"trend_{lb}d"] = trend_lbl
                     signals[f"vol_{lb}d"] = vol
                 else:
                     signals[f"change_{lb}d_pct"] = None
                     signals[f"trend_{lb}d"] = "N/A"
                     signals[f"vol_{lb}d"] = None
 
-            # --- SMA status ---
             curr = safe_float(close.iloc[-1])
             curr_sma50 = safe_float(sma50.iloc[-1])
             curr_sma200 = safe_float(sma200.iloc[-1])
             signals["sma50_status"] = "Above" if curr and curr_sma50 and curr > curr_sma50 else "Below"
             signals["sma200_status"] = "Above" if curr and curr_sma200 and curr > curr_sma200 else "Below"
-
-            # --- RSI (last) ---
             curr_rsi = safe_float(rsi.iloc[-1])
             signals["rsi"] = curr_rsi
-
-            # --- MACD / Signal ---
             curr_macd = safe_float(macd.iloc[-1])
             curr_macd_sig = safe_float(macd_sig.iloc[-1])
             signals["macd"] = curr_macd
@@ -157,31 +188,23 @@ def ta_market(lookbacks=[30, 90, 200]):
                     signals["macd_cross"] = "No"
             else:
                 signals["macd_cross"] = "N/A"
-
-            # --- Volatility regime (z-score, last) ---
             curr_volz = safe_float(vol_z.iloc[-1])
             signals["vol_zscore"] = curr_volz
-
-            # --- New high/low status ---
             is_newhigh_30d = (abs(curr - safe_float(high_30d.iloc[-1])) < 1e-3) if curr and len(high_30d) else False
             is_newlow_30d = (abs(curr - safe_float(low_30d.iloc[-1])) < 1e-3) if curr and len(low_30d) else False
-            signals["newhigh_30d"] = is_newhigh_30d
-            signals["newlow_30d"] = is_newlow_30d
-
             is_newhigh_90d = (abs(curr - safe_float(high_90d.iloc[-1])) < 1e-3) if curr and len(high_90d) else False
             is_newlow_90d = (abs(curr - safe_float(low_90d.iloc[-1])) < 1e-3) if curr and len(low_90d) else False
-            signals["newhigh_90d"] = is_newhigh_90d
-            signals["newlow_90d"] = is_newlow_90d
-
             is_newhigh_200d = (abs(curr - safe_float(high_200d.iloc[-1])) < 1e-3) if curr and len(high_200d) else False
             is_newlow_200d = (abs(curr - safe_float(low_200d.iloc[-1])) < 1e-3) if curr and len(low_200d) else False
+            signals["newhigh_30d"] = is_newhigh_30d
+            signals["newlow_30d"] = is_newlow_30d
+            signals["newhigh_90d"] = is_newhigh_90d
+            signals["newlow_90d"] = is_newlow_90d
             signals["newhigh_200d"] = is_newhigh_200d
             signals["newlow_200d"] = is_newlow_200d
-
-            # --- Last price ---
             signals["last"] = curr
 
-            # --- Alerts (overbought, oversold, high vol, macd cross, new highs/lows) ---
+            # Alerts
             alerts = []
             if curr_rsi is not None:
                 if curr_rsi > 70:
@@ -197,36 +220,29 @@ def ta_market(lookbacks=[30, 90, 200]):
             if is_newlow_30d or is_newlow_90d or is_newlow_200d:
                 alerts.append("New Low")
             signals["alerts"] = ", ".join(alerts) if alerts else None
-
-            out[name] = signals
-
-            # --- Add basket-level alert msg ---
             if alerts:
                 alert_msgs.append(f"{name}: {', '.join(alerts)}")
+
+            out[name] = signals
 
         except Exception as e:
             out[name] = {"error": f"{type(e).__name__}: {e}"}
 
-    # --- Breadth: % baskets above SMA50/200, in uptrend, at new highs ---
+    # --- Breadth
     breadth = {}
     total_baskets = len([v for v in out.values() if "last" in v])
-    # % Above SMA50
     n_sma50 = sum(1 for v in out.values() if v.get("sma50_status") == "Above")
-    breadth["pct_above_sma50"] = int(100 * n_sma50 / total_baskets) if total_baskets else None
-    # % Above SMA200
     n_sma200 = sum(1 for v in out.values() if v.get("sma200_status") == "Above")
-    breadth["pct_above_sma200"] = int(100 * n_sma200 / total_baskets) if total_baskets else None
-    # % Uptrend (30d)
     n_uptrend = sum(1 for v in out.values() if v.get("trend_30d") == "Uptrend")
-    breadth["pct_uptrend_30d"] = int(100 * n_uptrend / total_baskets) if total_baskets else None
-    # % New 30d highs
     n_newhigh_30d = sum(1 for v in out.values() if v.get("newhigh_30d"))
-    breadth["pct_newhigh_30d"] = int(100 * n_newhigh_30d / total_baskets) if total_baskets else None
-    # % New 30d lows
     n_newlow_30d = sum(1 for v in out.values() if v.get("newlow_30d"))
+    breadth["pct_above_sma50"] = int(100 * n_sma50 / total_baskets) if total_baskets else None
+    breadth["pct_above_sma200"] = int(100 * n_sma200 / total_baskets) if total_baskets else None
+    breadth["pct_uptrend_30d"] = int(100 * n_uptrend / total_baskets) if total_baskets else None
+    breadth["pct_newhigh_30d"] = int(100 * n_newhigh_30d / total_baskets) if total_baskets else None
     breadth["pct_newlow_30d"] = int(100 * n_newlow_30d / total_baskets) if total_baskets else None
 
-    # --- Relative rotation (vs S&P 500 or ^GSPC) ---
+    # --- Relative performance (vs S&P 500)
     rel_perf = {}
     spx_name = "S&P 500"
     spx_close = all_prices.get(spx_name, None)
@@ -245,6 +261,65 @@ def ta_market(lookbacks=[30, 90, 200]):
         except Exception:
             continue
 
+    # --- Cross-asset correlation matrix (last 60 days)
+    key_assets = [
+        "Straits Times Index", "MSCI Singapore ETF", "Hang Seng Index",
+        "MSCI Asia ex Japan ETF", "S&P 500", "US Dollar Index", "Gold", "Brent Oil"
+    ]
+    prices_df = pd.DataFrame({k: all_prices[k] for k in key_assets if k in all_prices})
+    correlation_matrix = None
+    if not prices_df.empty and prices_df.shape[1] > 1:
+        correlation_matrix = cross_asset_correlation(prices_df, cols=prices_df.columns, lookback=60)
+        correlation_matrix = correlation_matrix.round(2)
+
+    # --- Composite score ---
+    score_components = []
+    if breadth.get("pct_uptrend_30d") is not None:
+        score_components.append(breadth["pct_uptrend_30d"] / 100)
+    if breadth.get("pct_above_sma50") is not None:
+        score_components.append(breadth["pct_above_sma50"] / 100)
+    if breadth.get("pct_above_sma200") is not None:
+        score_components.append(breadth["pct_above_sma200"] / 100)
+    if breadth.get("pct_newhigh_30d") is not None:
+        score_components.append(breadth["pct_newhigh_30d"] / 100)
+    if breadth.get("pct_newlow_30d") is not None:
+        score_components.append(1 - (breadth["pct_newlow_30d"] / 100))
+    # Penalty for volatility regime
+    vol_penalty = 0
+    for v in out.values():
+        if v.get("vol_zscore", 0) and v.get("vol_zscore") > 2:
+            vol_penalty += 0.05
+    composite_score = np.nanmean(score_components) - vol_penalty
+    composite_score = max(0, min(1, composite_score))
+    if composite_score >= 0.7:
+        composite_label = "Bullish"
+    elif composite_score <= 0.3:
+        composite_label = "Bearish"
+    else:
+        composite_label = "Neutral"
+
+    # --- Market regime ---
+    def get_pct_change(name, days=1):
+        series = all_prices.get(name, None)
+        if series is not None and len(series) > days:
+            try:
+                return ((series.iloc[-1] - series.iloc[-1 - days]) / series.iloc[-1 - days]) * 100
+            except Exception:
+                return 0.0
+        return 0.0
+    context = {
+        "Straits Times Index": get_pct_change("Straits Times Index"),
+        "MSCI Singapore ETF": get_pct_change("MSCI Singapore ETF"),
+        "Hang Seng Index": get_pct_change("Hang Seng Index"),
+        "MSCI Asia ex Japan ETF": get_pct_change("MSCI Asia ex Japan ETF"),
+        "Gold": get_pct_change("Gold"),
+        "US Dollar Index": get_pct_change("US Dollar Index"),
+        "Brent Oil": get_pct_change("Brent Oil"),
+    }
+    risk_regime, risk_regime_rationale, risk_regime_score = compute_risk_regime(context)
+    anomaly_alerts = get_anomaly_alerts(context)
+
+    # --- Summary dict ---
     summary = {
         "as_of": today.strftime("%Y-%m-%d"),
         "out": out,
@@ -252,12 +327,20 @@ def ta_market(lookbacks=[30, 90, 200]):
         "rel_perf_30d": rel_perf,
         "all_prices": all_prices,
         "alerts": alert_msgs,
+        "composite_score": round(composite_score, 2),
+        "composite_label": composite_label,
+        "risk_regime": risk_regime,
+        "risk_regime_rationale": risk_regime_rationale,
+        "risk_regime_score": risk_regime_score,
+        "anomaly_alerts": anomaly_alerts,
+        "correlation_matrix": correlation_matrix.to_dict() if correlation_matrix is not None else None
     }
     return summary
 
 if __name__ == "__main__":
     result = ta_market()
     import pprint; pprint.pprint(result)
+
 
 
 
