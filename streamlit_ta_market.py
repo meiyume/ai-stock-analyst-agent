@@ -12,11 +12,10 @@ from data_utils import fetch_clean_yfinance
 from llm_utils import call_llm
 
 def safe_json(obj):
-    import pandas as pd
-    import numpy as np
+    import pandas as pd, numpy as np
     if isinstance(obj, dict):
-        return {k: safe_json(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
+        return {str(k): safe_json(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple, set)):
         return [safe_json(i) for i in obj]
     elif isinstance(obj, pd.DataFrame):
         return obj.to_dict(orient="records")
@@ -26,8 +25,15 @@ def safe_json(obj):
         return str(obj)
     elif isinstance(obj, (np.integer, np.floating)):
         return obj.item()
-    else:
+    elif hasattr(obj, "__dict__"):
+        return safe_json(obj.__dict__)
+    elif isinstance(obj, bytes):
+        return obj.decode(errors="ignore")
+    elif obj is None or isinstance(obj, (str, int, float, bool)):
         return obj
+    else:
+        return str(obj)
+
         
 def render_market_tab():
     st.header("🏢 AI Singapore/Asia Market Technical Dashboard")
