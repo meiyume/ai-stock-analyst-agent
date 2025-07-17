@@ -34,12 +34,15 @@ def render_market_tab():
             st.stop()
 
     # --- Load composite score history ---
-    history_file = "market_composite_score_history.csv"
-    hist_df = summary.get("composite_score_history")
-    if hist_df is not None and not hist_df.empty:
-        hist_df = hist_df.sort_values("date")
+    history_file = "composite_score_history.csv"
+    hist_df = None
+    if os.path.exists(history_file):
+        try:
+            hist_df = pd.read_csv(history_file, parse_dates=["date"])
+        except Exception as e:
+            st.warning(f"Could not load composite score history: {e}")
     else:
-        st.info("No historical composite score history found yet.")
+        st.info("No composite score history found yet.")
 
     # === HEADLINE METRICS ===
     as_of = summary.get("as_of", "N/A")
@@ -57,13 +60,15 @@ def render_market_tab():
 
     # ===== HEADLINE =====
     st.markdown(
-        f"#### <span style='font-size:1.3em;'>Composite Market Score: <b>{composite_score if composite_score is not None else 'N/A'}</b> ({composite_label if composite_label else 'N/A'})</span>",
+        f"#### <span style='font-size:1.3em;'>Composite Market Score: <b>{composite_score if composite_score is not None else 'N/A'}</b> ({composite_label if composite_label else 'N/A'})</span><br>"
+        f"<span style='font-size:1.0em;'>Risk Regime: <b>{risk_regime}</b></span>",
         unsafe_allow_html=True,
     )
     st.markdown(
-        f"<span style='font-weight:600;'>Risk Regime:</span> {risk_regime}  |  <span style='font-weight:600;'>As of:</span> {as_of}",
+        f"<span>As of</span> {as_of}",
         unsafe_allow_html=True
     )
+    
     # Rule-based explanations
     composite_score_expl = {
         "Bullish": "‘Bullish’ = Most Singapore/Asia market signals are strong, risk appetite is high, and uptrends dominate.",
@@ -102,13 +107,6 @@ def render_market_tab():
             text=hist_df["composite_label"],
             name="Composite Score"
         ))
-        # Optional: regime bands
-        fig.add_shape(type="rect", x0=hist_df["date"].min(), y0=0.7, x1=hist_df["date"].max(), y1=1.0,
-                      fillcolor="#38B2AC", opacity=0.09, layer="below", line_width=0)
-        fig.add_shape(type="rect", x0=hist_df["date"].min(), y0=0.3, x1=hist_df["date"].max(), y1=0.7,
-                      fillcolor="#ECC94B", opacity=0.07, layer="below", line_width=0)
-        fig.add_shape(type="rect", x0=hist_df["date"].min(), y0=0, x1=hist_df["date"].max(), y1=0.3,
-                      fillcolor="#F56565", opacity=0.09, layer="below", line_width=0)
         fig.update_layout(
             height=280,
             margin=dict(l=0, r=0, t=30, b=0),
@@ -200,16 +198,17 @@ def render_market_tab():
         st.info("Not enough data to compute relative outperformance.")
 
     # --- LLM Summaries Section ---
-    st.subheader("LLM-Generated Market Summaries")
+    st.subheader("AI-Agent Summaries")
     summary_for_llm = {k: v for k, v in summary.items() if k != "out"}  # Do not send "out"
     json_summary = json.dumps(summary_for_llm, indent=2)
-    if st.button("Generate LLM Market Summaries", type="primary"):
+    if st.button("Generate Report", type="primary"):
         with st.spinner("Querying LLM..."):
             try:
                 llm_output = call_llm("market", json_summary, prompt_vars={
                     "composite_label": composite_label or "",
                     "risk_regime": risk_regime or "",
                 })
+                st.session_state["llm_market_summary"] = llm_output
                 # Split into sections (robust, use headings if present)
                 sections = {"Technical Summary": "", "Plain-English Summary": "", "Explanation": ""}
                 current_section = None
@@ -230,14 +229,14 @@ def render_market_tab():
                     st.markdown("**Plain-English Summary**")
                     st.success(sections["Plain-English Summary"].strip())
                 if sections["Explanation"]:
-                    st.markdown("<span style='font-size:1.07em;font-weight:600;'>LLM Explanation (Why <b>{}</b> / Regime: <b>{}</b>?):</span>".format(
+                    st.markdown("<span style='font-size:1.07em;font-weight:600;'>Why Composite Score is <b>{}</b> and Regime: <b>{}</b>?</span>".format(
                         composite_label, risk_regime
                     ), unsafe_allow_html=True)
                     st.warning(sections["Explanation"].strip())
             except Exception as e:
                 st.error(f"LLM error: {e}")
 
-    st.caption("Summaries are powered by your LLM agent. Check API key if errors occur.")
+    st.caption("Note: AI generated content can be incorrect or misleading.")
 
     # --- Raw Data Section
     st.subheader("Raw Market Technical Data")
