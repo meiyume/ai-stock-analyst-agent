@@ -14,31 +14,27 @@ def trend_direction(change_pct, threshold=2):
         return "Sideways"
 
 def get_market_baskets():
-    # Define market/sector/factor tickers here
     return {
-        "S&P 500": "SPY",
-        "Nasdaq 100": "QQQ",
-        "EuroStoxx 50": "FEZ",
-        "Nikkei 225": "EWJ",
-        "FTSE 100": "EWU",
-        "Hang Seng": "EWH",
-        "Emerging Mkts": "EEM",
-        "US Tech": "XLK",
-        "US Financials": "XLF",
-        "US Energy": "XLE",
-        "US Industrials": "XLI",
-        "US Healthcare": "XLV",
-        "US Utilities": "XLU",
-        "US Value": "IVE",
-        "US Growth": "IVW",
-        "US Small Cap": "IWM",
-        "US Bonds": "AGG",
-        "Gold": "GLD",
-        "Oil": "USO",
+        # --- SGX/Singapore/ASEAN/Asia Focused ---
+        "Straits Times Index": "^STI",         # SGX main
+        "MSCI Singapore ETF": "EWS",           # US-listed, tracks Singapore
+        "FTSE ASEAN 40 (SGX)": "QL1.SI",       # ASEAN regional, SGX-listed
+        "Hang Seng Index": "^HSI",             # Hong Kong
+        "MSCI Asia ex Japan ETF": "AAXJ",      # Asia ex Japan
+        "MSCI Emerging Asia ETF": "EEMA",      # EM Asia
+        "Nikkei 225": "^N225",                 # Japan
+        "MSCI China ETF": "MCHI",              # China
+
+        # --- Global/US context (for relative rotation etc) ---
+        "MSCI World ETF": "URTH",              # Global
+        "S&P 500": "^GSPC",                    # US main index
+        "Nasdaq 100": "^NDX",                  # US tech
+        "US Dollar Index": "DX-Y.NYB",         # Dollar strength
+        "Gold": "GC=F",                        # Gold futures
+        "Brent Oil": "BZ=F",                   # Brent oil futures
     }
 
 def safe_float(val, default=None, precision=3):
-    """Safe float conversion with optional rounding and default fallback."""
     try:
         out = float(val)
         if np.isnan(out):
@@ -57,7 +53,6 @@ def ta_market(lookbacks=[30, 90, 200]):
     for name, ticker in baskets.items():
         try:
             df = yf.download(ticker, start=start, end=today, interval="1d", auto_adjust=True, progress=False)
-            # Defensive checks: dataframe type, min rows, 'Close' col
             if not isinstance(df, pd.DataFrame) or len(df) < 10 or "Close" not in df.columns:
                 out[name] = {"error": "No data"}
                 continue
@@ -74,7 +69,6 @@ def ta_market(lookbacks=[30, 90, 200]):
                 if len(close) >= lb:
                     now = safe_float(close.iloc[-1])
                     then = safe_float(close.iloc[-lb])
-                    # Handle missing or zero division
                     if then is None or then == 0:
                         change = np.nan
                         trend = "N/A"
@@ -82,7 +76,6 @@ def ta_market(lookbacks=[30, 90, 200]):
                     else:
                         change = (now - then) / then * 100 if now is not None else np.nan
                         trend = trend_direction(change)
-                        # Defensive: std on enough data and not all same
                         subset = close[-lb:]
                         vol = safe_float(subset.std(), precision=3) if subset.notnull().sum() > 1 else None
                     signals[f"change_{lb}d_pct"] = safe_float(change)
@@ -92,7 +85,6 @@ def ta_market(lookbacks=[30, 90, 200]):
                     signals[f"change_{lb}d_pct"] = None
                     signals[f"trend_{lb}d"] = "N/A"
                     signals[f"vol_{lb}d"] = None
-            # Defensive: last price
             signals["last"] = safe_float(close.iloc[-1])
             out[name] = signals
         except Exception as e:
@@ -109,21 +101,21 @@ def ta_market(lookbacks=[30, 90, 200]):
             total_count += 1
     breadth_30d_pct = int(100 * uptrend_count / total_count) if total_count else None
 
-    # --- Relative rotation (vs S&P 500 or SPY) ---
+    # --- Relative rotation (vs S&P 500 or ^GSPC) ---
     rel_perf = {}
-    spy_close = all_prices.get("S&P 500", None)
+    spx_name = "S&P 500"
+    spx_close = all_prices.get(spx_name, None)
     for name, series in all_prices.items():
         try:
-            # Defensive checks
-            if spy_close is None or len(series) < 30 or len(spy_close) < 30:
+            if spx_close is None or len(series) < 30 or len(spx_close) < 30:
                 continue
             series_now = safe_float(series.iloc[-1])
             series_then = safe_float(series.iloc[-30])
-            spy_now = safe_float(spy_close.iloc[-1])
-            spy_then = safe_float(spy_close.iloc[-30])
-            if None in [series_now, series_then, spy_now, spy_then] or series_then == 0 or spy_then == 0:
+            spx_now = safe_float(spx_close.iloc[-1])
+            spx_then = safe_float(spx_close.iloc[-30])
+            if None in [series_now, series_then, spx_now, spx_then] or series_then == 0 or spx_then == 0:
                 continue
-            rel = ((series_now - series_then) / series_then) - ((spy_now - spy_then) / spy_then)
+            rel = ((series_now - series_then) / series_then) - ((spx_now - spx_then) / spx_then)
             rel_perf[name] = round(rel * 100, 2)
         except Exception:
             continue
@@ -140,6 +132,7 @@ def ta_market(lookbacks=[30, 90, 200]):
 if __name__ == "__main__":
     result = ta_market()
     import pprint; pprint.pprint(result)
+
 
 
 
