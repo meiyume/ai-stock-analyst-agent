@@ -60,7 +60,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.markdown(
-    f"<span>As of:</span> {as_of}",
+    f"<span>As of</span> {as_of}",
     unsafe_allow_html=True
 )
 
@@ -72,7 +72,7 @@ composite_score_expl = {
 }
 risk_regime_expl = {
     "Bullish": "A 'Bullish' risk regime means volatility is falling and major markets are rising. Investors are confident and risk-taking is encouraged.",
-    "Neutral": "A 'Neutral' risk regime means there aren’t big warning signs of danger, but there also isn’t a strong signal that it’s a super-safe time. The market isn’t panicky, but it’s not totally carefree either—it’s in a steady, watchful mode.",
+    "Neutral": "A 'Neutral' risk regime means there aren’t big warning signs of danger, but there also isn’t a strong signal that it’s a super-safe time. The market isn’t panicky, but it’s not totally carefree either. it’s in a steady, watchful mode.",
     "Bearish": "A 'Bearish' risk regime means volatility is rising and major markets are falling. Investors may be nervous, and caution is warranted."
 }
 explanation = ""
@@ -248,7 +248,7 @@ if st.button("Generate LLM Global Summaries", type="primary"):
                 st.markdown("**Plain-English Summary**")
                 st.success(sections["Plain-English Summary"].strip())
             if sections["Explanation"]:
-                st.markdown("<span style='font-size:1.07em;font-weight:600;'>LLM Explanation (Why <b>{}</b> / Regime: <b>{}</b>?):</span>".format(
+                st.markdown("<span style='font-size:1.07em;font-weight:600;'>Why Composite Score is <b>{composite_label}</b> and Regime is <b>{risk_regime}</b>?):</span>".format(
                     composite_label, risk_regime
                 ), unsafe_allow_html=True)
                 st.warning(sections["Explanation"].strip())
@@ -459,7 +459,7 @@ chart_list = [
     },
     {
         "ticker": "HG=F",
-        "label": "Copper Futures Lawrence",
+        "label": "Copper Futures",
         "explanation": "Copper is an industrial bellwether, used to assess the strength of global manufacturing and economic growth."
     },
 ]
