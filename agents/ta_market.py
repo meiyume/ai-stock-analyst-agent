@@ -120,18 +120,9 @@ def ta_market(lookbacks=[30, 90, 200]):
             if not isinstance(df, pd.DataFrame) or len(df) < 20 or "Close" not in df.columns:
                 out[name] = {"error": "No data or delisted (check ticker: '{}')".format(ticker)}
                 continue
-            # Defensive close column selector: prefer "Close", fallback to first close-like col
-            close_col = None
-            for c in df.columns:
-                if "close" in c.lower():
-                    close_col = c
-                    break
-            if not close_col:
-                out[name] = {"error": "No close column found"}
-                continue
-            close = df[close_col].dropna()
-            if not isinstance(close, pd.Series):
-                close = pd.Series(close)
+            close = df["Close"].dropna()
+            if isinstance(close, pd.DataFrame):
+                close = close.squeeze()
             if close.empty or len(close) < 20:
                 out[name] = {"error": "Insufficient close data"}
                 continue
