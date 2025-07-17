@@ -225,16 +225,11 @@ def render_market_tab():
 
     # --- LLM Summaries Section ---
     st.subheader("AI-Agent Summaries")
-    summary_for_llm = {k: v for k, v in summary.items() if k != "out"}  # Do not send "out"
     
-    for k, v in summary_for_llm.items():
-        try:
-            json.dumps({k: v})
-        except Exception as e:
-            st.write(f"Key {k} failed to serialize: {e} (type={type(v)})")
-
-    
+    exclude_keys = ["out", "all_prices", "composite_score_history"]
+    summary_for_llm = {k: v for k, v in summary.items() if k not in exclude_keys}
     json_summary = json.dumps(summary_for_llm, indent=2)
+
     if st.button("Generate Report", type="primary"):
         with st.spinner("Querying LLM..."):
             try:
