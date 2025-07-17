@@ -12,7 +12,6 @@ def get_company_aliases_from_ticker(ticker):
             names.add(info["longName"])
         if "shortName" in info:
             names.add(info["shortName"])
-        # Heuristic: If bank, try variations
         if "longName" in info:
             if "Bank" in info["longName"]:
                 names.add(info["longName"].replace("Bank", "Bank Group"))
@@ -22,7 +21,7 @@ def get_company_aliases_from_ticker(ticker):
     except Exception:
         return [ticker]
 
-# --- 2. Fetch news for all aliases/sector ---
+# --- 2. NewsAPI search ---
 def fetch_stock_sector_news(query, max_articles=10, api_key=None, from_days_ago=7):
     url = (
         f"https://newsapi.org/v2/everything?q={query}"
@@ -47,21 +46,62 @@ def fetch_stock_sector_news(query, max_articles=10, api_key=None, from_days_ago=
         for a in articles
     ]
 
-def fetch_stock_sector_news_expanded(ticker, sector=None, max_articles=10, api_key=None, from_days_ago=7):
+# --- 3. SerpAPI Google News fallback ---
+def fetch_news_serpapi(query, serpapi_key, num=10):
+    try:
+        from serpapi import GoogleSearch
+    except ImportError:
+        raise ImportError("You need to `pip install google-search-results` for SerpAPI support.")
+    params = {
+        "engine": "google_news",
+        "q": query,
+        "api_key": serpapi_key,
+        "num": num,
+        "hl": "en",
+    }
+    results = GoogleSearch(params).get_dict()
+    news = results.get("news_results", [])
+    return [
+        {
+            "title": n.get("title", ""),
+            "publishedAt": n.get("date", ""),
+            "source": n.get("source", ""),
+            "url": n.get("link", ""),
+            "description": n.get("snippet", ""),
+        }
+        for n in news
+    ]
+
+# --- 4. Expand aliases, dedupe, search NewsAPI + fallback to SerpAPI ---
+def fetch_stock_sector_news_expanded(
+    ticker,
+    sector=None,
+    max_articles=10,
+    newsapi_key=None,
+    serpapi_key=None,
+    from_days_ago=7,
+    verbose=False
+):
     queries = get_company_aliases_from_ticker(ticker)
     if sector:
         queries.append(sector)
     seen_titles = set()
     news = []
     for q in queries:
-        res = fetch_stock_sector_news(q, max_articles=max_articles, api_key=api_key, from_days_ago=from_days_ago)
+        if verbose:
+            print(f"Querying NewsAPI for: {q}")
+        res = fetch_stock_sector_news(q, max_articles=max_articles, api_key=newsapi_key, from_days_ago=from_days_ago)
+        if not res and serpapi_key:
+            if verbose:
+                print(f"NewsAPI empty. Querying SerpAPI for: {q}")
+            res = fetch_news_serpapi(q, serpapi_key=serpapi_key, num=max_articles)
         for article in res:
-            if article["title"] not in seen_titles:
+            if article["title"] and article["title"] not in seen_titles:
                 news.append(article)
                 seen_titles.add(article["title"])
     return news
 
-# --- 3. Summarize with OpenAI LLM (>=1.0.0 syntax) ---
+# --- 5. Summarize with OpenAI LLM (>=1.0.0 syntax) ---
 def summarize_news_with_llm(headlines, company_name, sector_name=None, openai_client=None):
     if not headlines:
         return "No news found.", "N/A", []
@@ -93,22 +133,26 @@ Respond in JSON: {{"summary": "...", "sentiment": "...", "drivers": ["...", "...
         }
     return output.get("summary", ""), output.get("sentiment", ""), output.get("drivers", [])
 
-# --- 4. Master agent function ---
+# --- 6. Master agent function ---
 def news_agent_stock(
     ticker,
     company_name=None,
     sector_name=None,
     openai_client=None,
     newsapi_key=None,
+    serpapi_key=None,
     max_articles=12,
-    from_days_ago=7
+    from_days_ago=7,
+    verbose=False
 ):
     news = fetch_stock_sector_news_expanded(
         ticker,
         sector=sector_name,
         max_articles=max_articles,
-        api_key=newsapi_key,
-        from_days_ago=from_days_ago
+        newsapi_key=newsapi_key,
+        serpapi_key=serpapi_key,
+        from_days_ago=from_days_ago,
+        verbose=verbose
     )
     if company_name is None:
         try:
@@ -129,3 +173,7 @@ def news_agent_stock(
         "drivers": drivers,
         "headlines": news[:max_articles],
     }
+
+
+
+
