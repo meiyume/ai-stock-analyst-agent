@@ -1,18 +1,29 @@
 import streamlit as st
-from agents.na_stock import news_agent_stock
+from openai import OpenAI
+from na_stock import news_agent_stock
 
-st.set_page_config(page_title="News Analyst: Stock/Sector", page_icon="📰")
-
-st.title("📰 Stock/Sector News Analyst (AI)")
-ticker = st.text_input("Enter Stock Ticker or Company Name (e.g., SIA, Wilmar):")
-sector = st.text_input("Sector/Industry (optional):")
+st.title("📰 Stock/Sector News Analyst")
+ticker = st.text_input("Enter Stock Ticker (e.g., U11.SI):")
+sector = st.text_input("Sector (optional):")
 if st.button("Analyze News", type="primary"):
-    with st.spinner("Fetching and analyzing news..."):
-        api_key = st.secrets["NEWSAPI_KEY"]
-        openai_key = st.secrets["OPENAI_API_KEY"]
-        result = news_agent_stock(ticker, ticker, sector, openai_api_key=openai_key, newsapi_key=api_key)
+    with st.spinner("Analyzing news..."):
+        openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+        newsapi_key = st.secrets["NEWSAPI_KEY"]
+        result = news_agent_stock(
+            ticker,
+            sector_name=sector,
+            openai_client=openai_client,
+            newsapi_key=newsapi_key,
+        )
         st.subheader("Summary")
         st.write(result["summary"])
-        st.subheader("Top Headlines")
+        st.subheader(f"Sentiment: {result['sentiment']}")
+        st.subheader("Key News Drivers")
+        for d in result["drivers"]:
+            st.write(f"- {d}")
+        st.subheader("Recent Headlines")
         for h in result["headlines"]:
             st.markdown(f"- [{h['title']}]({h['url']}) <small>({h['source']}, {h['publishedAt'][:10]})</small>", unsafe_allow_html=True)
+
+
+
