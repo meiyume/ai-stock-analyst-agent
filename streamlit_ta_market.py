@@ -7,34 +7,63 @@ from agents.ta_market import ta_market
 import yfinance as yf
 from datetime import datetime, timedelta
 
-def plot_index_chart(ticker, label, window=180):
-    """Plots a compact line chart with SMA overlays for the given index."""
+def plot_index_chart(ticker, label, window=180, min_points=20):
+    """Robustly plot a line chart with SMA overlays, defensive to all data/column issues."""
     try:
         end = datetime.today()
-        start = end - timedelta(days=window + 30)
+        start = end - timedelta(days=window + 60)
         df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
-        if df is None or "Close" not in df.columns or df["Close"].dropna().empty:
-            st.info(f"Not enough data to plot {label}.")
+
+        if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+            st.info(f"Not enough data to plot {label} (empty dataframe).")
             return
-        df = df.dropna(subset=["Close"])
-        df = df.tail(window)
-        df["SMA20"] = df["Close"].rolling(window=20).mean()
-        df["SMA50"] = df["Close"].rolling(window=50).mean()
-        df["SMA200"] = df["Close"].rolling(window=200).mean()
+
+        # Flatten MultiIndex columns (if any)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = [
+                "_".join([str(i) for i in col if i and i != "None"]) for col in df.columns.values
+            ]
+
+        # Find 'close' column(s) (case-insensitive, works for 'Adj Close', 'Close*', etc.)
+        close_cols = [c for c in df.columns if isinstance(c, str) and "close" in c.lower()]
+        if not close_cols:
+            st.warning(f"Chart error ({label}): No close price column found. Columns: {list(df.columns)}")
+            return
+        close_col = close_cols[0]
+
+        # Drop NaN, check minimum history
+        df = df.dropna(subset=[close_col])
+        if len(df) < min_points:
+            st.info(f"Not enough {label} data (only {len(df)} valid points).")
+            return
+        df = df.tail(window).copy()
+
+        # Calculate SMAs only if enough data
+        for sma_win in [20, 50, 200]:
+            if len(df) >= sma_win:
+                df[f"SMA{sma_win}"] = df[close_col].rolling(window=sma_win).mean()
+            else:
+                df[f"SMA{sma_win}"] = float('nan')
+
+        # Check again for valid points after SMAs
+        if df[close_col].isnull().all():
+            st.info(f"All values in close column for {label} are NaN.")
+            return
+
+        # Build chart
         fig = go.Figure()
         fig.add_trace(go.Scatter(
-            x=df.index, y=df["Close"], mode="lines", name=label,
+            x=df.index, y=df[close_col], mode="lines", name=label,
             line=dict(width=2, color="#3182ce")
         ))
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df["SMA20"], mode="lines", name="SMA 20", line=dict(width=1, dash='dot', color="#8fd3fe")
-        ))
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df["SMA50"], mode="lines", name="SMA 50", line=dict(width=1, dash='dash', color="#38B2AC")
-        ))
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df["SMA200"], mode="lines", name="SMA 200", line=dict(width=1, dash='solid', color="#222")
-        ))
+        for sma_win, dash, color in zip([20, 50, 200], ['dot', 'dash', 'solid'], ["#8fd3fe", "#38B2AC", "#222"]):
+            # Only plot SMA if not all NaN
+            sma_col = f"SMA{sma_win}"
+            if not df[sma_col].isnull().all():
+                fig.add_trace(go.Scatter(
+                    x=df.index, y=df[sma_col], mode="lines", name=f"SMA {sma_win}",
+                    line=dict(width=1, dash=dash, color=color)
+                ))
         fig.update_layout(
             title=label,
             height=230,
@@ -45,8 +74,10 @@ def plot_index_chart(ticker, label, window=180):
             paper_bgcolor='rgba(0,0,0,0)'
         )
         st.plotly_chart(fig, use_container_width=True)
+
     except Exception as e:
         st.warning(f"Chart error ({label}): {e}")
+
 
 def render_market_tab():
     st.header("📈 AI Market / Sector Technical Dashboard")
