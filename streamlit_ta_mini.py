@@ -61,6 +61,8 @@ st.markdown(
 st.markdown(
     f"#### <span style='font-size:1.3em;'>Risk Regime: <b>{risk_regime}</b></span>",
     unsafe_allow_html=True,
+)
+st.markdown(
     f"<span style='font-weight:600;'>>As of:</span> {as_of}",
     unsafe_allow_html=True
 )
