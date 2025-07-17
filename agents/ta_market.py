@@ -1,8 +1,14 @@
-import yfinance as yf
+# agents/ta_market.py
+
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 import os
+import sys
+
+# -- Add parent dir to sys.path to allow: from data_utils import fetch_clean_yfinance
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_utils import fetch_clean_yfinance
 
 def trend_to_score(trend):
     if trend == "Uptrend":
@@ -116,13 +122,12 @@ def ta_market(lookbacks=[30, 90, 200]):
 
     for name, ticker in baskets.items():
         try:
-            df = yf.download(ticker, start=start, end=today, interval="1d", auto_adjust=True, progress=False)
-            if not isinstance(df, pd.DataFrame) or len(df) < 20 or "Close" not in df.columns:
-                out[name] = {"error": "No data or delisted (check ticker: '{}')".format(ticker)}
+            df, err = fetch_clean_yfinance(ticker, start=start, end=today, interval="1d", min_points=20, auto_adjust=True)
+            if err or df is None or df.empty:
+                out[name] = {"error": err or f"No data for ticker {ticker}"}
                 continue
-            close = df["Close"].dropna()
-            if isinstance(close, pd.DataFrame):
-                close = close.squeeze()
+
+            close = df["close"].astype(float).dropna()
             if close.empty or len(close) < 20:
                 out[name] = {"error": "Insufficient close data"}
                 continue
@@ -379,9 +384,5 @@ if __name__ == "__main__":
         fig.show()
     else:
         print("No historical composite score data found.")
-
-
-
-
 
 
