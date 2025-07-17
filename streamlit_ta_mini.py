@@ -60,7 +60,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.markdown(
-    f"<span style='font-weight:600;'>As of:</span> {as_of}",
+    f"<span>As of:</span> {as_of}",
     unsafe_allow_html=True
 )
 
