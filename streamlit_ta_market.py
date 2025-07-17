@@ -11,6 +11,24 @@ from agents.ta_market import ta_market
 from data_utils import fetch_clean_yfinance
 from llm_utils import call_llm
 
+def safe_json(obj):
+    import pandas as pd
+    import numpy as np
+    if isinstance(obj, dict):
+        return {k: safe_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [safe_json(i) for i in obj]
+    elif isinstance(obj, pd.DataFrame):
+        return obj.to_dict(orient="records")
+    elif isinstance(obj, pd.Series):
+        return obj.tolist()
+    elif isinstance(obj, (pd.Timestamp, np.datetime64)):
+        return str(obj)
+    elif isinstance(obj, (np.integer, np.floating)):
+        return obj.item()
+    else:
+        return obj
+        
 def render_market_tab():
     st.header("🏢 AI Singapore/Asia Market Technical Dashboard")
 
@@ -331,7 +349,7 @@ def render_market_tab():
     # --- LLM Summaries Section ---
     st.subheader("LLM-Generated Market Summaries")
     summary_for_llm = {k: v for k, v in summary.items() if k != "out"}  # Do not send "out"
-    json_summary = json.dumps(summary_for_llm, indent=2)
+    json_summary = json.dumps(safe_json(summary_for_llm), indent=2)
     if st.button("Generate LLM Market Summaries", type="primary"):
         with st.spinner("Querying LLM..."):
             try:
