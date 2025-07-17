@@ -192,24 +192,32 @@ def render_market_tab():
     # --- Relative Outperformance vs S&P 500 (30D) ---
     if rel_perf_30d:
         rel_df = pd.DataFrame(list(rel_perf_30d.items()), columns=["Name", "Relative Outperf (%)"])
-        rel_df = rel_df.sort_values("Relative Outperf (%)", ascending=True)  # Smallest at bottom
+        rel_df = rel_df.sort_values("Relative Outperf (%)", ascending=False)
+    
+        # Pastel green to pastel red (custom)
+        pastel_scale = [
+            [0.0, "#B6E2D3"],   # pastel green
+            [0.5, "#F7F6E7"],   # very light neutral
+            [1.0, "#F7B6B6"],   # pastel red
+        ]
     
         fig = px.bar(
             rel_df,
-            y="Name",
-            x="Relative Outperf (%)",
-            orientation="h",
+            x="Name",
+            y="Relative Outperf (%)",
             color="Relative Outperf (%)",
-            color_continuous_scale="RdYlGn",  # Green = best, Red = worst
-            height=300 + 20*len(rel_df),      # Dynamic height for more names
+            color_continuous_scale=pastel_scale,
+            height=400,
             labels={"Relative Outperf (%)": "Relative Outperformance (%)"},
-            title=None
+            title=None,
         )
         fig.update_layout(
-            xaxis_title="Relative Outperformance (%) vs S&P 500",
-            yaxis_title=None,
+            yaxis_title="Relative Outperformance (%) vs S&P 500",
+            xaxis_title=None,
             coloraxis_showscale=False,
-            margin=dict(l=0, r=0, t=30, b=0)
+            margin=dict(l=0, r=0, t=30, b=0),
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
