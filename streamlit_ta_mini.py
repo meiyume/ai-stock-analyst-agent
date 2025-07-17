@@ -11,7 +11,7 @@ from llm_utils import call_llm
 
 st.set_page_config(page_title="Technical Analyst AI Agent", page_icon="🌍")
 st.title("Technical Analyst AI Agent 🤖")
-st.title("Global Macro") 
+st.subheader("Global Macro")
 
 st.markdown(
     """
