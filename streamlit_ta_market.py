@@ -58,7 +58,7 @@ def render_market_tab():
             st.stop()
 
     # --- Load composite score history ---
-    history_file = "composite_score_history.csv"
+    history_file = "market_composite_score_history.csv"
     hist_df = None
     if os.path.exists(history_file):
         try:
