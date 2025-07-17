@@ -274,6 +274,56 @@ def render_market_tab():
 
     st.caption("Baskets include SGX/Asia indices, regional ETFs, and global context. Composite score, risk regime, and alerts use only available data.")
 
+# --- LLM Summaries and Explanation ---
+st.subheader("LLM-Generated Market Summaries")
+import json
+
+# Prepare JSON summary for LLM input
+market_summary = dict(mkt_summary)  # Make a shallow copy for editing if needed
+json_summary = json.dumps(market_summary, indent=2, default=str)
+
+if st.button("Generate LLM Market Summaries", type="primary"):
+    from llm_utils import call_llm
+    with st.spinner("Querying LLM for market outlook..."):
+        try:
+            llm_output = call_llm("market", json_summary, prompt_vars={
+                "composite_label": composite_label or "",
+                "risk_regime": risk_regime or "",
+            })
+            # Split the LLM output into sections
+            sections = {"Technical Summary": "", "Plain-English Summary": "", "Explanation": ""}
+            current_section = None
+            for line in llm_output.splitlines():
+                line_strip = line.strip()
+                if line_strip.startswith("Technical Summary"):
+                    current_section = "Technical Summary"
+                elif line_strip.startswith("Plain-English Summary"):
+                    current_section = "Plain-English Summary"
+                elif line_strip.startswith("Explanation"):
+                    current_section = "Explanation"
+                elif current_section and line_strip:
+                    sections[current_section] += line + "\n"
+            if sections["Technical Summary"]:
+                st.markdown("**Technical Summary**")
+                st.info(sections["Technical Summary"].strip())
+            if sections["Plain-English Summary"]:
+                st.markdown("**Plain-English Summary**")
+                st.success(sections["Plain-English Summary"].strip())
+            if sections["Explanation"]:
+                st.markdown("<span style='font-size:1.07em;font-weight:600;'>LLM Explanation (Why <b>{}</b> / Regime: <b>{}</b>?):</span>".format(
+                    composite_label, risk_regime
+                ), unsafe_allow_html=True)
+                st.warning(sections["Explanation"].strip())
+        except Exception as e:
+            st.error(f"LLM error: {e}")
+
+st.caption("If you do not see the summaries, check the console logs for LLM errors or ensure your OpenAI API key is correctly set.")
+
+# --- Raw Data Section
+st.subheader("Raw Market Technical Data")
+with st.expander("Show raw summary dict", expanded=False):
+    st.json(mkt_summary)
+
 # ---- End ----
 
 
