@@ -3,26 +3,29 @@
 import streamlit as st
 import os
 import json
-from datetime import datetime
 import pandas as pd
+import numpy as np
+import yfinance as yf
 import plotly.graph_objects as go
-
-from agents.ta_market import ta_market
 from llm_utils import call_llm
+from datetime import datetime, timedelta
 
 def render_market_tab():
-    st.header("🏢 AI Singapore/Asia Market Technical Dashboard")
-
-    st.caption(f"Streamlit version: {st.__version__}")
+    st.set_page_config(page_title="Technical Analyst AI Agent", page_icon="🌍")
+    st.markdown("""
+    <h1 style='margin-bottom: 0.3em;'>Technical Analyst AI Agent 🤖<br>
+    - Global Macro</h1>
+    """, unsafe_allow_html=True)
 
     st.markdown(
         """
-        This dashboard analyzes key Singapore & Asia equity, FX, and commodity indices, computes market breadth, regime, anomalies, cross-asset risk, and summarizes outlook via LLM.
+        Analyzes key Singapore and Asia equity, FX and commodity indices, computes market breath, regime, 
+        anormalies, cross-asset risk and summarizes outlook in both pro and plain-English style.
         """
     )
 
     # --- Fetch market technical summary
-    with st.spinner("Loading market technical summary..."):
+    with st.spinner("Loading data and performing computation..."):
         try:
             summary = ta_market()
             st.success("Fetched and computed market technical metrics.")
@@ -30,7 +33,7 @@ def render_market_tab():
             st.error(f"Error in ta_market(): {e}")
             st.stop()
 
-    # --- Load historical composite score for market ---
+    # --- Load composite score history ---
     history_file = "market_composite_score_history.csv"
     hist_df = summary.get("composite_score_history")
     if hist_df is not None and not hist_df.empty:
