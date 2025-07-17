@@ -373,6 +373,227 @@ def render_market_tab():
     with st.expander("Show raw summary dict", expanded=False):
         st.json(summary)
 
+from data_utils import fetch_clean_yfinance
+import plotly.graph_objects as go
+import numpy as np
+import pandas as pd
+
+# --- Get STI price data
+df_sti, err = fetch_clean_yfinance("^STI", start="2022-01-01", interval="1d", auto_adjust=True)
+if err or df_sti is None or len(df_sti) < 30:
+    st.info(f"STI data unavailable: {err}")
+else:
+    # MACD calculation
+    def compute_macd(series, span1=12, span2=26, signal=9):
+        ema1 = series.ewm(span=span1, adjust=False).mean()
+        ema2 = series.ewm(span=span2, adjust=False).mean()
+        macd = ema1 - ema2
+        macd_signal = macd.ewm(span=signal, adjust=False).mean()
+        return macd, macd_signal
+
+    # RSI calculation
+    def compute_rsi(series, window=14):
+        delta = series.diff()
+        up = delta.clip(lower=0)
+        down = -delta.clip(upper=0)
+        ma_up = up.rolling(window, min_periods=1).mean()
+        ma_down = down.rolling(window, min_periods=1).mean()
+        rs = ma_up / ma_down.replace(0, np.nan)
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+
+    df_sti = df_sti.reset_index(drop=True)
+    df_sti["SMA20"] = df_sti["close"].rolling(20).mean()
+    df_sti["SMA50"] = df_sti["close"].rolling(50).mean()
+    df_sti["SMA200"] = df_sti["close"].rolling(200).mean()
+    df_sti["MACD"], df_sti["MACD_Signal"] = compute_macd(df_sti["close"])
+    df_sti["RSI"] = compute_rsi(df_sti["close"])
+    df_sti["date"] = pd.to_datetime(df_sti["date"])
+
+    # Get historical regime (from composite_score_history)
+    hist_df = None
+    if "composite_score_history" in summary and summary["composite_score_history"] is not None:
+        hist_df = summary["composite_score_history"]
+        if isinstance(hist_df, pd.DataFrame):
+            hist_df = hist_df.sort_values("date")
+        else:
+            hist_df = pd.DataFrame(hist_df)
+        hist_df["date"] = pd.to_datetime(hist_df["date"])
+
+    # Set up figure
+    fig = go.Figure()
+
+    # --- Price line
+    fig.add_trace(go.Scatter(
+        x=df_sti["date"], y=df_sti["close"],
+        mode="lines", name="STI Close", line=dict(color="#005288", width=2)
+    ))
+
+    # --- Moving Averages
+    if show_sma:
+        fig.add_trace(go.Scatter(
+            x=df_sti["date"], y=df_sti["SMA20"],
+            mode="lines", name="SMA20", line=dict(dash="dot", color="#4A90E2")
+        ))
+        fig.add_trace(go.Scatter(
+            x=df_sti["date"], y=df_sti["SMA50"],
+            mode="lines", name="SMA50", line=dict(dash="dash", color="#F5A623")
+        ))
+        fig.add_trace(go.Scatter(
+            x=df_sti["date"], y=df_sti["SMA200"],
+            mode="lines", name="SMA200", line=dict(dash="solid", color="#D0021B")
+        ))
+
+    # --- Regime Color Bands
+    if show_regime and hist_df is not None and not hist_df.empty:
+        regime_colors = {"Bullish": "#38B2AC", "Neutral": "#ECC94B", "Bearish": "#F56565"}
+        last_date = df_sti["date"].max()
+        for i, row in hist_df.iterrows():
+            if i == 0: continue
+            prev_date = hist_df.iloc[i-1]["date"]
+            curr_date = row["date"]
+            label = row["composite_label"]
+            color = regime_colors.get(label, "#888")
+            fig.add_shape(
+                type="rect",
+                x0=prev_date, x1=curr_date,
+                y0=0, y1=df_sti["close"].max()*1.2,
+                fillcolor=color, opacity=0.10, line_width=0, layer="below"
+            )
+        # Extend last regime band to end
+        if len(hist_df) > 1:
+            fig.add_shape(
+                type="rect",
+                x0=hist_df.iloc[-1]["date"], x1=last_date,
+                y0=0, y1=df_sti["close"].max()*1.2,
+                fillcolor=regime_colors.get(hist_df.iloc[-1]["composite_label"], "#888"),
+                opacity=0.10, line_width=0, layer="below"
+            )
+
+    # --- Regime Change Vertical Lines
+    if show_regime and hist_df is not None and not hist_df.empty:
+        prev_label = None
+        for i, row in hist_df.iterrows():
+            label = row["composite_label"]
+            if prev_label and label != prev_label:
+                fig.add_shape(
+                    type="line",
+                    x0=row["date"], x1=row["date"],
+                    y0=0, y1=df_sti["close"].max()*1.2,
+                    line=dict(color="black", dash="dot", width=1.5)
+                )
+                fig.add_annotation(
+                    x=row["date"], y=df_sti["close"].max()*1.12,
+                    text=label, showarrow=False, font=dict(size=12, color="black"),
+                    bgcolor="white", opacity=0.7
+                )
+            prev_label = label
+
+    # --- Key Technical Signal Markers ---
+    if show_signals:
+        # MACD Crossovers
+        macd = df_sti["MACD"]
+        macd_sig = df_sti["MACD_Signal"]
+        for i in range(1, len(macd)):
+            # Bullish crossover
+            if macd.iloc[i-1] < macd_sig.iloc[i-1] and macd.iloc[i] > macd_sig.iloc[i]:
+                fig.add_trace(go.Scatter(
+                    x=[df_sti["date"].iloc[i]], y=[df_sti["close"].iloc[i]],
+                    mode="markers+text",
+                    marker=dict(color="green", size=14, symbol="arrow-up"),
+                    text=["MACD↑"], textposition="bottom center",
+                    name="MACD Bull", showlegend=False
+                ))
+            # Bearish crossover
+            if macd.iloc[i-1] > macd_sig.iloc[i-1] and macd.iloc[i] < macd_sig.iloc[i]:
+                fig.add_trace(go.Scatter(
+                    x=[df_sti["date"].iloc[i]], y=[df_sti["close"].iloc[i]],
+                    mode="markers+text",
+                    marker=dict(color="red", size=14, symbol="arrow-down"),
+                    text=["MACD↓"], textposition="top center",
+                    name="MACD Bear", showlegend=False
+                ))
+        # RSI Overbought/Oversold
+        for i in range(len(df_sti)):
+            if df_sti["RSI"].iloc[i] > 70:
+                fig.add_trace(go.Scatter(
+                    x=[df_sti["date"].iloc[i]], y=[df_sti["close"].iloc[i]],
+                    mode="markers+text",
+                    marker=dict(color="purple", size=12, symbol="circle"),
+                    text=["RSI>70"], textposition="top right",
+                    name="RSI Overbought", showlegend=False
+                ))
+            elif df_sti["RSI"].iloc[i] < 30:
+                fig.add_trace(go.Scatter(
+                    x=[df_sti["date"].iloc[i]], y=[df_sti["close"].iloc[i]],
+                    mode="markers+text",
+                    marker=dict(color="blue", size=12, symbol="circle"),
+                    text=["RSI<30"], textposition="bottom right",
+                    name="RSI Oversold", showlegend=False
+                ))
+        # New 30/90/200d highs/lows
+        for lookback, symbol, col in [(30, "⭐", "star"), (90, "🥇", "diamond"), (200, "🏅", "diamond")]:
+            for i in range(lookback, len(df_sti)):
+                window = df_sti.iloc[i-lookback:i+1]
+                price = df_sti["close"].iloc[i]
+                if price == window["close"].max():
+                    fig.add_trace(go.Scatter(
+                        x=[df_sti["date"].iloc[i]], y=[price],
+                        mode="markers+text",
+                        marker=dict(color="gold", size=11, symbol=col),
+                        text=[f"{symbol}High"], textposition="top left",
+                        showlegend=False
+                    ))
+                if price == window["close"].min():
+                    fig.add_trace(go.Scatter(
+                        x=[df_sti["date"].iloc[i]], y=[price],
+                        mode="markers+text",
+                        marker=dict(color="black", size=11, symbol=col),
+                        text=[f"{symbol}Low"], textposition="bottom left",
+                        showlegend=False
+                    ))
+
+    # --- Dynamic Smart Alert Annotations (from anomaly_alerts in summary)
+    if show_alerts and "anomaly_alerts" in summary and summary["anomaly_alerts"]:
+        # For demo: randomly place alert bubbles near the latest price
+        # (If you have per-date alerts, you can annotate those dates directly)
+        for msg in summary["anomaly_alerts"]:
+            fig.add_annotation(
+                x=df_sti["date"].iloc[-1], y=df_sti["close"].iloc[-1],
+                text=msg, showarrow=True, arrowhead=1, ax=0, ay=-40,
+                bgcolor="yellow", opacity=0.85,
+                font=dict(size=12, color="black")
+            )
+
+    # --- Interactivity
+    fig.update_layout(
+        title="Straits Times Index (STI) Advanced Chart",
+        xaxis_title="Date",
+        yaxis_title="Price",
+        hovermode="x unified",
+        height=500,
+        legend=dict(orientation="h"),
+        template="plotly_white",
+        dragmode="zoom",
+        margin=dict(l=30, r=30, t=60, b=30),
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # --- Rolling Volatility Mini-Plot
+    if show_vol:
+        st.markdown("**Rolling 30d Volatility (Mini-Plot):**")
+        df_sti["vol_30d"] = df_sti["close"].rolling(30).std()
+        fig_vol = go.Figure(go.Scatter(
+            x=df_sti["date"], y=df_sti["vol_30d"],
+            mode="lines", name="Volatility (30d)", line=dict(color="orange", width=2)
+        ))
+        fig_vol.update_layout(height=180, margin=dict(l=10, r=10, t=10, b=10),
+                             template="plotly_white", yaxis_title="Volatility", xaxis_title="Date")
+        st.plotly_chart(fig_vol, use_container_width=True)
+
 # If using as main app file
 if __name__ == "__main__":
     st.set_page_config(page_title="Market Dashboard", page_icon="🏢", layout="wide")
