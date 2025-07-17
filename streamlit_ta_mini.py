@@ -167,23 +167,6 @@ def trend_icon(val):
         return "🟡 Side"
     return val or "N/A"
 
-def highlight_trend(val):
-    base = (
-        "display:inline-block;"
-        "padding: 2px 10px;"
-        "border-radius: 12px;"
-        "margin: 2px auto;"
-        "min-width: 80px;"
-        "text-align:center;"
-    )
-    if val == "Uptrend":
-        return base + "background-color: #38B2AC; color: #fff; font-weight: 600;"
-    elif val == "Downtrend":
-        return base + "background-color: #F56565; color: #fff; font-weight: 600;"
-    elif val == "Sideways":
-        return base + "background-color: #ECC94B; color: #333; font-weight: 600;"
-    return ""
-
 # Group all assets by class for display
 grouped = {}
 for name, data in out.items():
@@ -347,7 +330,7 @@ def plot_chart(ticker, label, explanation):
             ))
             fig.add_trace(go.Scatter(
                 x=df[date_col], y=df["SMA200"],
-                mode='lines', name='SMA 200', line=dict(dash='solid', color='black')
+                mode='lines', name='SMA 200', line=dict(dash='solid')
             ))
             if volume_col and volume_col in df.columns:
                 fig.add_trace(go.Bar(
