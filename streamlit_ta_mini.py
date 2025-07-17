@@ -11,8 +11,8 @@ from llm_utils import call_llm
 
 st.set_page_config(page_title="Technical Analyst AI Agent", page_icon="🌍")
 st.markdown("""
-<h1 style='margin-bottom: 0.3em;'>Technical Analyst AI Agent 🤖</h1>
-<h1 style='margin-top: 0;'>Global Macro</h1>
+<h1 style='margin-bottom: 0.3em;'>Technical Analyst AI Agent 🤖<br>
+Global Macro</h1>
 """, unsafe_allow_html=True)
 
 st.markdown(
