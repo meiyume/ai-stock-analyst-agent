@@ -96,7 +96,7 @@ def render_market_tab():
         fig.update_layout(
             height=280,
             margin=dict(l=0, r=0, t=30, b=0),
-            yaxis=dict(range=[0, 1], title="Composite Score"),
+            yaxis=dict(title="Composite Score"),
             showlegend=False,
             template="plotly_white",
             plot_bgcolor='rgba(0,0,0,0)',
