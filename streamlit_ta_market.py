@@ -13,43 +13,36 @@ def plot_index_chart(ticker, label, window=180, min_points=20):
         end = datetime.today()
         start = end - timedelta(days=window + 60)
         df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
-
         if df is None or not isinstance(df, pd.DataFrame) or df.empty:
             st.info(f"Not enough data to plot {label} (empty dataframe).")
             return
-
         # Flatten MultiIndex columns (if any)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = [
                 "_".join([str(i) for i in col if i and i != "None"]) for col in df.columns.values
             ]
-
         # Find 'close' column(s) (case-insensitive, works for 'Adj Close', 'Close*', etc.)
         close_cols = [c for c in df.columns if isinstance(c, str) and "close" in c.lower()]
         if not close_cols:
             st.warning(f"Chart error ({label}): No close price column found. Columns: {list(df.columns)}")
             return
         close_col = close_cols[0]
-
         # Drop NaN, check minimum history
         df = df.dropna(subset=[close_col])
         if len(df) < min_points:
             st.info(f"Not enough {label} data (only {len(df)} valid points).")
             return
         df = df.tail(window).copy()
-
         # Calculate SMAs only if enough data
         for sma_win in [20, 50, 200]:
             if len(df) >= sma_win:
                 df[f"SMA{sma_win}"] = df[close_col].rolling(window=sma_win).mean()
             else:
                 df[f"SMA{sma_win}"] = float('nan')
-
         # Check again for valid points after SMAs
         if df[close_col].isnull().all():
             st.info(f"All values in close column for {label} are NaN.")
             return
-
         # Build chart
         fig = go.Figure()
         fig.add_trace(go.Scatter(
@@ -57,7 +50,6 @@ def plot_index_chart(ticker, label, window=180, min_points=20):
             line=dict(width=2, color="#3182ce")
         ))
         for sma_win, dash, color in zip([20, 50, 200], ['dot', 'dash', 'solid'], ["#8fd3fe", "#38B2AC", "#222"]):
-            # Only plot SMA if not all NaN
             sma_col = f"SMA{sma_win}"
             if not df[sma_col].isnull().all():
                 fig.add_trace(go.Scatter(
@@ -74,10 +66,8 @@ def plot_index_chart(ticker, label, window=180, min_points=20):
             paper_bgcolor='rgba(0,0,0,0)'
         )
         st.plotly_chart(fig, use_container_width=True)
-
     except Exception as e:
         st.warning(f"Chart error ({label}): {e}")
-
 
 def render_market_tab():
     st.header("📈 AI Market / Sector Technical Dashboard")
@@ -88,10 +78,19 @@ def render_market_tab():
         """
     )
 
+    # --- Fetch market summary ---
+    with st.spinner("Loading market/sector/factor technicals..."):
+        try:
+            mkt_summary = ta_market()
+            st.success("Fetched and computed market/sector technical metrics.")
+        except Exception as e:
+            st.error(f"Error in ta_market(): {e}")
+            st.stop()
+
     # --- Historical Composite Score Chart ---
     hist_df = mkt_summary.get("composite_score_history")
     if hist_df is not None and not hist_df.empty:
-        st.markdown("#### Historical Composite Market Score")
+        st.subheader("Historical Composite Market Score")
         regime_colors = {"Bullish": "#38B2AC", "Neutral": "#ECC94B", "Bearish": "#F56565"}
         fig = go.Figure()
         fig.add_trace(go.Scatter(
@@ -120,14 +119,6 @@ def render_market_tab():
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("No historical market composite score data available yet.")
-    # --- Fetch market summary ---
-    with st.spinner("Loading market/sector/factor technicals..."):
-        try:
-            mkt_summary = ta_market()
-            st.success("Fetched and computed market/sector technical metrics.")
-        except Exception as e:
-            st.error(f"Error in ta_market(): {e}")
-            st.stop()
 
     # --- HEADLINE & LOGIC ---
     as_of = mkt_summary.get("as_of", "N/A")
@@ -157,9 +148,21 @@ def render_market_tab():
         "Neutral": "A 'Neutral' composite score signals mixed technicals—some indices strong, others flat or weak.",
         "Bearish": "A 'Bearish' composite score means most baskets are trending down or below key averages—caution is warranted."
     }
+    risk_regime_expl = {
+        "Bullish": "A 'Bullish' risk regime means volatility is falling and major indices are rising. Investors are confident and risk-taking is encouraged.",
+        "Neutral": "A 'Neutral' risk regime means the market is not panicky, but not fully risk-on either.",
+        "Bearish": "A 'Bearish' risk regime means volatility is rising and most indices are falling. Caution is warranted."
+    }
+    explanation = ""
     if composite_label in composite_score_expl:
+        explanation += composite_score_expl[composite_label]
+    if risk_regime in risk_regime_expl:
+        if explanation:
+            explanation += " "
+        explanation += risk_regime_expl[risk_regime]
+    if explanation:
         st.markdown(
-            f"<span style='color:gray; font-size:0.80em;'>{composite_score_expl[composite_label]}</span>",
+            f"<span style='color:gray; font-size:0.80em;'>{explanation}</span>",
             unsafe_allow_html=True
         )
     if risk_regime_rationale:
@@ -216,7 +219,7 @@ def render_market_tab():
                 f"{data.get('rsi', 'N/A'):.1f}" if data.get("rsi", None) is not None else "N/A",
                 f"{data.get('macd', 'N/A'):.2f}" if data.get("macd", None) is not None else "N/A",
                 f"{data.get('macd_signal', 'N/A'):.2f}" if data.get("macd_signal", None) is not None else "N/A",
-                f"{data.get('vol_zscore', 'N/A'):.2f}" if data.get("vol_zscore", None) is not None else "N/A",
+                f"{data.get('vol_zscore', 'N/A'):.2f}" if data.get('vol_zscore', None) is not None else "N/A",
                 f"{rel_perf_val:+.2f}%" if rel_perf_val is not None else "N/A",
                 data.get("alerts", ""),
             ]
@@ -272,4 +275,6 @@ def render_market_tab():
     st.caption("Baskets include SGX/Asia indices, regional ETFs, and global context. Composite score, risk regime, and alerts use only available data.")
 
 # ---- End ----
+
+
 
