@@ -3,11 +3,12 @@
 import streamlit as st
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import plotly.graph_objects as go
 
 from agents.ta_market import ta_market
+from data_utils import fetch_clean_yfinance
 from llm_utils import call_llm
 
 def render_market_tab():
@@ -31,7 +32,6 @@ def render_market_tab():
             st.stop()
 
     # --- Load historical composite score for market ---
-    history_file = "market_composite_score_history.csv"
     hist_df = summary.get("composite_score_history")
     if hist_df is not None and not hist_df.empty:
         hist_df = hist_df.sort_values("date")
@@ -44,7 +44,6 @@ def render_market_tab():
     composite_label = summary.get("composite_label", None)
     risk_regime = summary.get("risk_regime", "N/A")
     risk_regime_rationale = summary.get("risk_regime_rationale", "")
-    risk_regime_score = summary.get("risk_regime_score", None)
     anomaly_alerts = summary.get("anomaly_alerts", [])
     correlation_matrix = summary.get("correlation_matrix", None)
     out = summary.get("out", {})
@@ -196,6 +195,139 @@ def render_market_tab():
     else:
         st.info("Not enough data to compute relative outperformance.")
 
+    # --- Key Index Charts (mirror streamlit_ta_global.py) ---
+    st.subheader("Key Market Index Charts")
+    def find_col(possibles, columns):
+        for p in possibles:
+            for c in columns:
+                if p in str(c).lower():
+                    return c
+        return None
+
+    def calc_trend_info(df, date_col, close_col, window=50):
+        """Returns percentage change, latest price, and trend direction for given window."""
+        if close_col not in df.columns or len(df) < window + 1:
+            return "N/A", "N/A", "N/A"
+        window_df = df.tail(window)
+        if window_df[close_col].isnull().all():
+            return "N/A", "N/A", "N/A"
+        start = window_df[close_col].iloc[0]
+        end = window_df[close_col].iloc[-1]
+        if pd.isna(start) or pd.isna(end):
+            return "N/A", "N/A", "N/A"
+        pct = 100 * (end - start) / start if start != 0 else 0
+        trend = "Uptrend" if end > start else "Downtrend" if end < start else "Flat"
+        latest = f"{end:,.2f}"
+        return f"{pct:+.2f}%", latest, trend
+
+    def plot_chart(ticker, label, explanation):
+        with st.container():
+            st.markdown(f"#### {label}")
+            st.caption(explanation)
+            try:
+                end = datetime.today()
+                start = end - timedelta(days=400)
+                df, err = fetch_clean_yfinance(ticker, start=start, end=end, interval="1d", auto_adjust=True)
+                if err or df is None or len(df) < 10:
+                    st.info(f"Not enough {label} data to plot. {err if err else ''}")
+                    return
+                date_col = find_col(['date', 'datetime', 'index'], df.columns) or df.columns[0]
+                close_col = find_col(['close'], df.columns)
+                volume_col = find_col(['volume'], df.columns)
+                if not date_col or not close_col:
+                    st.info(f"{label} chart failed to load: columns found: {list(df.columns)}")
+                    return
+                df = df.dropna(subset=[date_col, close_col])
+                if len(df) < 10:
+                    st.info(f"Not enough {label} data to plot.")
+                    return
+                df["SMA20"] = df[close_col].rolling(window=20).mean()
+                df["SMA50"] = df[close_col].rolling(window=50).mean()
+                df["SMA200"] = df[close_col].rolling(window=200).mean()
+                if len(df) > 180:
+                    df = df.iloc[-180:].copy()
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=df[date_col], y=df[close_col],
+                    mode='lines', name=label
+                ))
+                fig.add_trace(go.Scatter(
+                    x=df[date_col], y=df["SMA20"],
+                    mode='lines', name='SMA 20', line=dict(dash='dot')
+                ))
+                fig.add_trace(go.Scatter(
+                    x=df[date_col], y=df["SMA50"],
+                    mode='lines', name='SMA 50', line=dict(dash='dash')
+                ))
+                fig.add_trace(go.Scatter(
+                    x=df[date_col], y=df["SMA200"],
+                    mode='lines', name='SMA 200', line=dict(dash='solid', color='black')
+                ))
+                if volume_col and volume_col in df.columns:
+                    fig.add_trace(go.Bar(
+                        x=df[date_col], y=df[volume_col],
+                        name="Volume", yaxis="y2",
+                        marker_color="rgba(0,160,255,0.16)",
+                        opacity=0.5
+                    ))
+                fig.update_layout(
+                    title=label,
+                    xaxis_title="Date",
+                    yaxis_title="Price",
+                    yaxis=dict(title="Price", showgrid=True),
+                    yaxis2=dict(
+                        title="Volume", overlaying='y', side='right', showgrid=False, rangemode='tozero'
+                    ),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    template="plotly_white",
+                    height=350,
+                    bargap=0,
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                table_windows = [20, 50, 200]
+                table_rows = []
+                for win in table_windows:
+                    pct, latest, trend = calc_trend_info(df, date_col, close_col, window=win)
+                    table_rows.append({
+                        "Window": f"{win}d",
+                        "% Change": pct,
+                        "Latest": latest,
+                        "Trend": trend
+                    })
+                table_df = pd.DataFrame(table_rows)
+                st.markdown("**Trend Table**")
+                st.dataframe(table_df, hide_index=True)
+            except Exception as e:
+                st.info(f"{label} chart failed to load: {e}")
+
+    chart_list = [
+        {
+            "ticker": "^STI",
+            "label": "Straits Times Index (STI)",
+            "explanation": "Singapore's main equity benchmark."
+        },
+        {
+            "ticker": "AAXJ",
+            "label": "MSCI Asia ex Japan ETF (AAXJ)",
+            "explanation": "Broad Asia ex Japan equities."
+        },
+        {
+            "ticker": "EWS",
+            "label": "MSCI Singapore ETF (EWS)",
+            "explanation": "NY-traded Singapore equity ETF."
+        },
+        {
+            "ticker": "^HSI",
+            "label": "Hang Seng Index (HSI)",
+            "explanation": "Hong Kong equity benchmark."
+        },
+    ]
+
+    for chart in chart_list:
+        plot_chart(chart["ticker"], chart["label"], chart["explanation"])
+
     # --- LLM Summaries Section ---
     st.subheader("LLM-Generated Market Summaries")
     summary_for_llm = {k: v for k, v in summary.items() if k != "out"}  # Do not send "out"
@@ -245,3 +377,4 @@ def render_market_tab():
 if __name__ == "__main__":
     st.set_page_config(page_title="Market Dashboard", page_icon="🏢", layout="wide")
     render_market_tab()
+
