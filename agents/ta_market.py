@@ -10,6 +10,14 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_utils import fetch_clean_yfinance
 
+# --- DEFENSIVE 1D SERIES UTILITY ---
+def ensure_series_1d(x):
+    if isinstance(x, pd.DataFrame):
+        return x.iloc[:, 0]
+    elif hasattr(x, "shape") and len(x.shape) > 1 and x.shape[1] > 1:
+        return pd.Series(x.values.ravel())
+    return x
+
 def trend_to_score(trend):
     if trend == "Uptrend":
         return 1.0
@@ -74,9 +82,11 @@ def safe_float(val, default=None, precision=3):
         return default
 
 def compute_sma(series, window):
+    series = ensure_series_1d(series)
     return series.rolling(window=window, min_periods=1).mean()
 
 def compute_rsi(series, window=14):
+    series = ensure_series_1d(series)
     delta = series.diff()
     up = delta.clip(lower=0)
     down = -delta.clip(upper=0)
@@ -87,6 +97,7 @@ def compute_rsi(series, window=14):
     return rsi
 
 def compute_macd(series, span1=12, span2=26, signal=9):
+    series = ensure_series_1d(series)
     ema1 = series.ewm(span=span1, adjust=False).mean()
     ema2 = series.ewm(span=span2, adjust=False).mean()
     macd = ema1 - ema2
@@ -94,6 +105,7 @@ def compute_macd(series, span1=12, span2=26, signal=9):
     return macd, macd_signal
 
 def compute_zscore(series, window=90):
+    series = ensure_series_1d(series)
     mean = series.rolling(window, min_periods=1).mean()
     std = series.rolling(window, min_periods=1).std()
     zscore = (series - mean) / std.replace(0, np.nan)
@@ -127,7 +139,17 @@ def ta_market(lookbacks=[30, 90, 200]):
                 out[name] = {"error": err or f"No data for ticker {ticker}"}
                 continue
 
-            close = df["close"].astype(float).dropna()
+            # --- Bulletproof: Defensive flatten for all price columns ---
+            for col in ["open", "high", "low", "close", "adj_close", "volume"]:
+                if col in df.columns:
+                    s = df[col]
+                    if isinstance(s, pd.DataFrame):
+                        s = s.iloc[:, 0]
+                    elif hasattr(s, "shape") and len(s.shape) > 1 and s.shape[1] > 1:
+                        s = pd.Series(s.values.ravel())
+                    df[col] = s
+
+            close = ensure_series_1d(df["close"]).astype(float).dropna()
             if close.empty or len(close) < 20:
                 out[name] = {"error": "Insufficient close data"}
                 continue
