@@ -19,22 +19,48 @@ def render_market_tab():
 
     mkt_out = mkt_summary["out"]
     mkt_as_of = mkt_summary["as_of"]
-    mkt_breadth = mkt_summary["breadth_30d_pct"]
-    mkt_rel_perf = mkt_summary["rel_perf_30d"]
+    breadth = mkt_summary["breadth"]
+    rel_perf = mkt_summary["rel_perf_30d"]
+    composite_score = mkt_summary.get("composite_score")
+    composite_label = mkt_summary.get("composite_label")
+    risk_regime = mkt_summary.get("risk_regime")
+    risk_regime_rationale = mkt_summary.get("risk_regime_rationale")
+    anomaly_alerts = mkt_summary.get("anomaly_alerts", [])
+    alerts = mkt_summary.get("alerts", [])
+    corr_matrix = mkt_summary.get("correlation_matrix")
 
-    st.markdown(f"**As of:** {mkt_as_of} &nbsp;|&nbsp; **% Baskets in Uptrend (30d):** {mkt_breadth}%")
+    # --- Headline & composite/risk regime
+    st.markdown(
+        f"**As of:** {mkt_as_of} &nbsp;|&nbsp; "
+        f"**Composite Score:** {composite_score:.2f} ({composite_label}) &nbsp;|&nbsp; "
+        f"**Risk Regime:** {risk_regime}"
+    )
+    if risk_regime_rationale:
+        st.caption(f"_{risk_regime_rationale}_")
+
+    # --- Alerts and anomalies
+    if anomaly_alerts or alerts:
+        st.warning("  \n".join([*anomaly_alerts, *alerts]), icon="🚨")
+    else:
+        st.info("🕊️ No significant anomalies detected. Market appears calm.")
+
+    # --- Breadth dashboard
+    st.markdown("**Breadth Summary:**")
+    st.write(pd.DataFrame([breadth]))
 
     # --- Trend Table ---
     cols = [
         "Name", "Last", "30D Change", "90D Change", "200D Change",
-        "Trend (30D)", "Trend (90D)", "Trend (200D)", "Vol (30D)", "Vol (90D)", "Vol (200D)", "Rel. Perf vs S&P500 (30D)"
+        "Trend (30D)", "Trend (90D)", "Trend (200D)",
+        "Vol (30D)", "Vol (90D)", "Vol (200D)",
+        "SMA50", "SMA200", "RSI", "MACD", "MACD Sig", "Vol Z", "RelPerf (30D)", "Alerts"
     ]
     rows = []
     for name, data in mkt_out.items():
         if "error" in data:
             row = [name, data.get("error", "")] + [""] * (len(cols)-2)
         else:
-            rel_perf = f"{mkt_rel_perf.get(name, 0):+.2f}%" if name in mkt_rel_perf else "N/A"
+            rel_perf_val = rel_perf.get(name, None)
             row = [
                 name,
                 f"{data.get('last', 'N/A'):,}" if data.get("last", None) else "N/A",
@@ -47,16 +73,23 @@ def render_market_tab():
                 f"{data.get('vol_30d', 0):,.2f}" if data.get("vol_30d", None) is not None else "N/A",
                 f"{data.get('vol_90d', 0):,.2f}" if data.get("vol_90d", None) is not None else "N/A",
                 f"{data.get('vol_200d', 0):,.2f}" if data.get("vol_200d", None) is not None else "N/A",
-                rel_perf,
+                data.get("sma50_status", "N/A"),
+                data.get("sma200_status", "N/A"),
+                f"{data.get('rsi', 'N/A'):.1f}" if data.get("rsi", None) is not None else "N/A",
+                f"{data.get('macd', 'N/A'):.2f}" if data.get("macd", None) is not None else "N/A",
+                f"{data.get('macd_signal', 'N/A'):.2f}" if data.get("macd_signal", None) is not None else "N/A",
+                f"{data.get('vol_zscore', 'N/A'):.2f}" if data.get("vol_zscore", None) is not None else "N/A",
+                f"{rel_perf_val:+.2f}%" if rel_perf_val is not None else "N/A",
+                data.get("alerts", ""),
             ]
         rows.append(row)
     mkt_df = pd.DataFrame(rows, columns=cols)
     st.dataframe(mkt_df, hide_index=True)
 
     # --- Relative Rotation (bar chart) ---
-    if mkt_rel_perf:
+    if rel_perf:
         st.markdown("**Relative Outperformance vs S&P 500 (Last 30D)**")
-        rel_perf_df = pd.DataFrame(list(mkt_rel_perf.items()), columns=["Name", "Relative Perf (30D, %)"])
+        rel_perf_df = pd.DataFrame(list(rel_perf.items()), columns=["Name", "Relative Perf (30D, %)"])
         rel_perf_df = rel_perf_df.sort_values("Relative Perf (30D, %)", ascending=False)
         fig_rel = go.Figure(go.Bar(
             x=rel_perf_df["Name"],
@@ -73,5 +106,12 @@ def render_market_tab():
         )
         st.plotly_chart(fig_rel, use_container_width=True)
 
-    st.caption("Baskets include global indices, US sectors, value/growth/smallcap, bonds, gold, oil. Relative performance is versus S&P500.")
+    # --- Correlation heatmap ---
+    if corr_matrix:
+        st.markdown("**Cross-Asset Correlation (Last 60 Days)**")
+        corr_df = pd.DataFrame(corr_matrix)
+        st.dataframe(corr_df.style.background_gradient(axis=None, cmap='coolwarm'), height=350)
+
+    st.caption("Baskets include SGX/Asia indices, regional ETFs, and global context. Relative performance is versus S&P500. Composite score, risk regime, and alerts use only available data.")
+
 
