@@ -178,7 +178,7 @@ def render_market_tab():
     # Defensive: Clean and serialize all market data for LLM
     safe_summary = safe_llm_input(mkt_summary)
     json_summary = json.dumps(safe_summary, indent=2, default=str)
-    st.code(json_summary, language="json")  # Optional: Preview for debugging
+    # --- st.code(json_summary, language="json")  # Optional: Preview for debugging
     
     if st.button("Generate LLM Market Summaries", type="primary"):
         with st.spinner("Querying LLM for market outlook..."):
