@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import yfinance as yf
 import plotly.graph_objects as go
+import plotly.express as px
 from agents.ta_market import ta_market
 from llm_utils import call_llm
 from datetime import datetime, timedelta
@@ -189,11 +190,28 @@ def render_market_tab():
     st.dataframe(df, hide_index=True)
 
     # --- Relative Outperformance vs S&P 500 (30D) ---
-    st.markdown("#### Relative Outperformance vs S&P 500 (30D)")
     if rel_perf_30d:
         rel_df = pd.DataFrame(list(rel_perf_30d.items()), columns=["Name", "Relative Outperf (%)"])
-        rel_df = rel_df.sort_values("Relative Outperf (%)", ascending=False)
-        st.dataframe(rel_df, hide_index=True)
+        rel_df = rel_df.sort_values("Relative Outperf (%)", ascending=True)  # Smallest at bottom
+    
+        fig = px.bar(
+            rel_df,
+            y="Name",
+            x="Relative Outperf (%)",
+            orientation="h",
+            color="Relative Outperf (%)",
+            color_continuous_scale="RdYlGn",  # Green = best, Red = worst
+            height=300 + 20*len(rel_df),      # Dynamic height for more names
+            labels={"Relative Outperf (%)": "Relative Outperformance (%)"},
+            title=None
+        )
+        fig.update_layout(
+            xaxis_title="Relative Outperformance (%) vs S&P 500",
+            yaxis_title=None,
+            coloraxis_showscale=False,
+            margin=dict(l=0, r=0, t=30, b=0)
+        )
+        st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Not enough data to compute relative outperformance.")
 
