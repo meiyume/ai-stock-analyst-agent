@@ -12,6 +12,29 @@ from agents.ta_market import ta_market
 from llm_utils import call_llm
 from datetime import datetime, timedelta
 
+# --- Utility for JSON serialization ---
+def safe_json(obj):
+    if isinstance(obj, dict):
+        return {str(k): safe_json(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple, set)):
+        return [safe_json(i) for i in obj]
+    elif isinstance(obj, pd.DataFrame):
+        return obj.to_dict(orient="records")
+    elif isinstance(obj, pd.Series):
+        return obj.tolist()
+    elif isinstance(obj, (pd.Timestamp, np.datetime64)):
+        return str(obj)
+    elif isinstance(obj, (np.integer, np.floating)):
+        return obj.item()
+    elif hasattr(obj, "__dict__"):
+        return safe_json(obj.__dict__)
+    elif isinstance(obj, bytes):
+        return obj.decode(errors="ignore")
+    elif obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+    else:
+        return str(obj)
+        
 def render_market_tab():
     st.markdown("""
     <h1 style='margin-bottom: 0.3em;'>Technical Analyst AI Agent 🤖<br>
@@ -228,7 +251,7 @@ def render_market_tab():
     
     exclude_keys = ["out", "all_prices", "composite_score_history"]
     summary_for_llm = {k: v for k, v in summary.items() if k not in exclude_keys}
-    json_summary = json.dumps(summary_for_llm, indent=2)
+    json_summary = json.dumps(safe_json(summary_for_llm), indent=2)
 
     if st.button("Generate Report", type="primary"):
         with st.spinner("Querying LLM..."):
