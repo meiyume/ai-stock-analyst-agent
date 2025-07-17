@@ -227,11 +227,11 @@ def render_market_tab():
     st.subheader("AI-Agent Summaries")
     summary_for_llm = {k: v for k, v in summary.items() if k != "out"}  # Do not send "out"
 
-    for k, v in summary_for_llm.items():
-    try:
-        json.dumps({k: v})
-    except Exception as e:
-        print(f"Key {k} failed to serialize: {e} (type={type(v)})")
+        for k, v in summary_for_llm.items():
+        try:
+            json.dumps({k: v})
+        except Exception as e:
+            print(f"Key {k} failed to serialize: {e} (type={type(v)})")
 
     
     json_summary = json.dumps(summary_for_llm, indent=2)
