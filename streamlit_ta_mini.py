@@ -218,10 +218,10 @@ for asset_class in class_display_order:
 st.caption("Assets are grouped by class. Note: Some tickers may not have reliable data (e.g. certain bonds/volatility indices on Yahoo).")
 
 # --- LLM Summaries and Explanation ---
-st.subheader("AI Agent Summaries")
+st.subheader("AI-Agent Summaries")
 json_summary = json.dumps(summary, indent=2)
 
-if st.button("Generate LLM Global Summaries", type="primary"):
+if st.button("Generate", type="primary"):
     with st.spinner("Querying LLM..."):
         try:
             llm_output = call_llm("global", json_summary, prompt_vars={
