@@ -357,7 +357,7 @@ def plot_chart(ticker, label, explanation):
                     opacity=0.5
                 ))
             fig.update_layout(
-                title=label,
+                # === title=label,
                 xaxis_title="Date",
                 yaxis_title="Price",
                 yaxis=dict(title="Price", showgrid=True),
