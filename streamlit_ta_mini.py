@@ -22,12 +22,12 @@ st.markdown(
 )
 
 # --- Get latest global technical summary
-with st.spinner("Loading global technical summary..."):
+with st.spinner("Loading data and performing computation..."):
     try:
         summary = ta_global()
         st.success("Fetched and computed global technical metrics.")
     except Exception as e:
-        st.error(f"Error in ta_global(): {e}")
+        st.error(f"Error in fetching from ta_global(): {e}")
         st.stop()
 
 # --- Load composite score history ---
@@ -59,7 +59,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.markdown(
-    f"<span style='font-weight:600;'>Risk Regime:</span> {risk_regime}  |  <span style='font-weight:600;'>As of:</span> {as_of}",
+    f"#### <span style='font-size:1.3em;'>Risk Regime: <b>{risk_regime}</b></span>",
+    unsafe_allow_html=True,
+    f"<span style='font-weight:600;'>>As of:</span> {as_of}",
     unsafe_allow_html=True
 )
 
