@@ -8,6 +8,18 @@ UNIVERSAL_COLUMNS = [
     "date", "open", "high", "low", "close", "adj_close", "volume", "ticker"
 ]
 
+def enforce_1d_column(series_or_df):
+    """
+    Ensures input is a 1D pandas Series, even if given a DataFrame or ndarray.
+    """
+    # If it's a DataFrame, take first column
+    if isinstance(series_or_df, pd.DataFrame):
+        return series_or_df.iloc[:, 0]
+    # If it's a numpy array, squeeze to 1D
+    if hasattr(series_or_df, "ndim") and series_or_df.ndim > 1 and series_or_df.shape[1] == 1:
+        return pd.Series(series_or_df.ravel())
+    return series_or_df
+
 def fetch_clean_yfinance(
     ticker,
     start,
@@ -67,6 +79,10 @@ def fetch_clean_yfinance(
         df = df.reset_index(drop=False).rename(columns={"index": "date"})
         df["ticker"] = ticker
 
+        # Defensive: flatten any column that might be a DataFrame or multidim object
+        for col in UNIVERSAL_COLUMNS:
+            df[col] = enforce_1d_column(df[col])
+
         # Drop all-NaN rows in 'close', 'open', etc.
         df = df.dropna(subset=["close"], how="all")
         # Fill missing values if possible (forward fill)
@@ -96,3 +112,4 @@ if __name__ == "__main__":
         print("Error:", err)
     else:
         print(df.head())
+
