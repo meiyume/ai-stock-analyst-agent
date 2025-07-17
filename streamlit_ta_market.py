@@ -176,7 +176,7 @@ def render_market_tab():
     st.subheader("LLM-Generated Market Summaries")
     
     # Defensive: Clean and serialize all market data for LLM
-    safe_summary = safe_llm_input(mkt_summary)
+    safe_summary = safe_llm_input(mkt_summary, max_list_len=5, max_dict_len=5)
     json_summary = json.dumps(safe_summary, indent=2, default=str)
     # --- st.code(json_summary, language="json")  # Optional: Preview for debugging
     
