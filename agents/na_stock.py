@@ -8,20 +8,7 @@ def get_metadata_yfinance(ticker: str):
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
-        return {
-            "company_name": info.get("longName", ticker),
-            "sector": info.get("sector"),
-            "industry": info.get("industry"),
-            "region": info.get("country") or info.get("exchange") or None
-        }
     except Exception:
-        return {
-            "company_name": ticker,
-            "sector": None,
-            "industry": None,
-            "region": None
-        }
-
 def infer_metadata_llm(ticker: str, openai_client):
     prompt = (
         f"As a financial analyst, what are the most relevant company names (including aliases), sector, industry, "
@@ -158,40 +145,7 @@ def fetch_news_serpapi(keywords: List[str], api_key: Optional[str], max_articles
         if len(news) >= max_articles:
             break
     return news[:max_articles]
-
-
-    return {
-        "ticker": ticker,
-        "company_names": company_names,
-        "sector": sector,
-        "industry": industry,
-        "region": region,
-        "keywords": keywords,
-        "news": deduped_news,
-        "llm_summary": llm_summary,
-        "news_counts": {
-            "yfinance": len(fetch_yfinance_news(ticker, max_articles)),
-            "newsapi": len(fetch_news_newsapi(keywords, newsapi_key, max_articles)),
-            "serpapi": len(fetch_news_serpapi(keywords, serpapi_key, max_articles)),
-        }
     }
-
-
-
-    return {
-        "ticker": ticker,
-        "company_names": company_names,
-        "sector": sector,
-        "industry": industry,
-        "region": region,
-        "keywords": keywords,
-        "news": deduped_news,
-        "llm_summary": llm_summary,
-        "news_counts": {
-            "yfinance": len(fetch_yfinance_news(ticker, max_articles)),
-            "newsapi": len(fetch_news_newsapi(keywords, newsapi_key, max_articles)),
-            "serpapi": len(fetch_news_serpapi(keywords, serpapi_key, max_articles)),
-        }
     }
 
 
@@ -243,3 +197,87 @@ Respond only in JSON format:
     except Exception as e:
         print("[ERROR] LLM summary failed:", str(e))
         return {}
+
+
+def dedupe_news(news: List[Dict], max_articles=12):
+    seen = set()
+    deduped = []
+    for n in news:
+        key = (n.get("title") or "", n.get("url") or "")
+        if key not in seen and n.get("title"):
+            deduped.append(n)
+            seen.add(key)
+        if len(deduped) >= max_articles:
+            break
+    return deduped
+
+def news_agent_stock(
+    ticker: str,
+    openai_client=None,
+    newsapi_key=None,
+    serpapi_key=None,
+    max_articles=12,
+    verbose=False
+):
+    if verbose:
+        print(f"[DEBUG] Starting news_agent_stock for ticker: {ticker}")
+
+    # Step 1: Metadata
+    meta_yf = get_metadata_yfinance(ticker)
+    company_names = [meta_yf.get("company_name", ticker)]
+    sector = meta_yf.get("sector")
+    industry = meta_yf.get("industry")
+    region = meta_yf.get("region")
+
+    # Step 2: LLM-enhanced metadata
+    if openai_client:
+        print("[DEBUG] Calling infer_metadata_llm ...")
+        llm_meta = infer_metadata_llm(ticker, openai_client)
+        print("[DEBUG] LLM meta returned:", llm_meta)
+        company_names = llm_meta.get("company_names") or company_names
+        sector = llm_meta.get("sector") or sector
+        industry = llm_meta.get("industry") or industry
+        region = llm_meta.get("region") or region
+        print("[DEBUG] Calling expand_search_keywords_llm ...")
+        keywords = expand_search_keywords_llm(company_names, sector, industry, region, openai_client)
+        print("[DEBUG] Keywords from LLM:", keywords)
+    else:
+        keywords = list({ticker, *company_names, sector, industry, region})
+        keywords = [k for k in keywords if k and k.lower() != "unknown"]
+    if verbose:
+        print(f"[DEBUG] Keywords: {keywords}")
+
+    # Step 3: News fetching
+    print("[DEBUG] Fetching yfinance news ...")
+    all_news = fetch_yfinance_news(ticker, max_articles)
+    print(f"[DEBUG] yfinance news: {len(all_news)} articles")
+    all_news += fetch_news_newsapi(keywords, newsapi_key, max_articles)
+    print(f"[DEBUG] newsapi news count: {len(all_news)}")
+    all_news += fetch_news_serpapi(keywords, serpapi_key, max_articles)
+    print(f"[DEBUG] serpapi news count: {len(all_news)}")
+
+    deduped_news = dedupe_news(all_news, max_articles)
+    print(f"[DEBUG] deduped_news count: {len(deduped_news)}")
+
+    # Step 4: LLM-first synthesis
+    llm_summary = None
+    if openai_client:
+        print("[DEBUG] Calling llm_news_summary ...")
+        llm_summary = llm_news_summary(keywords, company_names, sector, industry, region, deduped_news, openai_client)
+        print("[DEBUG] llm_summary returned:", llm_summary)
+
+    return {
+        "ticker": ticker,
+        "company_names": company_names,
+        "sector": sector,
+        "industry": industry,
+        "region": region,
+        "keywords": keywords,
+        "news": deduped_news,
+        "llm_summary": llm_summary,
+        "news_counts": {
+            "yfinance": len(fetch_yfinance_news(ticker, max_articles)),
+            "newsapi": len(fetch_news_newsapi(keywords, newsapi_key, max_articles)),
+            "serpapi": len(fetch_news_serpapi(keywords, serpapi_key, max_articles)),
+        }
+    }
