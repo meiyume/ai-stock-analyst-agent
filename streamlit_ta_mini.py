@@ -276,7 +276,7 @@ if st.button("Analyze News") and ticker:
             break
             
     with st.expander("Deduped Articles (Click to expand)", expanded=False):
-    st.code(json.dumps(deduped_articles, indent=2), language="json")
+        st.code(json.dumps(deduped_articles, indent=2), language="json")
     
     # --- Show Results by Source ---
     sources = {}
