@@ -200,9 +200,19 @@ Respond only in JSON format:
         # Remove markdown code fences if present
         raw = re.sub(r"^```json\s*|```$", "", raw.strip(), flags=re.IGNORECASE)
 
-        return pyjson.loads(raw)
+        # Extract JSON block (the first {...} block)
+        json_match = re.search(r"\{.*\}", raw, flags=re.DOTALL)
+        if json_match:
+            raw_json = json_match.group(0)
+            return pyjson.loads(raw_json)
+        else:
+            print("[ERROR] No JSON found in LLM output! Full output was:")
+            print(raw)
+            return {}
     except Exception as e:
         print("[ERROR] LLM summary failed:", str(e))
+        print("[ERROR] Raw LLM output was:")
+        print(raw)
         return {}
 
 def dedupe_news(news: List[Dict], max_articles=12):
