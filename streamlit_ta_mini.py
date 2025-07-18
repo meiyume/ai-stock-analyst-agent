@@ -1,39 +1,42 @@
+from na_stock import (
+    get_company_aliases_from_ticker,
+    fetch_stock_sector_news,
+    fetch_news_serpapi,
+    fetch_web_search_serpapi
+)
 import streamlit as st
-from openai import OpenAI
-from agents.na_stock import news_agent_stock
-from agents.na_stock import get_company_aliases_from_ticker
 
-st.title("📰 Stock/Sector News Analyst")
+st.title("News Debugger")
 ticker = st.text_input("Enter Stock Ticker (e.g., U11.SI):")
 sector = st.text_input("Sector (optional):")
-if st.button("Analyze News", type="primary"):
-    with st.spinner("Analyzing news..."):
+newsapi_key = st.secrets["NEWSAPI_KEY"]
+serpapi_key = st.secrets["SERPAPI_KEY"]
 
-        # Show the alias names
-        aliases = get_company_aliases_from_ticker(ticker)
-        st.markdown("**Search queries used:**")
-        st.write(", ".join(aliases + ([sector] if sector else [])))
-        
-        openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-        newsapi_key = st.secrets["NEWSAPI_KEY"]
-        serpapi_key = st.secrets["SERPAPI_KEY"]
-        result = news_agent_stock(
-            ticker,
-            sector_name=sector,
-            openai_client=openai_client,
-            newsapi_key=newsapi_key,
-            serpapi_key=serpapi_key,
-        )
-        st.subheader("Summary")
-        st.write(result["summary"])
-        st.subheader(f"Sentiment: {result['sentiment']}")
-        st.subheader("Key News Drivers")
-        for d in result["drivers"]:
-            st.write(f"- {d}")
-        st.subheader("Recent Headlines")
-        for h in result["headlines"]:
-            st.markdown(f"- [{h['title']}]({h['url']}) <small>({h['source']}, {h['publishedAt'][:10]})</small>", unsafe_allow_html=True)
+if ticker:
+    aliases = get_company_aliases_from_ticker(ticker)
+    st.markdown("**Search queries used:**")
+    st.write(", ".join(aliases + ([sector] if sector else [])))
 
+    for q in aliases:
+        st.markdown(f"### Query: `{q}`")
+        # Try NewsAPI
+        newsapi_results = fetch_stock_sector_news(q, api_key=newsapi_key)
+        st.write(f"NewsAPI articles: {len(newsapi_results)}")
+        for a in newsapi_results:
+            st.write(f"- {a['title']} ({a['source']})")
+
+        # Try SerpAPI Google News (if key provided)
+        if serpapi_key:
+            serpapi_news = fetch_news_serpapi(q, serpapi_key)
+            st.write(f"SerpAPI Google News articles: {len(serpapi_news)}")
+            for s in serpapi_news:
+                st.write(f"- {s['title']} ({s['source']})")
+
+            # Try SerpAPI Google Web
+            serpapi_web = fetch_web_search_serpapi(q, serpapi_key)
+            st.write(f"SerpAPI Web articles: {len(serpapi_web)}")
+            for w in serpapi_web:
+                st.write(f"- {w['title']} ({w['source']})")
 
 
 
