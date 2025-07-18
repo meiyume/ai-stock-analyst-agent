@@ -1,152 +1,34 @@
-import requests
 import yfinance as yf
-from datetime import datetime, timedelta
 
-# --- 1. Get all aliases for a given ticker ---
-def get_company_aliases_from_ticker(ticker):
+# 1. Try to get sector/industry/region from yfinance
+def get_metadata_yfinance(ticker):
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
-        names = set()
-        if "longName" in info:
-            names.add(info["longName"])
-        if "shortName" in info:
-            names.add(info["shortName"])
-        if "longName" in info:
-            if "Bank" in info["longName"]:
-                names.add(info["longName"].replace("Bank", "Bank Group"))
-                names.add(info["longName"].replace("Bank", "Holdings"))
-        names.add(ticker)
-        return list(names)
+        sector = info.get("sector", None)
+        industry = info.get("industry", None)
+        # Try to guess region from country or exchange
+        region = info.get("country", None) or info.get("exchange", None)
+        return {
+            "company_name": info.get("longName", ticker),
+            "sector": sector,
+            "industry": industry,
+            "region": region
+        }
     except Exception:
-        return [ticker]
+        return {
+            "company_name": ticker,
+            "sector": None,
+            "industry": None,
+            "region": None
+        }
 
-# --- 2. NewsAPI search ---
-def fetch_stock_sector_news(query, max_articles=10, api_key=None, from_days_ago=7):
-    url = (
-        f"https://newsapi.org/v2/everything?q={query}"
-        f"&language=en&pageSize={max_articles}"
-        f"&from={ (datetime.utcnow() - timedelta(days=from_days_ago)).date() }"
-        f"&sortBy=publishedAt&apiKey={api_key}"
+# 2. If yfinance metadata is missing, use LLM to infer sector/region
+def infer_metadata_llm(ticker, openai_client):
+    prompt = (
+        f"As a financial analyst, what are the most relevant sector, industry, and country/region for the stock ticker '{ticker}'? "
+        "Respond in JSON: {\"company_name\": \"...\", \"sector\": \"...\", \"industry\": \"...\", \"region\": \"...\"}"
     )
-    try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        articles = resp.json().get("articles", [])
-    except Exception:
-        articles = []
-    return [
-        {
-            "title": a.get("title", ""),
-            "publishedAt": a.get("publishedAt", ""),
-            "source": a.get("source", {}).get("name", ""),
-            "url": a.get("url", ""),
-            "description": a.get("description", ""),
-        }
-        for a in articles
-    ]
-
-# --- 3. SerpAPI Google News fallback ---
-def fetch_news_serpapi(query, serpapi_key, num=10):
-    try:
-        from serpapi import GoogleSearch
-    except ImportError:
-        raise ImportError("You need to `pip install google-search-results` for SerpAPI support.")
-    params = {
-        "engine": "google_news",
-        "q": query,
-        "api_key": serpapi_key,
-        "num": num,
-        "hl": "en",
-    }
-    results = GoogleSearch(params).get_dict()
-    news = results.get("news_results", [])
-    return [
-        {
-            "title": n.get("title", ""),
-            "publishedAt": n.get("date", ""),
-            "source": n.get("source", ""),
-            "url": n.get("link", ""),
-            "description": n.get("snippet", ""),
-        }
-        for n in news
-    ]
-
-# --- 4. Expand aliases, dedupe, search NewsAPI + fallback to SerpAPI ---
-def fetch_stock_sector_news_expanded(
-    ticker,
-    sector=None,
-    max_articles=10,
-    newsapi_key=None,
-    serpapi_key=None,
-    from_days_ago=7,
-    verbose=False
-):
-    queries = get_company_aliases_from_ticker(ticker)
-    if sector:
-        queries.append(sector)
-    seen_titles = set()
-    news = []
-    for q in queries:
-        if verbose:
-            print(f"Querying NewsAPI for: {q}")
-        res = fetch_stock_sector_news(q, max_articles=max_articles, api_key=newsapi_key, from_days_ago=from_days_ago)
-        if not res and serpapi_key:
-            if verbose:
-                print(f"NewsAPI empty. Querying SerpAPI Google News for: {q}")
-            res = fetch_news_serpapi(q, serpapi_key=serpapi_key, num=max_articles)
-        if not res and serpapi_key:
-            if verbose:
-                print(f"SerpAPI Google News empty. Querying SerpAPI Google Web for: {q}")
-            res = fetch_web_search_serpapi(q, serpapi_key=serpapi_key, num=max_articles)
-        for article in res:
-            if article["title"] and article["title"] not in seen_titles:
-                news.append(article)
-                seen_titles.add(article["title"])
-    return news
-
-
-def fetch_web_search_serpapi(query, serpapi_key, num=10):
-    try:
-        from serpapi import GoogleSearch
-    except ImportError:
-        raise ImportError("You need to `pip install google-search-results` for SerpAPI support.")
-    params = {
-        "engine": "google",
-        "q": query,
-        "api_key": serpapi_key,
-        "num": num,
-        "hl": "en",
-    }
-    results = GoogleSearch(params).get_dict()
-    organic_results = results.get("organic_results", [])
-    return [
-        {
-            "title": r.get("title", ""),
-            "publishedAt": "",  # Google web doesn't have published date in API
-            "source": r.get("displayed_link", ""),
-            "url": r.get("link", ""),
-            "description": r.get("snippet", ""),
-        }
-        for r in organic_results
-    ]
-    
-# --- 5. Summarize with OpenAI LLM (>=1.0.0 syntax) ---
-def summarize_news_with_llm(headlines, company_name, sector_name=None, openai_client=None):
-    if not headlines:
-        return "No news found.", "N/A", []
-    prompt = f"""
-You are a financial news analyst AI.
-Given these headlines about {company_name}{f' in the {sector_name} sector' if sector_name else ''}, provide:
-- A short summary (max 2 sentences)
-- Overall sentiment (Bullish, Bearish, Neutral)
-- Top 2 news drivers
-
-Headlines:
-{chr(10).join(['- ' + h['title'] for h in headlines])}
-Respond in JSON: {{"summary": "...", "sentiment": "...", "drivers": ["...", "..."]}}
-"""
-    # openai_client: an openai.OpenAI(api_key=...) client
     response = openai_client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}]
@@ -157,51 +39,111 @@ Respond in JSON: {{"summary": "...", "sentiment": "...", "drivers": ["...", "...
         output = pyjson.loads(content)
     except Exception:
         output = {
-            "summary": content,
-            "sentiment": "N/A",
-            "drivers": []
+            "company_name": ticker,
+            "sector": "Unknown",
+            "industry": "Unknown",
+            "region": "Unknown"
         }
-    return output.get("summary", ""), output.get("sentiment", ""), output.get("drivers", [])
+    return output
 
-# --- 6. Master agent function ---
+# 3. Use LLM to expand keywords/phrases for news search
+def expand_search_keywords_llm(company_name, sector, industry, region, openai_client):
+    prompt = (
+        f"As a financial news analyst, generate a list of the 6 most relevant search phrases or keywords to find news related to the company '{company_name}', its sector '{sector}', industry '{industry}', and region '{region}'. "
+        "Include stock ticker and all related synonyms or common sector/region keywords. "
+        "Return the list in JSON: {\"keywords\": [ ... ]}"
+    )
+    response = openai_client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    import json as pyjson
+    content = response.choices[0].message.content
+    try:
+        output = pyjson.loads(content)
+        keywords = output.get("keywords", [])
+    except Exception:
+        keywords = [company_name, sector, industry, region]
+    # Remove any duplicates, None, or "Unknown"
+    keywords = [k for k in keywords if k and k.lower() != "unknown"]
+    return keywords
+
+# 4. Search Yahoo Finance news for all generated keywords
+def fetch_yfinance_news_for_keywords(keywords, max_articles=12):
+    # Yahoo Finance (yfinance) only allows .news for tickers, not keywords.
+    # For keywords, you might need to search major company tickers from the sector list, but here we'll just show ticker news for now.
+    # (If you want true keyword search, you need a paid NewsAPI or SerpAPI.)
+    news = []
+    for kw in keywords:
+        try:
+            stock = yf.Ticker(kw)
+            articles = getattr(stock, "news", [])
+            for n in articles:
+                article = {
+                    "title": n.get("title", ""),
+                    "publishedAt": n.get("providerPublishTime", ""),
+                    "source": n.get("publisher", ""),
+                    "url": n.get("link", ""),
+                    "description": n.get("summary", ""),
+                    "search_keyword": kw
+                }
+                news.append(article)
+        except Exception:
+            continue
+    # Deduplicate by title
+    seen_titles = set()
+    deduped_news = []
+    for a in news:
+        if a["title"] and a["title"] not in seen_titles:
+            deduped_news.append(a)
+            seen_titles.add(a["title"])
+        if len(deduped_news) >= max_articles:
+            break
+    return deduped_news
+
+# 5. Master function: run all steps
 def news_agent_stock(
     ticker,
-    company_name=None,
-    sector_name=None,
     openai_client=None,
-    newsapi_key=None,
-    serpapi_key=None,
     max_articles=12,
-    from_days_ago=7,
     verbose=False
 ):
-    news = fetch_stock_sector_news_expanded(
-        ticker,
-        sector=sector_name,
-        max_articles=max_articles,
-        newsapi_key=newsapi_key,
-        serpapi_key=serpapi_key,
-        from_days_ago=from_days_ago,
-        verbose=verbose
-    )
-    if company_name is None:
-        try:
-            aliases = get_company_aliases_from_ticker(ticker)
-            company_name = aliases[0] if aliases else ticker
-        except Exception:
-            company_name = ticker
+    # Step 1: Try yfinance metadata
+    metadata = get_metadata_yfinance(ticker)
+    # Step 2: Use LLM if any key info missing
+    if openai_client and (not metadata["sector"] or not metadata["region"] or not metadata["industry"]):
+        if verbose:
+            print("Falling back to LLM for metadata...")
+        metadata = infer_metadata_llm(ticker, openai_client)
+    if verbose:
+        print(f"Metadata for {ticker}:", metadata)
 
-    summary, sentiment, drivers = summarize_news_with_llm(
-        news[:max_articles], company_name, sector_name, openai_client=openai_client
-    )
+    # Step 3: Generate search keywords
+    keywords = [ticker]
+    if openai_client:
+        keywords = expand_search_keywords_llm(
+            metadata["company_name"], metadata["sector"], metadata["industry"], metadata["region"], openai_client
+        )
+    if verbose:
+        print("Keywords:", keywords)
+
+    # Step 4: Fetch news
+    news = fetch_yfinance_news_for_keywords(keywords, max_articles=max_articles)
+    summary = f"{len(news)} news articles found for keywords: {', '.join(keywords)}."
+    sentiment = "N/A"
+    drivers = []
 
     return {
-        "company": company_name,
-        "sector": sector_name,
+        "ticker": ticker,
+        "company_name": metadata.get("company_name"),
+        "sector": metadata.get("sector"),
+        "industry": metadata.get("industry"),
+        "region": metadata.get("region"),
+        "keywords": keywords,
         "summary": summary,
         "sentiment": sentiment,
         "drivers": drivers,
-        "headlines": news[:max_articles],
+        "headlines": news,
     }
 
 
