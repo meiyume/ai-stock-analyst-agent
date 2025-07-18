@@ -8,20 +8,20 @@ sector = st.text_input("Sector (optional):")
 if st.button("Analyze News", type="primary"):
     with st.spinner("Analyzing news..."):
 
-    # Show the alias names
-    aliases = get_company_aliases_from_ticker(ticker)
-    st.markdown("**Search queries used:**")
-    st.write(", ".join(aliases + ([sector] if sector else [])))
-    
-    openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-    newsapi_key = st.secrets["NEWSAPI_KEY"]
-    serpapi_key = st.secrets["SERPAPI_KEY"]
-    result = news_agent_stock(
-        ticker,
-        sector_name=sector,
-        openai_client=openai_client,
-        newsapi_key=newsapi_key,
-        serpapi_key=serpapi_key,
+        # Show the alias names
+        aliases = get_company_aliases_from_ticker(ticker)
+        st.markdown("**Search queries used:**")
+        st.write(", ".join(aliases + ([sector] if sector else [])))
+        
+        openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+        newsapi_key = st.secrets["NEWSAPI_KEY"]
+        serpapi_key = st.secrets["SERPAPI_KEY"]
+        result = news_agent_stock(
+            ticker,
+            sector_name=sector,
+            openai_client=openai_client,
+            newsapi_key=newsapi_key,
+            serpapi_key=serpapi_key,
         )
         st.subheader("Summary")
         st.write(result["summary"])
