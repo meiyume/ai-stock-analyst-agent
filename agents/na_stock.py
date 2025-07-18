@@ -160,118 +160,6 @@ def fetch_news_serpapi(keywords: List[str], api_key: Optional[str], max_articles
     return news[:max_articles]
 
 
-def llm_news_summary(keywords, company, sector, industry, region, openai_client):
-    import json as pyjson
-    try:
-        # Limit keywords to avoid excessive prompt size
-        keywords = keywords[:10]
-        prompt = f"""
-You are an expert financial news agent. Given the following information:
-Company names/aliases: {company}
-Sector: {sector}
-Industry: {industry}
-Region: {region}
-Keywords for search: {keywords}
-
-1. Simulate as if you searched the web using the given keywords, but do NOT search in real-time.
-   Pretend you did a quick analyst scan using those keywords. No hallucinated or invented news.
-2. Summarize sentiment for (a) the stock (b) the sector (c) the region.
-3. Give rationale for each.
-4. Write a 4–5 sentence executive summary.
-5. Output structured JSON:
-   {{
-     "company_keywords": [...],
-     "sector_keywords": [...],
-     "region_keywords": [...],
-     "stock_sentiment": {{"score": "Bullish", "reason": "..."}},
-     "sector_sentiment": {{...}},
-     "region_sentiment": {{...}},
-     "summary": "..."
-   }}
-"""
-        response = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2
-        )
-        return pyjson.loads(response.choices[0].message.content)
-    except Exception as e:
-        print("[ERROR] LLM summary failed:", str(e))
-        return {}
-
-
-
-
-def dedupe_news(news: List[Dict], max_articles=12):
-    seen = set()
-    deduped = []
-    for n in news:
-        key = (n.get("title") or "", n.get("url") or "")
-        if key not in seen and n.get("title"):
-            deduped.append(n)
-            seen.add(key)
-        if len(deduped) >= max_articles:
-            break
-    return deduped
-
-def news_agent_stock(
-    ticker: str,
-    openai_client=None,
-    newsapi_key=None,
-    serpapi_key=None,
-    max_articles=12,
-    verbose=False
-):
-    if verbose:
-        print(f"[DEBUG] Starting news_agent_stock for ticker: {ticker}")
-
-    # --- Step 1: Metadata
-    meta_yf = get_metadata_yfinance(ticker)
-    company_names = [meta_yf.get("company_name", ticker)]
-    sector = meta_yf.get("sector")
-    industry = meta_yf.get("industry")
-    region = meta_yf.get("region")
-
-    # --- Step 2: LLM fallback for richer metadata/keywords
-    if openai_client:
-        print("[DEBUG] Calling infer_metadata_llm ...")
-        llm_meta = infer_metadata_llm(ticker, openai_client)
-        print("[DEBUG] LLM meta returned:", llm_meta)
-        company_names = llm_meta.get("company_names") or company_names
-        sector = llm_meta.get("sector") or sector
-        industry = llm_meta.get("industry") or industry
-        region = llm_meta.get("region") or region
-        print("[DEBUG] Calling expand_search_keywords_llm ...")
-        keywords = expand_search_keywords_llm(company_names, sector, industry, region, openai_client)
-        print("[DEBUG] Keywords from LLM:", keywords)
-    else:
-        keywords = list({ticker, *company_names, sector, industry, region})
-        keywords = [k for k in keywords if k and k.lower() != "unknown"]
-    if verbose:
-        print(f"[DEBUG] Keywords: {keywords}")
-
-    # --- Step 3: Fetch news from all sources
-    print("[DEBUG] Fetching yfinance news ...")
-    all_news = []
-    all_news += fetch_yfinance_news(ticker, max_articles)
-    print(f"[DEBUG] yfinance news: {len(all_news)} articles")
-    print("[DEBUG] Fetching newsapi news ...")
-    all_news += fetch_news_newsapi(keywords, newsapi_key, max_articles)
-    print(f"[DEBUG] newsapi news count: {len(all_news)}")
-    print("[DEBUG] Fetching serpapi news ...")
-    all_news += fetch_news_serpapi(keywords, serpapi_key, max_articles)
-    print(f"[DEBUG] serpapi news count: {len(all_news)}")
-
-    deduped_news = dedupe_news(all_news, max_articles)
-    print(f"[DEBUG] deduped_news count: {len(deduped_news)}")
-
-    # --- Step 4: Always call LLM summary
-    llm_summary = None
-    if openai_client:
-        print("[DEBUG] Calling llm_news_summary ...")
-        llm_summary = llm_news_summary(keywords, company_names, sector, industry, region, openai_client)
-        print("[DEBUG] llm_summary returned:", llm_summary)
-
     return {
         "ticker": ticker,
         "company_names": company_names,
@@ -287,3 +175,47 @@ def news_agent_stock(
             "serpapi": len(fetch_news_serpapi(keywords, serpapi_key, max_articles)),
         }
     }
+
+
+
+def llm_news_summary(keywords, company, sector, industry, region, deduped_news, openai_client):
+    import json as pyjson
+    try:
+        keywords = keywords[:10]
+        headline_snippets = deduped_news[:15] if deduped_news else []
+        news_text = "\n".join([
+            f"- {n['title']}: {n.get('description', '')}" for n in headline_snippets
+        ]) or "No articles available."
+
+        prompt = f"""
+You are a financial news analyst with deep domain knowledge of global markets, industries, and companies.
+
+Your task is to:
+1. Use your internal financial expertise and reasoning.
+2. Cross-reference it with the following recent headlines and descriptions:
+{news_text}
+3. Derive sentiment and insights for:
+   - The company/stock ({company})
+   - The sector ({sector})
+   - The region ({region})
+4. Adjust or reaffirm your opinion based on the real news.
+5. Provide a final 4–5 sentence executive summary.
+
+Respond only in JSON format:
+{{
+  "company_keywords": {keywords},
+  "stock_sentiment": {{"score": "...", "reason": "..." }},
+  "sector_sentiment": {{"score": "...", "reason": "..." }},
+  "region_sentiment": {{"score": "...", "reason": "..." }},
+  "summary": "..."
+}}
+"""
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3
+        )
+        return pyjson.loads(response.choices[0].message.content)
+    except Exception as e:
+        print("[ERROR] LLM summary failed:", str(e))
+        return {}
