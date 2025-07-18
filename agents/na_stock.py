@@ -169,7 +169,6 @@ def llm_news_summary(keywords, company, sector, industry, region, deduped_news, 
 
         prompt = f"""
 You are a financial news analyst with deep domain knowledge of global markets, industries, and companies.
-
 Your task is to:
 1. Use your internal financial expertise and reasoning.
 2. Cross-reference it with the following recent headlines and descriptions:
@@ -179,7 +178,8 @@ Your task is to:
    - The sector ({sector})
    - The region ({region})
 4. Adjust or reaffirm your opinion based on the real news.
-5. Provide a final 4–5 sentence executive summary.
+5. Provide your opinion on future outlook for next 90 days.
+5. Provide a final 6-7 sentence executive summary.
 
 Respond only in JSON format:
 {{
