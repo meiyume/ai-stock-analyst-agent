@@ -1,302 +1,84 @@
+# streamlit_na_stock.py
+
 import streamlit as st
-import yfinance as yf
-import json
+import agents.na_stock as na_stock
 from openai import OpenAI
 
-# ======= News Source Functions ========
+st.set_page_config(page_title="AI News Analyst Agent", page_icon="📰", layout="centered")
 
-# --- 1. Yahoo Finance ---
-def fetch_yfinance_news(ticker, max_articles=12):
-    try:
-        stock = yf.Ticker(ticker)
-        news = getattr(stock, "news", [])
-        articles = []
-        for n in news:
-            # New Yahoo format: everything under 'content'
-            content = n.get("content", {})
-            title = content.get("title") or n.get("title", "")
-            # URL may be under clickThroughUrl or canonicalUrl
-            url = None
-            for k in ["clickThroughUrl", "canonicalUrl"]:
-                if content.get(k) and isinstance(content.get(k), dict):
-                    url = content[k].get("url")
-                    if url:
-                        break
-            url = url or n.get("link", "")
-            summary = content.get("summary") or n.get("summary", "")
-            published = content.get("pubDate") or n.get("providerPublishTime", "")
-            source = (content.get("provider", {}) or {}).get("displayName", n.get("publisher", "Yahoo Finance"))
-            articles.append({
-                "title": title,
-                "publishedAt": published,
-                "source": source,
-                "url": url,
-                "description": summary,
-                "api": "Yahoo Finance",
-                "search_keyword": ticker
-            })
-            if len(articles) >= max_articles:
-                break
-        return articles
-    except Exception as e:
-        print("Error fetching yfinance news:", e)
-        return []
+st.title("📰 AI News Analyst Agent")
+st.markdown(
+    """
+    Enter a stock ticker (e.g., `AAPL`, `D05.SI`, `UOB`, `TSLA`) to see a combined AI-powered news analysis and live news headlines.
+    """
+)
 
+ticker = st.text_input("Enter Ticker Symbol", value="AAPL")
+max_articles = st.slider("Max news articles", min_value=3, max_value=25, value=10)
+go = st.button("Analyze News")
 
-# --- 2. NewsAPI ---
-def fetch_news_newsapi(query, max_articles=12, api_key=None, from_days_ago=14):
-    if not api_key:
-        return []
-    import requests
-    from datetime import datetime, timedelta
-    url = (
-        f"https://newsapi.org/v2/everything?q={query}"
-        f"&language=en&pageSize={max_articles}"
-        f"&from={ (datetime.utcnow() - timedelta(days=from_days_ago)).date() }"
-        f"&sortBy=publishedAt&apiKey={api_key}"
-    )
-    try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-        articles = resp.json().get("articles", [])
-    except Exception:
-        articles = []
-    return [
-        {
-            "title": a.get("title", ""),
-            "publishedAt": a.get("publishedAt", ""),
-            "source": a.get("source", {}).get("name", ""),
-            "url": a.get("url", ""),
-            "description": a.get("description", ""),
-            "api": "NewsAPI",
-            "search_keyword": query
-        }
-        for a in articles
-    ]
-
-# --- 3. SerpAPI Google News ---
-def fetch_news_serpapi(query, serpapi_key, max_articles=12):
-    if not serpapi_key:
-        return []
-    try:
-        from serpapi import GoogleSearch
-    except ImportError:
-        return []
-    params = {
-        "engine": "google_news",
-        "q": query,
-        "api_key": serpapi_key,
-        "num": max_articles,
-        "hl": "en",
-    }
-    try:
-        results = GoogleSearch(params).get_dict()
-        news = results.get("news_results", [])
-    except Exception:
-        news = []
-    return [
-        {
-            "title": n.get("title", ""),
-            "publishedAt": n.get("date", ""),
-            "source": n.get("source", ""),
-            "url": n.get("link", ""),
-            "description": n.get("snippet", ""),
-            "api": "SerpAPI News",
-            "search_keyword": query
-        }
-        for n in news
-    ]
-
-# --- 4. SerpAPI Web ---
-def fetch_web_search_serpapi(query, serpapi_key, max_articles=12):
-    if not serpapi_key:
-        return []
-    try:
-        from serpapi import GoogleSearch
-    except ImportError:
-        return []
-    params = {
-        "engine": "google",
-        "q": query,
-        "api_key": serpapi_key,
-        "num": max_articles,
-        "hl": "en",
-    }
-    try:
-        results = GoogleSearch(params).get_dict()
-        organic_results = results.get("organic_results", [])
-    except Exception:
-        organic_results = []
-    return [
-        {
-            "title": r.get("title", ""),
-            "publishedAt": "",  # No publish date from web
-            "source": r.get("displayed_link", ""),
-            "url": r.get("link", ""),
-            "description": r.get("snippet", ""),
-            "api": "SerpAPI Web",
-            "search_keyword": query
-        }
-        for r in organic_results
-    ]
-
-# ======= Metadata & Keyword Expansion ========
-
-def get_metadata_yfinance(ticker):
-    try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
-        sector = info.get("sector", None)
-        industry = info.get("industry", None)
-        region = info.get("country", None) or info.get("exchange", None)
-        return {
-            "company_name": info.get("longName", ticker),
-            "sector": sector,
-            "industry": industry,
-            "region": region
-        }
-    except Exception:
-        return {
-            "company_name": ticker,
-            "sector": None,
-            "industry": None,
-            "region": None
-        }
-
-def infer_metadata_llm(ticker, openai_client):
-    prompt = (
-        f"As a financial analyst, what are the most relevant sector, industry, and country/region for the stock ticker '{ticker}'? "
-        "Respond in JSON: {\"company_name\": \"...\", \"sector\": \"...\", \"industry\": \"...\", \"region\": \"...\"}"
-    )
-    response = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    import json as pyjson
-    content = response.choices[0].message.content
-    try:
-        output = pyjson.loads(content)
-    except Exception:
-        output = {
-            "company_name": ticker,
-            "sector": "Unknown",
-            "industry": "Unknown",
-            "region": "Unknown"
-        }
-    return output
-
-def expand_search_keywords_llm(company_name, sector, industry, region, openai_client):
-    prompt = (
-        f"As a financial news analyst, generate a list of the 6 most relevant search phrases or keywords to find news related to the company '{company_name}', its sector '{sector}', industry '{industry}', and region '{region}'. "
-        "Include the stock ticker and all related synonyms or common sector/region keywords. "
-        "Return the list in JSON: {\"keywords\": [ ... ]}"
-    )
-    response = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    import json as pyjson
-    content = response.choices[0].message.content
-    try:
-        output = pyjson.loads(content)
-        keywords = output.get("keywords", [])
-    except Exception:
-        keywords = [company_name, sector, industry, region]
-    keywords = [k for k in keywords if k and k.lower() != "unknown"]
-    return keywords
-
-# ======= Main App ========
-
-st.set_page_config(page_title="LLM-powered News Analyst", page_icon="📰")
-st.title("📰 LLM-powered Stock/Sector News Analyst")
-
-ticker = st.text_input("Enter Stock Ticker (e.g., U11.SI):")
-max_articles = st.slider("Max Articles", 5, 20, 10)
-from_days_ago = st.slider("Lookback days (for NewsAPI)", 3, 30, 14)
-
-# Optionally use OpenAI for LLM-powered expansion
-use_llm = st.toggle("Expand queries with LLM (OpenAI)", value=True)
-openai_key = st.secrets.get("OPENAI_API_KEY")
-newsapi_key = st.secrets.get("NEWSAPI_KEY")
-serpapi_key = st.secrets.get("SERPAPI_KEY")
-openai_client = OpenAI(api_key=openai_key) if (openai_key and use_llm) else None
-
-if st.button("Analyze News") and ticker:
-    # --- Metadata ---
-    metadata = get_metadata_yfinance(ticker)
-    st.markdown(f"**Company Name:** {metadata['company_name']}")
-    st.markdown(f"**Sector:** {metadata['sector']}")
-    st.markdown(f"**Industry:** {metadata['industry']}")
-    st.markdown(f"**Region:** {metadata['region']}")
-
-    # --- LLM Fallback if enabled and info missing ---
-    if openai_client and (not metadata["sector"] or not metadata["industry"] or not metadata["region"]):
-        st.info("LLM used to infer missing sector/region/industry info.")
-        metadata = infer_metadata_llm(ticker, openai_client)
-        st.markdown(f"**(LLM) Company Name:** {metadata['company_name']}")
-        st.markdown(f"**(LLM) Sector:** {metadata['sector']}")
-        st.markdown(f"**(LLM) Industry:** {metadata['industry']}")
-        st.markdown(f"**(LLM) Region:** {metadata['region']}")
-
-    # --- Generate keywords/aliases ---
-    if openai_client:
-        keywords = expand_search_keywords_llm(
-            metadata["company_name"], metadata["sector"], metadata["industry"], metadata["region"], openai_client
-        )
-        st.markdown(f"**Keywords used for news search:** {', '.join(keywords)}")
+if go and ticker:
+    st.info(f"Running AI News Agent for **{ticker}** ...")
+    # --- API keys from secrets
+    newsapi_key = st.secrets.get("NEWSAPI_KEY", "")
+    serpapi_key = st.secrets.get("SERPAPI_KEY", "")
+    openai_key = st.secrets.get("OPENAI_API_KEY")
+    if not openai_key:
+        st.error("You need to provide your OpenAI API key in Streamlit secrets.")
     else:
-        keywords = [ticker]
-        st.markdown(f"**Keywords used for news search:** {', '.join(keywords)}")
+        client = OpenAI(api_key=openai_key)
+        result = na_stock.news_agent_stock(
+            ticker,
+            openai_client=client,
+            newsapi_key=newsapi_key,
+            serpapi_key=serpapi_key,
+            max_articles=max_articles,
+            verbose=True
+        )
 
-    # --- Gather news from all sources ---
-    all_articles = []
-    
-    # Always fetch Yahoo news for the ticker only!
-    ynews = fetch_yfinance_news(ticker, max_articles=max_articles)
-    all_articles.extend(ynews)
-    st.markdown(f"**Yahoo Finance news fetched for:** {ticker}")
-    
-    # Other APIs: use all keywords
-    for kw in keywords:
-        if newsapi_key:
-            na = fetch_news_newsapi(kw, max_articles=max_articles, api_key=newsapi_key, from_days_ago=from_days_ago)
-            all_articles.extend(na)
-        if serpapi_key:
-            sa_news = fetch_news_serpapi(kw, serpapi_key, max_articles=max_articles)
-            all_articles.extend(sa_news)
-            sa_web = fetch_web_search_serpapi(kw, serpapi_key, max_articles=max_articles)
-            all_articles.extend(sa_web)
+        # --- Show company info and keywords
+        st.markdown(f"""
+        **Company Names / Aliases:** {', '.join(result.get('company_names', []))}
+        **Sector:** {result.get('sector') or 'N/A'}
+        **Industry:** {result.get('industry') or 'N/A'}
+        **Region:** {result.get('region') or 'N/A'}
+        **Keywords Used:** {', '.join(result.get('keywords', []))}
+        """)
 
-    # --- Deduplicate by title ---
-    seen_titles = set()
-    deduped_articles = []
-    for a in all_articles:
-        if a["title"] and a["title"] not in seen_titles:
-            deduped_articles.append(a)
-            seen_titles.add(a["title"])
-        if len(deduped_articles) >= max_articles:
-            break
-            
-    with st.expander("Deduped Articles (Click to expand)", expanded=False):
-        st.code(json.dumps(deduped_articles, indent=2), language="json")
-    
-    # --- Show Results by Source ---
-    sources = {}
-    for a in deduped_articles:
-        api = a.get("api", "Unknown")
-        sources.setdefault(api, []).append(a)
-    st.markdown(f"**Articles by Source:**")
-    for api, arts in sources.items():
-        with st.expander(f"{api} ({len(arts)})", expanded=True if api == "Yahoo Finance" else False):
-            for a in arts:
-                st.markdown(f"- [{a['title']}]({a['url']}) ({a['source']})")
-                if a.get("description"):
-                    st.caption(a["description"])
-    if not deduped_articles:
-        st.warning("No news found from any enabled source.")
+        # --- Source counts
+        nc = result.get("news_counts", {})
+        st.markdown(f"""
+        **News Found:**  
+        - Yahoo Finance: {nc.get('yfinance',0)}  
+        - NewsAPI: {nc.get('newsapi',0)}  
+        - SerpAPI: {nc.get('serpapi',0)}
+        """)
 
-else:
-    st.info("Enter a ticker, select options, then click **Analyze News** to begin.")
+        # --- News Expanders by API
+        news = result.get("news", [])
+        if news:
+            apis = sorted(set(n.get("api", "Other") for n in news))
+            api_selected = st.selectbox("Filter news by source:", ["All"] + apis)
+            show_news = [n for n in news if api_selected == "All" or n.get("api") == api_selected]
+            for n in show_news:
+                with st.expander(f"{n['title']} ({n.get('source')}, {n.get('api')})", expanded=False):
+                    st.write(f"**Published:** {n.get('publishedAt')}")
+                    st.write(f"**Source:** {n.get('source')}")
+                    st.write(f"**Search Keyword:** {n.get('search_keyword')}")
+                    if n.get('description'):
+                        st.write(n['description'])
+                    if n.get("url"):
+                        st.markdown(f"[Read Full Article]({n['url']})")
+        else:
+            st.warning("No live news found from Yahoo Finance or APIs.")
+
+        # --- LLM fallback summary
+        llm_summary = result.get("llm_summary")
+        if llm_summary:
+            st.markdown("---")
+            st.subheader("LLM-Based News & Sentiment Summary")
+            st.json(llm_summary)
+
 
 
 
