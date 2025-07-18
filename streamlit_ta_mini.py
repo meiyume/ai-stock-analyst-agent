@@ -36,7 +36,31 @@ if go and ticker:
             verbose=True
         )
 
-        # --- Show company info and keywords
+        
+        # --- LLM Summary Block
+        llm_summary = result.get("llm_summary")
+        if llm_summary:
+            st.markdown("---")
+            st.subheader("🧠 LLM Summary & Sentiment Analysis")
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.markdown("**📈 Stock Sentiment**")
+                st.markdown(f"**{llm_summary['stock_sentiment']['score']}**")
+                st.caption(llm_summary['stock_sentiment']['reason'])
+            with col2:
+                st.markdown("**🏦 Sector Sentiment**")
+                st.markdown(f"**{llm_summary['sector_sentiment']['score']}**")
+                st.caption(llm_summary['sector_sentiment']['reason'])
+            with col3:
+                st.markdown("**🌍 Region Sentiment**")
+                st.markdown(f"**{llm_summary['region_sentiment']['score']}**")
+                st.caption(llm_summary['region_sentiment']['reason'])
+
+            st.markdown("#### 🧾 Executive Summary")
+            st.markdown(llm_summary.get("summary", ""))
+
+# --- Show company info and keywords
         st.markdown(f"""
         **Company Names / Aliases:** {', '.join(result.get('company_names', []))}
         **Sector:** {result.get('sector') or 'N/A'}
