@@ -250,15 +250,17 @@ if st.button("Analyze News") and ticker:
 
     # --- Gather news from all sources ---
     all_articles = []
+    
+    # Always fetch Yahoo news for the ticker only!
+    ynews = fetch_yfinance_news(ticker, max_articles=max_articles)
+    all_articles.extend(ynews)
+    st.markdown(f"**Yahoo Finance news fetched for:** {ticker}")
+    
+    # Other APIs: use all keywords
     for kw in keywords:
-        # Yahoo Finance
-        ynews = fetch_yfinance_news(kw, max_articles=max_articles)
-        all_articles.extend(ynews)
-        # NewsAPI (optional)
         if newsapi_key:
             na = fetch_news_newsapi(kw, max_articles=max_articles, api_key=newsapi_key, from_days_ago=from_days_ago)
             all_articles.extend(na)
-        # SerpAPI (optional)
         if serpapi_key:
             sa_news = fetch_news_serpapi(kw, serpapi_key, max_articles=max_articles)
             all_articles.extend(sa_news)
