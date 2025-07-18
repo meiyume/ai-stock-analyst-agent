@@ -200,13 +200,19 @@ Respond only in JSON format:
         # Remove markdown code fences if present
         raw = re.sub(r"^```json\s*|```$", "", raw.strip(), flags=re.IGNORECASE)
 
-        # Extract JSON block (the first {...} block)
+        # Extract JSON or dict block
         json_match = re.search(r"\{.*\}", raw, flags=re.DOTALL)
         if json_match:
             raw_json = json_match.group(0)
-            return pyjson.loads(raw_json)
+            try:
+                # Try regular JSON first
+                return pyjson.loads(raw_json)
+            except Exception:
+                # Fallback: Python dict with single quotes
+                import ast
+                return ast.literal_eval(raw_json)
         else:
-            print("[ERROR] No JSON found in LLM output! Full output was:")
+            print("[ERROR] No JSON/dict found in LLM output! Full output was:")
             print(raw)
             return {}
     except Exception as e:
@@ -214,6 +220,7 @@ Respond only in JSON format:
         print("[ERROR] Raw LLM output was:")
         print(raw)
         return {}
+
 
 def dedupe_news(news: List[Dict], max_articles=12):
     seen = set()
