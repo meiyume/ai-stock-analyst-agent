@@ -203,6 +203,9 @@ def news_agent_stock(
     max_articles=12,
     verbose=False
 ):
+    if verbose:
+        print(f"[DEBUG] Starting news_agent_stock for ticker: {ticker}")
+    
     # --- Step 1: Metadata
     meta_yf = get_metadata_yfinance(ticker)
     company_names = [meta_yf.get("company_name", ticker)]
@@ -211,28 +214,42 @@ def news_agent_stock(
     region = meta_yf.get("region")
     # --- Step 2: LLM fallback for richer metadata/keywords
     if openai_client:
+        print("[DEBUG] Calling infer_metadata_llm ...")
         llm_meta = infer_metadata_llm(ticker, openai_client)
+        print("[DEBUG] LLM meta returned:", llm_meta)
         company_names = llm_meta.get("company_names") or company_names
         sector = llm_meta.get("sector") or sector
         industry = llm_meta.get("industry") or industry
         region = llm_meta.get("region") or region
+        print("[DEBUG] Calling expand_search_keywords_llm ...")
         keywords = expand_search_keywords_llm(company_names, sector, industry, region, openai_client)
+        print("[DEBUG] Keywords from LLM:", keywords)
     else:
         keywords = list({ticker, *company_names, sector, industry, region})
         keywords = [k for k in keywords if k and k.lower() != "unknown"]
     if verbose:
-        print(f"Keywords: {keywords}")
+        print(f"[DEBUG]Keywords: {keywords}")
 
     # --- Step 3: Fetch news from all sources
+    print("[DEBUG] Fetching yfinance news ...")
     all_news = []
     all_news += fetch_yfinance_news(ticker, max_articles)
+    print(f"[DEBUG] yfinance news: {len(all_news)} articles")
+    print("[DEBUG] Fetching newsapi news ...")
     all_news += fetch_news_newsapi(keywords, newsapi_key, max_articles)
+    print(f"[DEBUG] newsapi news count: {len(all_news)}")
+    print("[DEBUG] Fetching serpapi news ...")
     all_news += fetch_news_serpapi(keywords, serpapi_key, max_articles)
+    print(f"[DEBUG] serpapi news count: {len(all_news)}")
+
     deduped_news = dedupe_news(all_news, max_articles)
+    print(f"[DEBUG] deduped_news count: {len(deduped_news)}")
     # --- Step 4: Fallback to LLM “virtual” news if no news found
     llm_summary = None
     if (not deduped_news) and openai_client:
+        print("[DEBUG] No news found. Calling llm_news_summary ...")
         llm_summary = llm_news_summary(keywords, company_names, sector, industry, region, openai_client)
+        print("[DEBUG] llm_summary returned:", llm_summary)
     return {
         "ticker": ticker,
         "company_names": company_names,
