@@ -57,30 +57,30 @@ if go and ticker:
         # --- News Expanders by API
         news = result.get("news", [])
         # --- News Expanders grouped by API/source
-news = result.get("news", [])
-if news:
-    apis = sorted(set(n.get("api", "Other") for n in news))
-    api_selected = st.selectbox("Show news from:", ["All"] + apis)
-    # Group news by api
-    from collections import defaultdict
-    news_by_api = defaultdict(list)
-    for n in news:
-        news_by_api[n.get("api", "Other")].append(n)
-
-    for api in apis:
-        if api_selected != "All" and api_selected != api:
-            continue
-        with st.expander(f"{api} ({len(news_by_api[api])} articles)", expanded=(len(apis)==1)):
-            for n in news_by_api[api]:
-                st.markdown(f"**{n['title']}**")
-                st.write(f"*Published:* {n.get('publishedAt')}  \n*Source:* {n.get('source')}  \n*Search Keyword:* {n.get('search_keyword')}")
-                if n.get('description'):
-                    st.write(n['description'])
-                if n.get("url"):
-                    st.markdown(f"[Read Full Article]({n['url']})")
-                st.markdown("---")
-else:
-    st.warning("No live news found from Yahoo Finance or APIs.")
+        news = result.get("news", [])
+        if news:
+            apis = sorted(set(n.get("api", "Other") for n in news))
+            api_selected = st.selectbox("Show news from:", ["All"] + apis)
+            # Group news by api
+            from collections import defaultdict
+            news_by_api = defaultdict(list)
+            for n in news:
+                news_by_api[n.get("api", "Other")].append(n)
+        
+            for api in apis:
+                if api_selected != "All" and api_selected != api:
+                    continue
+                with st.expander(f"{api} ({len(news_by_api[api])} articles)", expanded=(len(apis)==1)):
+                    for n in news_by_api[api]:
+                        st.markdown(f"**{n['title']}**")
+                        st.write(f"*Published:* {n.get('publishedAt')}  \n*Source:* {n.get('source')}  \n*Search Keyword:* {n.get('search_keyword')}")
+                        if n.get('description'):
+                            st.write(n['description'])
+                        if n.get("url"):
+                            st.markdown(f"[Read Full Article]({n['url']})")
+                        st.markdown("---")
+        else:
+            st.warning("No live news found from Yahoo Finance or APIs.")
 
 
         # --- LLM fallback summary
