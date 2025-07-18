@@ -273,7 +273,9 @@ if st.button("Analyze News") and ticker:
             seen_titles.add(a["title"])
         if len(deduped_articles) >= max_articles:
             break
-
+            
+    st.write("DEBUG: deduped_articles = ", deduped_articles)
+    
     # --- Show Results by Source ---
     sources = {}
     for a in deduped_articles:
