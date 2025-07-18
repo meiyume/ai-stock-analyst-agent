@@ -1,5 +1,3 @@
-# agents/na_stock.py
-
 import yfinance as yf
 from datetime import datetime
 from typing import List, Dict, Optional
@@ -13,12 +11,15 @@ def get_metadata_yfinance(ticker: str):
             "sector": info.get("sector"),
             "industry": info.get("industry"),
             "region": info.get("country") or info.get("exchange") or None
+        }
     except Exception:
         return {
             "company_name": ticker,
             "sector": None,
             "industry": None,
             "region": None
+        }
+
 def infer_metadata_llm(ticker: str, openai_client):
     prompt = (
         f"As a financial analyst, what are the most relevant company names (including aliases), sector, industry, "
@@ -40,6 +41,7 @@ def infer_metadata_llm(ticker: str, openai_client):
             "sector": "Unknown",
             "industry": "Unknown",
             "region": "Unknown"
+        }
     return out
 
 def expand_search_keywords_llm(company_names, sector, industry, region, openai_client):
@@ -105,6 +107,7 @@ def fetch_news_newsapi(keywords: List[str], api_key: Optional[str], max_articles
             "language": "en",
             "sortBy": "publishedAt",
             "pageSize": max_articles,
+        }
         resp = requests.get(url, params=params, timeout=10)
         if resp.status_code == 200:
             data = resp.json()
@@ -137,6 +140,7 @@ def fetch_news_serpapi(keywords: List[str], api_key: Optional[str], max_articles
             "api_key": api_key,
             "num": max_articles,
             "hl": "en"
+        }
         search = GoogleSearch(params)
         results = search.get_dict()
         for article in results.get("news_results", []):
@@ -152,41 +156,6 @@ def fetch_news_serpapi(keywords: List[str], api_key: Optional[str], max_articles
         if len(news) >= max_articles:
             break
     return news[:max_articles]
-
-
-    return {
-        "ticker": ticker,
-        "company_names": company_names,
-        "sector": sector,
-        "industry": industry,
-        "region": region,
-        "keywords": keywords,
-        "news": deduped_news,
-        "llm_summary": llm_summary,
-        "news_counts": {
-            "yfinance": len(fetch_yfinance_news(ticker, max_articles)),
-            "newsapi": len(fetch_news_newsapi(keywords, newsapi_key, max_articles)),
-            "serpapi": len(fetch_news_serpapi(keywords, serpapi_key, max_articles)),
-    }
-
-
-
-    return {
-        "ticker": ticker,
-        "company_names": company_names,
-        "sector": sector,
-        "industry": industry,
-        "region": region,
-        "keywords": keywords,
-        "news": deduped_news,
-        "llm_summary": llm_summary,
-        "news_counts": {
-            "yfinance": len(fetch_yfinance_news(ticker, max_articles)),
-            "newsapi": len(fetch_news_newsapi(keywords, newsapi_key, max_articles)),
-            "serpapi": len(fetch_news_serpapi(keywords, serpapi_key, max_articles)),
-    }
-
-
 
 def llm_news_summary(keywords, company, sector, industry, region, deduped_news, openai_client):
     import json as pyjson
@@ -236,7 +205,6 @@ Respond only in JSON format:
         print("[ERROR] LLM summary failed:", str(e))
         return {}
 
-
 def dedupe_news(news: List[Dict], max_articles=12):
     seen = set()
     deduped = []
@@ -259,7 +227,7 @@ def news_agent_stock(
 ):
     if verbose:
         print(f"[DEBUG] Starting news_agent_stock for ticker: {ticker}")
-
+    
     # Step 1: Metadata
     meta_yf = get_metadata_yfinance(ticker)
     company_names = [meta_yf.get("company_name", ticker)]
@@ -319,3 +287,4 @@ def news_agent_stock(
             "serpapi": len(fetch_news_serpapi(keywords, serpapi_key, max_articles)),
         }
     }
+
