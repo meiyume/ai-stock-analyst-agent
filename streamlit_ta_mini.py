@@ -283,12 +283,9 @@ if st.button("Analyze News") and ticker:
         sources.setdefault(api, []).append(a)
     st.markdown(f"**Articles by Source:**")
     for api, arts in sources.items():
-        with st.expander(f"{api} ({len(arts)})", expanded=(api == "Yahoo Finance")):
+        with st.expander(f"{api} ({len(arts)})", expanded=True if api == "Yahoo Finance" else False):
             for a in arts:
-                st.markdown(
-                    f"- [{a['title']}]({a['url']}) <small>({a.get('source','')}, {str(a.get('publishedAt',''))[:10]})</small> [Searched: {a['search_keyword']}]",
-                    unsafe_allow_html=True
-                )
+                st.markdown(f"- [{a['title']}]({a['url']}) ({a['source']})")
                 if a.get("description"):
                     st.caption(a["description"])
     if not deduped_articles:
