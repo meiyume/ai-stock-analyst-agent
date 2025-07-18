@@ -1,0 +1,200 @@
+# agents/na_stock.py
+
+import yfinance as yf
+from datetime import datetime
+from typing import List, Dict, Optional
+
+def get_metadata_yfinance(ticker: str):
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        return {
+            "company_name": info.get("longName", ticker),
+            "sector": info.get("sector"),
+            "industry": info.get("industry"),
+            "region": info.get("country") or info.get("exchange") or None
+        }
+    except Exception:
+        return {
+            "company_name": ticker,
+            "sector": None,
+            "industry": None,
+            "region": None
+        }
+
+def infer_metadata_llm(ticker: str, openai_client):
+    prompt = (
+        f"As a financial analyst, what are the most relevant company names (including aliases), sector, industry, "
+        f"and main region for the stock ticker '{ticker}'? "
+        "Respond in JSON: {\"company_names\": [...], \"sector\": \"...\", \"industry\": \"...\", \"region\": \"...\"}"
+    )
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2
+        )
+        import json as pyjson
+        content = response.choices[0].message.content
+        out = pyjson.loads(content)
+    except Exception:
+        out = {
+            "company_names": [ticker],
+            "sector": "Unknown",
+            "industry": "Unknown",
+            "region": "Unknown"
+        }
+    return out
+
+def expand_search_keywords_llm(company_names, sector, industry, region, openai_client):
+    names_str = ', '.join(company_names)
+    prompt = (
+        f"As a financial news analyst, generate a list of the 6 most relevant search phrases/keywords to find news "
+        f"related to: {names_str}, sector: {sector}, industry: {industry}, region: {region}. "
+        "Include common synonyms, sector/region phrases, and stock ticker if relevant. "
+        "Return as JSON: {\"keywords\": [ ... ]}"
+    )
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2
+        )
+        import json as pyjson
+        content = response.choices[0].message.content
+        out = pyjson.loads(content)
+        keywords = out.get("keywords", [])
+    except Exception:
+        keywords = [*company_names, sector, industry, region]
+    return [k for k in keywords if k and k.lower() != "unknown"]
+
+def fetch_yfinance_news(ticker: str, max_articles: int = 12) -> List[Dict]:
+    stock = yf.Ticker(ticker)
+    news = []
+    articles = getattr(stock, "news", [])
+    for n in articles[:max_articles]:
+        content = n.get("content", {})
+        title = content.get("title") or n.get("title", "")
+        url = None
+        for k in ["clickThroughUrl", "canonicalUrl"]:
+            if content.get(k) and isinstance(content.get(k), dict):
+                url = content[k].get("url")
+                if url:
+                    break
+        url = url or n.get("link", "")
+        summary = content.get("summary") or n.get("summary", "")
+        published = content.get("pubDate") or n.get("providerPublishTime", "")
+        source = (content.get("provider", {}) or {}).get("displayName", n.get("publisher", "Yahoo Finance"))
+        news.append({
+            "title": title,
+            "publishedAt": published,
+            "source": source,
+            "url": url,
+            "description": summary,
+            "search_keyword": ticker,
+            "api": "Yahoo Finance"
+        })
+    return news
+
+def fetch_news_newsapi(keywords: List[str], api_key: Optional[str], max_articles=10) -> List[Dict]:
+    if not api_key:
+        return []
+    import requests
+    url = "https://newsapi.org/v2/everything"
+    news = []
+    for q in keywords:
+        params = {
+            "q": q,
+            "apiKey": api_key,
+            "language": "en",
+            "sortBy": "publishedAt",
+            "pageSize": max_articles,
+        }
+        resp = requests.get(url, params=params, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            for article in data.get("articles", []):
+                news.append({
+                    "title": article.get("title"),
+                    "publishedAt": article.get("publishedAt"),
+                    "source": article.get("source", {}).get("name"),
+                    "url": article.get("url"),
+                    "description": article.get("description"),
+                    "search_keyword": q,
+                    "api": "NewsAPI"
+                })
+        if len(news) >= max_articles:
+            break
+    return news[:max_articles]
+
+def fetch_news_serpapi(keywords: List[str], api_key: Optional[str], max_articles=10) -> List[Dict]:
+    if not api_key:
+        return []
+    try:
+        from serpapi import GoogleSearch
+    except ImportError:
+        return []
+    news = []
+    for q in keywords:
+        params = {
+            "q": q,
+            "engine": "google_news",
+            "api_key": api_key,
+            "num": max_articles,
+            "hl": "en"
+        }
+        search = GoogleSearch(params)
+        results = search.get_dict()
+        for article in results.get("news_results", []):
+            news.append({
+                "title": article.get("title"),
+                "publishedAt": article.get("date"),
+                "source": article.get("source"),
+                "url": article.get("link"),
+                "description": article.get("snippet"),
+                "search_keyword": q,
+                "api": "SerpAPI"
+            })
+        if len(news) >= max_articles:
+            break
+    return news[:max_articles]
+
+
+def llm_news_summary(keywords, company, sector, industry, region, openai_client):
+    import json as pyjson
+    try:
+        # Limit keywords to avoid excessive prompt size
+        keywords = keywords[:10]
+        prompt = (
+            f"You are an expert financial news agent. Given the following information:
+"
+            f"Company names/aliases: {company}
+Sector: {sector}
+Industry: {industry}
+Region: {region}
+"
+            f"Keywords for search: {keywords}
+"
+            "1. Simulate as if you searched the web using the given keywords, but do NOT search in real-time. "
+            "Pretend you did a quick analyst scan using those keywords. No hallucinated or invented news.
+"
+            "2. Summarize sentiment for (a) the stock (b) the sector (c) the region.
+"
+            "3. Give rationale for each. 4. Write a 4-5 sentence summary.
+"
+            "5. Output structured JSON: "
+            "{ 'company_keywords': [...], 'sector_keywords': [...], 'region_keywords': [...], "
+            "'stock_sentiment': {'score': 'Bullish', 'reason': '...'}, "
+            "'sector_sentiment': {...}, 'region_sentiment': {...}, 'summary': '...' }"
+        )
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2,
+            timeout=30  # pseudo-timeout, actual SDK may not support this yet
+        )
+        return pyjson.loads(response.choices[0].message.content)
+    except Exception as e:
+        print("[ERROR] LLM summary failed:", str(e))
+        return {}
+
