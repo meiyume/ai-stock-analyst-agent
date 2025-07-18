@@ -9,21 +9,38 @@ def fetch_yfinance_news(ticker, max_articles=12):
     try:
         stock = yf.Ticker(ticker)
         news = getattr(stock, "news", [])
-        articles = [
-            {
-                "title": n.get("title", ""),
-                "publishedAt": n.get("providerPublishTime", ""),
-                "source": n.get("publisher", ""),
-                "url": n.get("link", ""),
-                "description": n.get("summary", ""),
+        articles = []
+        for n in news:
+            # New Yahoo format: everything under 'content'
+            content = n.get("content", {})
+            title = content.get("title") or n.get("title", "")
+            # URL may be under clickThroughUrl or canonicalUrl
+            url = None
+            for k in ["clickThroughUrl", "canonicalUrl"]:
+                if content.get(k) and isinstance(content.get(k), dict):
+                    url = content[k].get("url")
+                    if url:
+                        break
+            url = url or n.get("link", "")
+            summary = content.get("summary") or n.get("summary", "")
+            published = content.get("pubDate") or n.get("providerPublishTime", "")
+            source = (content.get("provider", {}) or {}).get("displayName", n.get("publisher", "Yahoo Finance"))
+            articles.append({
+                "title": title,
+                "publishedAt": published,
+                "source": source,
+                "url": url,
+                "description": summary,
                 "api": "Yahoo Finance",
                 "search_keyword": ticker
-            }
-            for n in news
-        ]
-        return articles[:max_articles]
-    except Exception:
+            })
+            if len(articles) >= max_articles:
+                break
+        return articles
+    except Exception as e:
+        print("Error fetching yfinance news:", e)
         return []
+
 
 # --- 2. NewsAPI ---
 def fetch_news_newsapi(query, max_articles=12, api_key=None, from_days_ago=14):
