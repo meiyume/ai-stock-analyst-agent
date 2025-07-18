@@ -165,33 +165,34 @@ def llm_news_summary(keywords, company, sector, industry, region, openai_client)
     try:
         # Limit keywords to avoid excessive prompt size
         keywords = keywords[:10]
-        prompt = (
-            f"You are an expert financial news agent. Given the following information:
-"
-            f"Company names/aliases: {company}
+        prompt = f"""
+You are an expert financial news agent. Given the following information:
+Company names/aliases: {company}
 Sector: {sector}
 Industry: {industry}
 Region: {region}
-"
-            f"Keywords for search: {keywords}
-"
-            "1. Simulate as if you searched the web using the given keywords, but do NOT search in real-time. "
-            "Pretend you did a quick analyst scan using those keywords. No hallucinated or invented news.
-"
-            "2. Summarize sentiment for (a) the stock (b) the sector (c) the region.
-"
-            "3. Give rationale for each. 4. Write a 4-5 sentence summary.
-"
-            "5. Output structured JSON: "
-            "{ 'company_keywords': [...], 'sector_keywords': [...], 'region_keywords': [...], "
-            "'stock_sentiment': {'score': 'Bullish', 'reason': '...'}, "
-            "'sector_sentiment': {...}, 'region_sentiment': {...}, 'summary': '...' }"
-        )
+Keywords for search: {keywords}
+
+1. Simulate as if you searched the web using the given keywords, but do NOT search in real-time.
+   Pretend you did a quick analyst scan using those keywords. No hallucinated or invented news.
+2. Summarize sentiment for (a) the stock (b) the sector (c) the region.
+3. Give rationale for each.
+4. Write a 4–5 sentence executive summary.
+5. Output structured JSON:
+   {{
+     "company_keywords": [...],
+     "sector_keywords": [...],
+     "region_keywords": [...],
+     "stock_sentiment": {{"score": "Bullish", "reason": "..."}},
+     "sector_sentiment": {{...}},
+     "region_sentiment": {{...}},
+     "summary": "..."
+   }}
+"""
         response = openai_client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-            timeout=30  # pseudo-timeout, actual SDK may not support this yet
+            temperature=0.2
         )
         return pyjson.loads(response.choices[0].message.content)
     except Exception as e:
