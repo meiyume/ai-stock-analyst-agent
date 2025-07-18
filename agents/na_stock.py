@@ -244,14 +244,14 @@ def news_agent_stock(
     if verbose:
         print(f"[DEBUG] Starting news_agent_stock for ticker: {ticker}")
 
-    # --- Step 1: Metadata
+    # Step 1: Metadata
     meta_yf = get_metadata_yfinance(ticker)
     company_names = [meta_yf.get("company_name", ticker)]
     sector = meta_yf.get("sector")
     industry = meta_yf.get("industry")
     region = meta_yf.get("region")
 
-    # --- Step 2: LLM fallback for richer metadata/keywords
+    # Step 2: LLM-enhanced metadata
     if openai_client:
         print("[DEBUG] Calling infer_metadata_llm ...")
         llm_meta = infer_metadata_llm(ticker, openai_client)
@@ -269,26 +269,23 @@ def news_agent_stock(
     if verbose:
         print(f"[DEBUG] Keywords: {keywords}")
 
-    # --- Step 3: Fetch news from all sources
+    # Step 3: News fetching
     print("[DEBUG] Fetching yfinance news ...")
-    all_news = []
-    all_news += fetch_yfinance_news(ticker, max_articles)
+    all_news = fetch_yfinance_news(ticker, max_articles)
     print(f"[DEBUG] yfinance news: {len(all_news)} articles")
-    print("[DEBUG] Fetching newsapi news ...")
     all_news += fetch_news_newsapi(keywords, newsapi_key, max_articles)
     print(f"[DEBUG] newsapi news count: {len(all_news)}")
-    print("[DEBUG] Fetching serpapi news ...")
     all_news += fetch_news_serpapi(keywords, serpapi_key, max_articles)
     print(f"[DEBUG] serpapi news count: {len(all_news)}")
 
     deduped_news = dedupe_news(all_news, max_articles)
     print(f"[DEBUG] deduped_news count: {len(deduped_news)}")
 
-    # --- Step 4: Always call LLM summary
+    # Step 4: LLM-first synthesis
     llm_summary = None
     if openai_client:
         print("[DEBUG] Calling llm_news_summary ...")
-        llm_summary = llm_news_summary(keywords, company_names, sector, industry, region, openai_client)
+        llm_summary = llm_news_summary(keywords, company_names, sector, industry, region, deduped_news, openai_client)
         print("[DEBUG] llm_summary returned:", llm_summary)
 
     return {
@@ -305,3 +302,4 @@ def news_agent_stock(
             "newsapi": len(fetch_news_newsapi(keywords, newsapi_key, max_articles)),
             "serpapi": len(fetch_news_serpapi(keywords, serpapi_key, max_articles)),
         }
+    }
