@@ -1,4 +1,4 @@
-from na_stock import (
+from agents.na_stock import (
     get_company_aliases_from_ticker,
     fetch_stock_sector_news,
     fetch_news_serpapi,
