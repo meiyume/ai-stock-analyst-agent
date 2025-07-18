@@ -69,6 +69,27 @@ def expand_search_keywords_llm(company_name, sector, industry, region, openai_cl
     return keywords
 
 # 4. Search Yahoo Finance news for all generated keywords
+def parse_yfinance_news_article(n, kw=""):
+    content = n.get("content", {}) if isinstance(n.get("content", {}), dict) else {}
+    title = content.get("title") or n.get("title", "")
+    url = (
+        (content.get("clickThroughUrl", {}) or {}).get("url") or
+        (content.get("canonicalUrl", {}) or {}).get("url") or
+        n.get("link", "")
+    )
+    summary = content.get("summary") or n.get("summary", "")
+    published = content.get("pubDate") or n.get("providerPublishTime", "")
+    source = (content.get("provider", {}) or {}).get("displayName", n.get("publisher", "Yahoo Finance"))
+    return {
+        "title": title,
+        "publishedAt": published,
+        "source": source,
+        "url": url,
+        "description": summary,
+        "search_keyword": kw,
+        "api": "Yahoo Finance"
+    }
+
 def fetch_yfinance_news_for_keywords(keywords, max_articles=12):
     import yfinance as yf
     news = []
@@ -77,29 +98,7 @@ def fetch_yfinance_news_for_keywords(keywords, max_articles=12):
             stock = yf.Ticker(kw)
             articles = getattr(stock, "news", [])
             for n in articles:
-                # Try to support both formats (nested "content" and flat)
-                content = n.get("content", {}) if isinstance(n.get("content", {}), dict) else {}
-                title = content.get("title") or n.get("title", "")
-                # url: check clickThroughUrl, canonicalUrl, then fallback
-                url = (
-                    (content.get("clickThroughUrl", {}) or {}).get("url") or
-                    (content.get("canonicalUrl", {}) or {}).get("url") or
-                    n.get("link", "")
-                )
-                summary = content.get("summary") or n.get("summary", "")
-                published = content.get("pubDate") or n.get("providerPublishTime", "")
-                # source/provider
-                source = (content.get("provider", {}) or {}).get("displayName", n.get("publisher", "Yahoo Finance"))
-                article = {
-                    "title": title,
-                    "publishedAt": published,
-                    "source": source,
-                    "url": url,
-                    "description": summary,
-                    "search_keyword": kw,
-                    "api": "Yahoo Finance"
-                }
-                news.append(article)
+                news.append(parse_yfinance_news_article(n, kw))
         except Exception as e:
             # Optionally, print(e) for debugging
             continue
