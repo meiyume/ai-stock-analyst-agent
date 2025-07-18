@@ -1,19 +1,18 @@
-import yfinance as yf
+# agents/na_stock.py
 
-# 1. Try to get sector/industry/region from yfinance
-def get_metadata_yfinance(ticker):
+import yfinance as yf
+from datetime import datetime
+from typing import List, Dict, Optional
+
+def get_metadata_yfinance(ticker: str):
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
-        sector = info.get("sector", None)
-        industry = info.get("industry", None)
-        # Try to guess region from country or exchange
-        region = info.get("country", None) or info.get("exchange", None)
         return {
             "company_name": info.get("longName", ticker),
-            "sector": sector,
-            "industry": industry,
-            "region": region
+            "sector": info.get("sector"),
+            "industry": info.get("industry"),
+            "region": info.get("country") or info.get("exchange") or None
         }
     except Exception:
         return {
@@ -23,140 +22,231 @@ def get_metadata_yfinance(ticker):
             "region": None
         }
 
-# 2. If yfinance metadata is missing, use LLM to infer sector/region
-def infer_metadata_llm(ticker, openai_client):
+def infer_metadata_llm(ticker: str, openai_client):
     prompt = (
-        f"As a financial analyst, what are the most relevant sector, industry, and country/region for the stock ticker '{ticker}'? "
-        "Respond in JSON: {\"company_name\": \"...\", \"sector\": \"...\", \"industry\": \"...\", \"region\": \"...\"}"
+        f"As a financial analyst, what are the most relevant company names (including aliases), sector, industry, "
+        f"and main region for the stock ticker '{ticker}'? "
+        "Respond in JSON: {\"company_names\": [...], \"sector\": \"...\", \"industry\": \"...\", \"region\": \"...\"}"
     )
-    response = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    import json as pyjson
-    content = response.choices[0].message.content
     try:
-        output = pyjson.loads(content)
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2
+        )
+        import json as pyjson
+        content = response.choices[0].message.content
+        out = pyjson.loads(content)
     except Exception:
-        output = {
-            "company_name": ticker,
+        out = {
+            "company_names": [ticker],
             "sector": "Unknown",
             "industry": "Unknown",
             "region": "Unknown"
         }
-    return output
+    return out
 
-# 3. Use LLM to expand keywords/phrases for news search
-def expand_search_keywords_llm(company_name, sector, industry, region, openai_client):
+def expand_search_keywords_llm(company_names, sector, industry, region, openai_client):
+    names_str = ', '.join(company_names)
     prompt = (
-        f"As a financial news analyst, generate a list of the 6 most relevant search phrases or keywords to find news related to the company '{company_name}', its sector '{sector}', industry '{industry}', and region '{region}'. "
-        "Include stock ticker and all related synonyms or common sector/region keywords. "
-        "Return the list in JSON: {\"keywords\": [ ... ]}"
+        f"As a financial news analyst, generate a list of the 6 most relevant search phrases/keywords to find news "
+        f"related to: {names_str}, sector: {sector}, industry: {industry}, region: {region}. "
+        "Include common synonyms, sector/region phrases, and stock ticker if relevant. "
+        "Return as JSON: {\"keywords\": [ ... ]}"
     )
-    response = openai_client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    import json as pyjson
-    content = response.choices[0].message.content
     try:
-        output = pyjson.loads(content)
-        keywords = output.get("keywords", [])
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2
+        )
+        import json as pyjson
+        content = response.choices[0].message.content
+        out = pyjson.loads(content)
+        keywords = out.get("keywords", [])
     except Exception:
-        keywords = [company_name, sector, industry, region]
-    # Remove any duplicates, None, or "Unknown"
-    keywords = [k for k in keywords if k and k.lower() != "unknown"]
-    return keywords
+        keywords = [*company_names, sector, industry, region]
+    return [k for k in keywords if k and k.lower() != "unknown"]
 
-# 4. Search Yahoo Finance news for all generated keywords
-def parse_yfinance_news_article(n, kw=""):
-    content = n.get("content", {}) if isinstance(n.get("content", {}), dict) else {}
-    title = content.get("title") or n.get("title", "")
-    url = (
-        (content.get("clickThroughUrl", {}) or {}).get("url") or
-        (content.get("canonicalUrl", {}) or {}).get("url") or
-        n.get("link", "")
-    )
-    summary = content.get("summary") or n.get("summary", "")
-    published = content.get("pubDate") or n.get("providerPublishTime", "")
-    source = (content.get("provider", {}) or {}).get("displayName", n.get("publisher", "Yahoo Finance"))
-    return {
-        "title": title,
-        "publishedAt": published,
-        "source": source,
-        "url": url,
-        "description": summary,
-        "search_keyword": kw,
-        "api": "Yahoo Finance"
-    }
-
-def fetch_yfinance_news_for_keywords(keywords, max_articles=12):
-    import yfinance as yf
+def fetch_yfinance_news(ticker: str, max_articles: int = 12) -> List[Dict]:
+    stock = yf.Ticker(ticker)
     news = []
-    for kw in keywords:
-        try:
-            stock = yf.Ticker(kw)
-            articles = getattr(stock, "news", [])
-            for n in articles:
-                news.append(parse_yfinance_news_article(n, kw))
-        except Exception as e:
-            # Optionally, print(e) for debugging
-            continue
-    # Deduplicate by title
-    seen_titles = set()
-    deduped_news = []
-    for a in news:
-        if a["title"] and a["title"] not in seen_titles:
-            deduped_news.append(a)
-            seen_titles.add(a["title"])
-        if len(deduped_news) >= max_articles:
+    articles = getattr(stock, "news", [])
+    for n in articles[:max_articles]:
+        content = n.get("content", {})
+        title = content.get("title") or n.get("title", "")
+        url = None
+        for k in ["clickThroughUrl", "canonicalUrl"]:
+            if content.get(k) and isinstance(content.get(k), dict):
+                url = content[k].get("url")
+                if url:
+                    break
+        url = url or n.get("link", "")
+        summary = content.get("summary") or n.get("summary", "")
+        published = content.get("pubDate") or n.get("providerPublishTime", "")
+        source = (content.get("provider", {}) or {}).get("displayName", n.get("publisher", "Yahoo Finance"))
+        news.append({
+            "title": title,
+            "publishedAt": published,
+            "source": source,
+            "url": url,
+            "description": summary,
+            "search_keyword": ticker,
+            "api": "Yahoo Finance"
+        })
+    return news
+
+def fetch_news_newsapi(keywords: List[str], api_key: Optional[str], max_articles=10) -> List[Dict]:
+    if not api_key:
+        return []
+    import requests
+    url = "https://newsapi.org/v2/everything"
+    news = []
+    for q in keywords:
+        params = {
+            "q": q,
+            "apiKey": api_key,
+            "language": "en",
+            "sortBy": "publishedAt",
+            "pageSize": max_articles,
+        }
+        resp = requests.get(url, params=params, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            for article in data.get("articles", []):
+                news.append({
+                    "title": article.get("title"),
+                    "publishedAt": article.get("publishedAt"),
+                    "source": article.get("source", {}).get("name"),
+                    "url": article.get("url"),
+                    "description": article.get("description"),
+                    "search_keyword": q,
+                    "api": "NewsAPI"
+                })
+        if len(news) >= max_articles:
             break
-    return deduped_news
+    return news[:max_articles]
 
+def fetch_news_serpapi(keywords: List[str], api_key: Optional[str], max_articles=10) -> List[Dict]:
+    if not api_key:
+        return []
+    try:
+        from serpapi import GoogleSearch
+    except ImportError:
+        return []
+    news = []
+    for q in keywords:
+        params = {
+            "q": q,
+            "engine": "google_news",
+            "api_key": api_key,
+            "num": max_articles,
+            "hl": "en"
+        }
+        search = GoogleSearch(params)
+        results = search.get_dict()
+        for article in results.get("news_results", []):
+            news.append({
+                "title": article.get("title"),
+                "publishedAt": article.get("date"),
+                "source": article.get("source"),
+                "url": article.get("link"),
+                "description": article.get("snippet"),
+                "search_keyword": q,
+                "api": "SerpAPI"
+            })
+        if len(news) >= max_articles:
+            break
+    return news[:max_articles]
 
-# 5. Master function: run all steps
+def llm_news_summary(keywords, company, sector, industry, region, openai_client):
+    prompt = (
+        f"You are an expert financial news agent. Given the following information:\n"
+        f"Company names/aliases: {company}\nSector: {sector}\nIndustry: {industry}\nRegion: {region}\n"
+        f"Keywords for search: {keywords}\n"
+        "1. Simulate as if you searched real news for the company, sector, and region. "
+        "2. Summarize sentiment for (a) the stock (b) the sector (c) the region. "
+        "3. Give rationale for each. 4. Write a 4-5 sentence summary. "
+        "5. Output structured JSON: "
+        "{ 'company_keywords': [...], 'sector_keywords': [...], 'region_keywords': [...], "
+        "'stock_sentiment': {'score': 'Bullish', 'reason': '...'}, "
+        "'sector_sentiment': {...}, 'region_sentiment': {...}, 'summary': '...' }"
+    )
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.2
+        )
+        import json as pyjson
+        return pyjson.loads(response.choices[0].message.content)
+    except Exception:
+        return {}
+
+def dedupe_news(news: List[Dict], max_articles=12):
+    seen = set()
+    deduped = []
+    for n in news:
+        key = (n.get("title") or "", n.get("url") or "")
+        if key not in seen and n.get("title"):
+            deduped.append(n)
+            seen.add(key)
+        if len(deduped) >= max_articles:
+            break
+    return deduped
+
 def news_agent_stock(
-    ticker,
+    ticker: str,
     openai_client=None,
+    newsapi_key=None,
+    serpapi_key=None,
     max_articles=12,
     verbose=False
 ):
-    # Step 1: Try yfinance metadata
-    metadata = get_metadata_yfinance(ticker)
-    # Step 2: Use LLM if any key info missing
-    if openai_client and (not metadata["sector"] or not metadata["region"] or not metadata["industry"]):
-        if verbose:
-            print("Falling back to LLM for metadata...")
-        metadata = infer_metadata_llm(ticker, openai_client)
-    if verbose:
-        print(f"Metadata for {ticker}:", metadata)
-
-    # Step 3: Generate search keywords
-    keywords = [ticker]
+    # --- Step 1: Metadata
+    meta_yf = get_metadata_yfinance(ticker)
+    company_names = [meta_yf.get("company_name", ticker)]
+    sector = meta_yf.get("sector")
+    industry = meta_yf.get("industry")
+    region = meta_yf.get("region")
+    # --- Step 2: LLM fallback for richer metadata/keywords
     if openai_client:
-        keywords = expand_search_keywords_llm(
-            metadata["company_name"], metadata["sector"], metadata["industry"], metadata["region"], openai_client
-        )
+        llm_meta = infer_metadata_llm(ticker, openai_client)
+        company_names = llm_meta.get("company_names") or company_names
+        sector = llm_meta.get("sector") or sector
+        industry = llm_meta.get("industry") or industry
+        region = llm_meta.get("region") or region
+        keywords = expand_search_keywords_llm(company_names, sector, industry, region, openai_client)
+    else:
+        keywords = list({ticker, *company_names, sector, industry, region})
+        keywords = [k for k in keywords if k and k.lower() != "unknown"]
     if verbose:
-        print("Keywords:", keywords)
+        print(f"Keywords: {keywords}")
 
-    # Step 4: Fetch news
-    news = fetch_yfinance_news_for_keywords(keywords, max_articles=max_articles)
-    summary = f"{len(news)} news articles found for keywords: {', '.join(keywords)}."
-    sentiment = "N/A"
-    drivers = []
-
+    # --- Step 3: Fetch news from all sources
+    all_news = []
+    all_news += fetch_yfinance_news(ticker, max_articles)
+    all_news += fetch_news_newsapi(keywords, newsapi_key, max_articles)
+    all_news += fetch_news_serpapi(keywords, serpapi_key, max_articles)
+    deduped_news = dedupe_news(all_news, max_articles)
+    # --- Step 4: Fallback to LLM “virtual” news if no news found
+    llm_summary = None
+    if (not deduped_news) and openai_client:
+        llm_summary = llm_news_summary(keywords, company_names, sector, industry, region, openai_client)
     return {
         "ticker": ticker,
-        "company_name": metadata.get("company_name"),
-        "sector": metadata.get("sector"),
-        "industry": metadata.get("industry"),
-        "region": metadata.get("region"),
+        "company_names": company_names,
+        "sector": sector,
+        "industry": industry,
+        "region": region,
         "keywords": keywords,
-        "summary": summary,
-        "sentiment": sentiment,
-        "drivers": drivers,
-        "headlines": news,
+        "news": deduped_news,
+        "llm_summary": llm_summary,
+        "news_counts": {
+            "yfinance": len(fetch_yfinance_news(ticker, max_articles)),
+            "newsapi": len(fetch_news_newsapi(keywords, newsapi_key, max_articles)),
+            "serpapi": len(fetch_news_serpapi(keywords, serpapi_key, max_articles)),
+        }
     }
 
 
