@@ -77,19 +77,18 @@ def fetch_yfinance_news_for_keywords(keywords, max_articles=12):
             stock = yf.Ticker(kw)
             articles = getattr(stock, "news", [])
             for n in articles:
-                # New Yahoo format: info is nested under 'content'
-                content = n.get("content", {})
+                # Try to support both formats (nested "content" and flat)
+                content = n.get("content", {}) if isinstance(n.get("content", {}), dict) else {}
                 title = content.get("title") or n.get("title", "")
-                # Try to find url in either clickThroughUrl or canonicalUrl
-                url = None
-                for k in ["clickThroughUrl", "canonicalUrl"]:
-                    if content.get(k) and isinstance(content.get(k), dict):
-                        url = content[k].get("url")
-                        if url:
-                            break
-                url = url or n.get("link", "")
+                # url: check clickThroughUrl, canonicalUrl, then fallback
+                url = (
+                    (content.get("clickThroughUrl", {}) or {}).get("url") or
+                    (content.get("canonicalUrl", {}) or {}).get("url") or
+                    n.get("link", "")
+                )
                 summary = content.get("summary") or n.get("summary", "")
                 published = content.get("pubDate") or n.get("providerPublishTime", "")
+                # source/provider
                 source = (content.get("provider", {}) or {}).get("displayName", n.get("publisher", "Yahoo Finance"))
                 article = {
                     "title": title,
@@ -97,10 +96,12 @@ def fetch_yfinance_news_for_keywords(keywords, max_articles=12):
                     "source": source,
                     "url": url,
                     "description": summary,
-                    "search_keyword": kw
+                    "search_keyword": kw,
+                    "api": "Yahoo Finance"
                 }
                 news.append(article)
-        except Exception:
+        except Exception as e:
+            # Optionally, print(e) for debugging
             continue
     # Deduplicate by title
     seen_titles = set()
@@ -112,6 +113,7 @@ def fetch_yfinance_news_for_keywords(keywords, max_articles=12):
         if len(deduped_news) >= max_articles:
             break
     return deduped_news
+
 
 # 5. Master function: run all steps
 def news_agent_stock(
