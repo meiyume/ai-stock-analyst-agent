@@ -70,21 +70,33 @@ def expand_search_keywords_llm(company_name, sector, industry, region, openai_cl
 
 # 4. Search Yahoo Finance news for all generated keywords
 def fetch_yfinance_news_for_keywords(keywords, max_articles=12):
-    # Yahoo Finance (yfinance) only allows .news for tickers, not keywords.
-    # For keywords, you might need to search major company tickers from the sector list, but here we'll just show ticker news for now.
-    # (If you want true keyword search, you need a paid NewsAPI or SerpAPI.)
+    import yfinance as yf
     news = []
     for kw in keywords:
         try:
             stock = yf.Ticker(kw)
             articles = getattr(stock, "news", [])
             for n in articles:
+                # New Yahoo format: info is nested under 'content'
+                content = n.get("content", {})
+                title = content.get("title") or n.get("title", "")
+                # Try to find url in either clickThroughUrl or canonicalUrl
+                url = None
+                for k in ["clickThroughUrl", "canonicalUrl"]:
+                    if content.get(k) and isinstance(content.get(k), dict):
+                        url = content[k].get("url")
+                        if url:
+                            break
+                url = url or n.get("link", "")
+                summary = content.get("summary") or n.get("summary", "")
+                published = content.get("pubDate") or n.get("providerPublishTime", "")
+                source = (content.get("provider", {}) or {}).get("displayName", n.get("publisher", "Yahoo Finance"))
                 article = {
-                    "title": n.get("title", ""),
-                    "publishedAt": n.get("providerPublishTime", ""),
-                    "source": n.get("publisher", ""),
-                    "url": n.get("link", ""),
-                    "description": n.get("summary", ""),
+                    "title": title,
+                    "publishedAt": published,
+                    "source": source,
+                    "url": url,
+                    "description": summary,
                     "search_keyword": kw
                 }
                 news.append(article)
