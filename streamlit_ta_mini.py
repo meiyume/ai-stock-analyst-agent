@@ -1,6 +1,7 @@
 import streamlit as st
-from openai import OpenAI
 import yfinance as yf
+import json
+from openai import OpenAI
 
 # ======= News Source Functions ========
 
@@ -274,7 +275,8 @@ if st.button("Analyze News") and ticker:
         if len(deduped_articles) >= max_articles:
             break
             
-    st.write("DEBUG: deduped_articles = ", deduped_articles)
+    with st.expander("Deduped Articles (Click to expand)", expanded=False):
+    st.code(json.dumps(deduped_articles, indent=2), language="json")
     
     # --- Show Results by Source ---
     sources = {}
