@@ -10,6 +10,26 @@ from langchain.chains import LLMChain
 from langchain_core.output_parsers import JsonOutputParser
 from langchain.output_parsers import OutputFixingParser
 
+# --- Universal extraction helper ---
+def get_unwrapped(obj, *keys):
+    """
+    Recursively unwrap 'text' field if present and extract value by keys.
+    If keys not found, returns None.
+    """
+    # Handle dicts wrapped in 'text'
+    while isinstance(obj, dict) and 'text' in obj and isinstance(obj['text'], dict):
+        obj = obj['text']
+    # Unwrap chains with 'result' as in RunnableSequence
+    if isinstance(obj, dict) and 'result' in obj and isinstance(obj['result'], dict):
+        obj = obj['result']
+    # Now, extract keys if provided
+    for k in keys:
+        if isinstance(obj, dict):
+            obj = obj.get(k)
+        else:
+            return None
+    return obj
+
 def fetch_yfinance_news(ticker: str, max_articles: int = 12) -> List[Dict]:
     stock = yf.Ticker(ticker)
     news = []
@@ -193,10 +213,11 @@ def news_agent_stock(
     max_articles: int = 12
 ):
     meta_prompt = PromptTemplate.from_template(
-        "Given the stock ticker {ticker}, what are the company names (list), sector, industry, and region? "
-        "Respond as JSON like this: "
-        '{{"company_names": [...], "sector": "...", "industry": "...", "region": "..."}}'
-        "\nIMPORTANT: All JSON keys and values must use double quotes (\")."
+        "Given the stock ticker {ticker}, return the corresponding company names (as a list), sector, industry, and region. "
+        "If any value is not known, return an empty string or empty list. "
+        "Respond ONLY with valid JSON in this format: "
+        '{{"company_names": ["..."], "sector": "...", "industry": "...", "region": "..."}}'
+        "\nIMPORTANT: Return double-quoted JSON only, and no extra text or explanation."
     )
     kw_prompt = PromptTemplate.from_template(
         "Generate the 6 most relevant news search keywords for {company_names}, sector: {sector}, industry: {industry}, region: {region}. "
@@ -230,8 +251,14 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
     "reason": "Explain in 1-2 sentences, mentioning if it is based on your expertise, news evidence, or both.",
     "confidence": "High/Medium/Low"
   }},
-  "sector_sentiment": ...,
-  "region_sentiment": ...,
+  "sector_sentiment": {{
+    "score": "Bullish/Bearish/Neutral",
+    "reason": "Explain briefly."
+  }},
+  "region_sentiment": {{
+    "score": "Bullish/Bearish/Neutral",
+    "reason": "Explain briefly."
+  }},
   "risks": [
     {{ "label": "...", "details": "..." }}
   ],
@@ -272,62 +299,57 @@ IMPORTANT: All JSON output **must** use double quotes (\"), not single quotes.
         output_parser=fixing_parser
     )
 
-    # -- 1. Metadata LLM --
+    # --- 1. Metadata LLM ---
     meta_result = meta_chain.invoke({"ticker": ticker})
-    print("DEBUG meta_result:", meta_result)
-    # -- 2. Keyword Expansion LLM --
+    meta_text = get_unwrapped(meta_result)
+
+    # --- 2. Keyword Expansion LLM ---
     kw_result = kw_chain.invoke({
-        "company_names": meta_result.get("company_names"),
-        "sector": meta_result.get("sector"),
-        "industry": meta_result.get("industry"),
-        "region": meta_result.get("region"),
+        "company_names": meta_text.get("company_names"),
+        "sector": meta_text.get("sector"),
+        "industry": meta_text.get("industry"),
+        "region": meta_text.get("region"),
     })
-
-    # Defensive keyword extraction
-    keywords = []
-    if isinstance(kw_result, dict):
-        if "keywords" in kw_result and kw_result["keywords"]:
-            keywords = kw_result["keywords"]
-        elif "text" in kw_result and isinstance(kw_result["text"], dict) and "keywords" in kw_result["text"]:
-            keywords = kw_result["text"]["keywords"]
-    if not keywords:
+    keywords = get_unwrapped(kw_result, "keywords") or []
+    if not isinstance(keywords, list):
         keywords = []
-        print(f"[WARNING] No keywords returned by LLM. kw_result: {kw_result}")
 
-    # -- 3. News Fetch (All APIs & Scrapers) --
+    # --- 3. News Fetch (All APIs & Scrapers) ---
     yf_news = fetch_yfinance_news(ticker, max_articles)
     newsapi_news = fetch_news_newsapi(keywords, newsapi_key, max_articles)
     serpapi_news = fetch_news_serpapi(keywords, serpapi_key, max_articles)
     google_news = []
     bing_news = []
-    for kw in keywords[:2]:  # Only scrape top 2 keywords for demo speed/safety
+    for kw in keywords[:2]:
         google_news += scrape_google_news(kw, max_articles=4, sleep=1.5)
         bing_news += scrape_bing_news(kw, max_articles=4, sleep=1.5)
     all_news = yf_news + newsapi_news + serpapi_news + google_news + bing_news
     deduped_news = dedupe_news(all_news, max_articles)
-    # -- 4. Synthesis LLM --
+
+    # --- 4. Synthesis LLM ---
     news_text = "\n".join([
         f"- {n['title']}: {n.get('description','')}" for n in deduped_news[:12]
     ]) or "No articles available."
     synth_input = {
-        "company_names": meta_result.get("company_names"),
-        "sector": meta_result.get("sector"),
-        "industry": meta_result.get("industry"),
-        "region": meta_result.get("region"),
+        "company_names": meta_text.get("company_names"),
+        "sector": meta_text.get("sector"),
+        "industry": meta_text.get("industry"),
+        "region": meta_text.get("region"),
         "keywords": keywords,
         "news_text": news_text,
     }
     llm_summary = synth_chain.invoke(synth_input)
-    # -- 5. Output --
+    llm_summary_unwrapped = get_unwrapped(llm_summary)
+
     return {
         "ticker": ticker,
-        "company_names": meta_result.get("company_names"),
-        "sector": meta_result.get("sector"),
-        "industry": meta_result.get("industry"),
-        "region": meta_result.get("region"),
+        "company_names": meta_text.get("company_names") or [],
+        "sector": meta_text.get("sector") or "",
+        "industry": meta_text.get("industry") or "",
+        "region": meta_text.get("region") or "",
         "keywords": keywords,
         "news": deduped_news,
-        "llm_summary": llm_summary,
+        "llm_summary": llm_summary_unwrapped or {},
         "news_counts": {
             "yfinance": len(yf_news),
             "newsapi": len(newsapi_news),
@@ -336,7 +358,6 @@ IMPORTANT: All JSON output **must** use double quotes (\"), not single quotes.
             "bing_scrape": len(bing_news),
         }
     }
-
 
 
 
