@@ -1,21 +1,26 @@
 import streamlit as st
+import agents.na_stock as na_stock  # Adjust if your import path differs
 
-# ---- Sidebar/User Input Example ----
-st.set_page_config(page_title="AI News Agent", page_icon="📰")
-st.title("📰 AI-Powered Stock News & Sentiment Agent")
+st.set_page_config(page_title="AI Stock News Agent", page_icon="📰")
 
-ticker = st.text_input("Enter SGX Stock Ticker", value="D05.SI")
-max_articles = st.number_input("Max Articles per Source", min_value=3, max_value=20, value=12)
-openai_key = st.secrets.get("OPENAI_API_KEY", "")
-newsapi_key = st.secrets.get("NEWSAPI_KEY", "")
-serpapi_key = st.secrets.get("SERPAPI_KEY", "")
+st.title("📰 AI-Powered Stock News Agent")
 
-run_button = st.button("Run News Agent")
+# ---- Sidebar (API keys, etc.) ----
+with st.sidebar:
+    st.markdown("### Configuration")
+    openai_key = st.secrets.get("OPENAI_API_KEY", "")
+    newsapi_key = st.secrets.get("NEWSAPI_KEY", "")
+    serpapi_key = st.secrets.get("SERPAPI_KEY", "")
+    max_articles = st.number_input("Max Articles per Source", min_value=1, max_value=30, value=10)
+
+# ---- Ticker Input ----
+ticker = st.text_input("Enter Stock Ticker (e.g., D05.SI, MSFT, TSLA):", value="D05.SI")
+run_button = st.button("Run News Analysis")
 
 if run_button and ticker:
-    import agents.na_stock as na_stock
+    st.info(f"Running news agent for **{ticker}**...")
 
-    # ---- Run News Agent ----
+    # ---- Agent Call ----
     result = na_stock.news_agent_stock(
         ticker,
         openai_api_key=openai_key,
@@ -24,7 +29,64 @@ if run_button and ticker:
         max_articles=max_articles
     )
 
+    # ---- Meta Information ----
+    st.markdown("---")
+    st.subheader("📊 Ticker Metadata")
+    st.write(f"**Company Names / Aliases:** {', '.join(result.get('company_names', []) or [])}")
+    st.write(f"**Sector:** {result.get('sector', 'N/A')}")
+    st.write(f"**Industry:** {result.get('industry', 'N/A')}")
+    st.write(f"**Region:** {result.get('region', 'N/A')}")
+    st.write(f"**Keywords Used:** {', '.join(result.get('keywords', []) or [])}")
 
+    # ---- LLM Summary & Sentiment ----
+    llm_summary = result.get("llm_summary", {})
+    st.markdown("---")
+    st.subheader("🧠 LLM Summary & Sentiment Analysis")
+    if llm_summary and "stock_sentiment" in llm_summary:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown("**📈 Stock Sentiment**")
+            st.markdown(f"**{llm_summary['stock_sentiment'].get('score', 'N/A')}**")
+            st.caption(llm_summary['stock_sentiment'].get('reason', ''))
+        with col2:
+            st.markdown("**🏦 Sector Sentiment**")
+            st.markdown(f"**{llm_summary.get('sector_sentiment', {}).get('score', 'N/A')}**")
+            st.caption(llm_summary.get('sector_sentiment', {}).get('reason', ''))
+        with col3:
+            st.markdown("**🌍 Region Sentiment**")
+            st.markdown(f"**{llm_summary.get('region_sentiment', {}).get('score', 'N/A')}**")
+            st.caption(llm_summary.get('region_sentiment', {}).get('reason', ''))
+        st.markdown("#### 🧾 Executive Summary")
+        st.markdown(llm_summary.get("summary", ""))
+    else:
+        st.warning("No LLM summary returned or fields missing.")
+
+    # ---- News Counts ----
+    st.markdown("---")
+    st.subheader("📰 News Source Counts")
+    news_counts = result.get("news_counts", {})
+    st.write(news_counts)
+
+    # ---- News Results (Deduped, By Source/Expander) ----
+    st.markdown("---")
+    st.subheader("📰 News Headlines by Source")
+    news_by_source = {}
+    for n in result.get("news", []):
+        src = n.get("api") or n.get("source") or "Unknown"
+        news_by_source.setdefault(src, []).append(n)
+
+    for src, articles in news_by_source.items():
+        with st.expander(f"{src} ({len(articles)})", expanded=False):
+            for a in articles:
+                st.markdown(f"**{a.get('title','(No Title)')}**")
+                st.caption(a.get("publishedAt", ""))
+                if a.get("url"):
+                    st.markdown(f"[Read]({a['url']})", unsafe_allow_html=True)
+                if a.get("description"):
+                    st.write(a["description"])
+                st.markdown("---")
+
+    # ---- Bing/Google/All News Diagnostics ----
     all_news = result.get("all_news", [])
 
     # Defensive: log non-dict items for diagnostics
@@ -69,104 +131,14 @@ if run_button and ticker:
     else:
         st.write("No Google news found.")
 
-
-
-
-
-
-
-
-    
-    st.markdown("---")
-    st.subheader("🗂️ Ticker Meta Information")
-    company_names = result.get('company_names')
-    if not company_names or not isinstance(company_names, list):
-        company_names = []
-    st.markdown(f"**Company Names / Aliases:** {', '.join(company_names) if company_names else 'N/A'}")
-    st.markdown(f"**Sector:** {result.get('sector') or 'N/A'}")
-    st.markdown(f"**Industry:** {result.get('industry') or 'N/A'}")
-    st.markdown(f"**Region:** {result.get('region') or 'N/A'}")
-    st.markdown(f"**News Search Keywords:** {', '.join(result.get('keywords', []) or []) or 'N/A'}")
-
-    # ---- LLM Summary & Sentiment ----
-    st.markdown("---")
-    st.subheader("🧠 LLM Summary & Sentiment Analysis")
-
-    llm_summary = result.get("llm_summary", {})
-    # Defensive: handle OutputFixingParser 'text' wrapping
-    if isinstance(llm_summary, dict) and 'text' in llm_summary and isinstance(llm_summary['text'], dict):
-        llm_summary = llm_summary['text']
-
-    def get_nested(d, *keys):
-        """Helper to get nested dict values without KeyError."""
-        for k in keys:
-            if isinstance(d, dict):
-                d = d.get(k)
-            else:
-                return None
-        return d
-
-    if llm_summary:
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown("**📈 Stock Sentiment**")
-            score = get_nested(llm_summary, 'stock_sentiment', 'score')
-            reason = get_nested(llm_summary, 'stock_sentiment', 'reason')
-            st.markdown(f"**{score or 'N/A'}**")
-            st.caption(reason or "")
-        with col2:
-            st.markdown("**🏦 Sector Sentiment**")
-            score = get_nested(llm_summary, 'sector_sentiment', 'score')
-            reason = get_nested(llm_summary, 'sector_sentiment', 'reason')
-            st.markdown(f"**{score or 'N/A'}**")
-            st.caption(reason or "")
-        with col3:
-            st.markdown("**🌍 Region Sentiment**")
-            score = get_nested(llm_summary, 'region_sentiment', 'score')
-            reason = get_nested(llm_summary, 'region_sentiment', 'reason')
-            st.markdown(f"**{score or 'N/A'}**")
-            st.caption(reason or "")
-        st.markdown("#### 🧾 Executive Summary")
-        st.markdown(llm_summary.get("summary", ""))
-    else:
-        st.warning("No LLM summary returned.")
-        st.write("Raw LLM summary:", llm_summary)
-
-    # ---- News Results (by Source/Expander) ----
-    st.markdown("---")
-    st.subheader("📰 News Headlines by Source")
-    news_by_source = {}
-    for n in result.get("news", []):
-        src = n.get("api") or n.get("source") or "Unknown"
-        news_by_source.setdefault(src, []).append(n)
-
-    for src, articles in news_by_source.items():
-        with st.expander(f"{src} ({len(articles)})", expanded=False):
-            for a in articles:
-                st.markdown(f"**{a.get('title','(No Title)')}**")
-                st.caption(a.get("publishedAt", ""))
-                if a.get("url"):
-                    st.markdown(f"[Read]({a['url']})", unsafe_allow_html=True)
-                if a.get("description"):
-                    st.write(a["description"])
-                st.markdown("---")
-
-    # ---- News Source Counts (Optional) ----
-    st.markdown("---")
-    st.markdown("##### News Source Counts")
-    for src, count in result.get("news_counts", {}).items():
-        st.write(f"{src}: {count}")
+    # All News (optional, raw printout)
+    st.markdown("#### All News (Combined Raw List, Before Deduplication)")
+    st.write(all_news)
 
 else:
-    st.info("Enter a ticker and press 'Run News Agent' to start.")
+    st.info("Please enter a ticker and press **Run News Analysis**.")
 
-st.markdown("### Bing News (raw, before deduplication)")
-bing_news = [n for n in all_news if n.get('api', '').lower().startswith('bing')]
-st.write(bing_news)
 
-st.markdown("### Google News (raw, before deduplication)")
-google_news = [n for n in all_news if n.get('api', '').lower().startswith('google')]
-st.write(google_news)
 
 
 
