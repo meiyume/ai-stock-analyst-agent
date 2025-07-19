@@ -15,8 +15,13 @@ meta_prompt = PromptTemplate.from_template(
     "Given the stock ticker {ticker}, what are the company names (list), sector, industry, and region? "
     "Respond as JSON: {\"company_names\": [...], \"sector\": \"...\", \"industry\": \"...\", \"region\": \"...\"}"
 )
+llm = OpenAI(
+    model_name="gpt-3.5-turbo",
+    temperature=0.2,
+    openai_api_key=openai_api_key   # (from your function param or secrets)
+)
 meta_chain = LLMChain(
-    llm=OpenAI(model="gpt-3.5-turbo", temperature=0.2),
+    llm=llm,
     prompt=meta_prompt,
     output_parser=JsonOutputParser()
 )
