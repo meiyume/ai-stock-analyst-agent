@@ -3,6 +3,7 @@ import requests
 from typing import List, Dict, Optional
 import time
 from bs4 import BeautifulSoup
+import feedparser
 
 from langchain.prompts import PromptTemplate
 from langchain_community.chat_models import ChatOpenAI
@@ -10,19 +11,12 @@ from langchain.chains import LLMChain
 from langchain_core.output_parsers import JsonOutputParser
 from langchain.output_parsers import OutputFixingParser
 
-# --- Universal extraction helper ---
+# --- Universal extraction helper (unchanged) ---
 def get_unwrapped(obj, *keys):
-    """
-    Recursively unwrap 'text' field if present and extract value by keys.
-    If keys not found, returns None.
-    """
-    # Handle dicts wrapped in 'text'
     while isinstance(obj, dict) and 'text' in obj and isinstance(obj['text'], dict):
         obj = obj['text']
-    # Unwrap chains with 'result' as in RunnableSequence
     if isinstance(obj, dict) and 'result' in obj and isinstance(obj['result'], dict):
         obj = obj['result']
-    # Now, extract keys if provided
     for k in keys:
         if isinstance(obj, dict):
             obj = obj.get(k)
@@ -30,6 +24,7 @@ def get_unwrapped(obj, *keys):
             return None
     return obj
 
+# --- Yahoo Finance API News (unchanged) ---
 def fetch_yfinance_news(ticker: str, max_articles: int = 12) -> List[Dict]:
     stock = yf.Ticker(ticker)
     news = []
@@ -58,6 +53,7 @@ def fetch_yfinance_news(ticker: str, max_articles: int = 12) -> List[Dict]:
         })
     return news
 
+# --- NewsAPI (unchanged) ---
 def fetch_news_newsapi(keywords: List[str], api_key: Optional[str], max_articles=10) -> List[Dict]:
     if not api_key:
         return []
@@ -88,6 +84,7 @@ def fetch_news_newsapi(keywords: List[str], api_key: Optional[str], max_articles
             break
     return news[:max_articles]
 
+# --- SerpAPI (unchanged) ---
 def fetch_news_serpapi(keywords: List[str], api_key: Optional[str], max_articles=10) -> List[Dict]:
     if not api_key:
         return []
@@ -120,7 +117,24 @@ def fetch_news_serpapi(keywords: List[str], api_key: Optional[str], max_articles
             break
     return news[:max_articles]
 
-def scrape_google_news(query, max_articles=10, sleep=1.5):
+# === ENHANCED GOOGLE NEWS SCRAPER (RSS + HTML fallback) ===
+def parse_google_rss(query, max_articles=10):
+    url = f"https://news.google.com/rss/search?q={query.replace(' ', '+')}&hl=en-US&gl=US&ceid=US:en"
+    feed = feedparser.parse(url)
+    news = []
+    for entry in feed.entries[:max_articles]:
+        news.append({
+            "title": entry.get("title"),
+            "url": entry.get("link"),
+            "publishedAt": entry.get("published"),
+            "source": (entry.get("source", {}) or {}).get("title") or "Google News",
+            "description": BeautifulSoup(entry.get("summary", ""), "html.parser").text,
+            "search_keyword": query,
+            "api": "GoogleNews-RSS"
+        })
+    return news
+
+def scrape_google_news_html(query, max_articles=10, sleep=1.5):
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; DemoBot/0.1; +https://yourdomain.com/demo)"
     }
@@ -130,74 +144,116 @@ def scrape_google_news(query, max_articles=10, sleep=1.5):
     articles = []
     if resp.status_code == 200:
         soup = BeautifulSoup(resp.text, "html.parser")
-        seen_titles = set()
-        for item in soup.find_all(["article", "div"]):  # broaden search
-            # Try h3, h4, a for title
-            headline_tag = item.find("h3") or item.find("h4") or item.find("a")
+        for item in soup.select("article"):
+            headline_tag = item.find("h3")
             if not headline_tag or not headline_tag.text.strip():
                 continue
             title = headline_tag.text.strip()
-            if title in seen_titles or not title:
-                continue
-            seen_titles.add(title)
-            link_tag = headline_tag.find("a") or headline_tag if headline_tag.name == "a" else None
+            link_tag = headline_tag.find("a")
             url = ("https://news.google.com" + link_tag["href"][1:]) if link_tag and link_tag.has_attr("href") and link_tag["href"].startswith(".") else ""
-            snippet_tag = item.find("span")
-            snippet = snippet_tag.text.strip() if snippet_tag else ""
+            snippet = ""
+            snippet_tag = item.find("span", attrs={"class": "xBbh9"})
+            if snippet_tag:
+                snippet = snippet_tag.text.strip()
+            published = ""
+            time_tag = item.find("time")
+            if time_tag and time_tag.has_attr("datetime"):
+                published = time_tag["datetime"]
+            source = ""
+            source_tag = item.find("div", class_="SVJrMe")
+            if source_tag:
+                source = source_tag.text.strip()
             articles.append({
                 "title": title,
-                "publishedAt": "",
-                "source": "Google News",
                 "url": url,
+                "publishedAt": published,
+                "source": source or "Google News",
                 "description": snippet,
                 "search_keyword": query,
-                "api": "GoogleNews-Scrape"
+                "api": "GoogleNews-HTML"
             })
             if len(articles) >= max_articles:
                 break
-    else:
-        print("Google News HTTP error:", resp.status_code)
-    print("Scraped Google articles:", len(articles))
     return articles
 
+def fetch_google_news_combined(query, max_articles=10):
+    news = parse_google_rss(query, max_articles)
+    if len(news) < max_articles:
+        html_news = scrape_google_news_html(query, max_articles - len(news))
+        news.extend(html_news)
+    return news[:max_articles]
 
-def scrape_bing_news(query, max_articles=10, sleep=1.5):
+# === ENHANCED BING NEWS SCRAPER (RSS + HTML fallback) ===
+def parse_bing_rss(query, max_articles=10):
+    url = f"https://www.bing.com/news/search?q={query.replace(' ', '+')}&format=rss"
+    feed = feedparser.parse(url)
+    news = []
+    for entry in feed.entries[:max_articles]:
+        news.append({
+            "title": entry.get("title"),
+            "url": entry.get("link"),
+            "publishedAt": entry.get("published"),
+            "source": (entry.get("source", {}) or {}).get("title") or "Bing News",
+            "description": BeautifulSoup(entry.get("summary", ""), "html.parser").text,
+            "search_keyword": query,
+            "api": "BingNews-RSS"
+        })
+    return news
+
+def scrape_bing_news_html(query, max_articles=10, sleep=1.5):
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; DemoBot/0.1; +https://yourdomain.com/demo)"
     }
-    url = f"https://www.bing.com/news/search?q={query.replace(' ', '+')}&FORM=HDRSC6&setlang=en"
+    url = f"https://www.bing.com/news/search?q={query.replace(' ', '+')}&setlang=en"
     resp = requests.get(url, headers=headers, timeout=10)
     time.sleep(sleep)
     articles = []
     if resp.status_code == 200:
         soup = BeautifulSoup(resp.text, "html.parser")
-        seen_titles = set()
         for item in soup.select("div.news-card, div.t_s"):
             headline_tag = item.find("a")
             if not headline_tag or not headline_tag.text.strip():
                 continue
             title = headline_tag.text.strip()
-            if title in seen_titles:
-                continue
-            seen_titles.add(title)
-            url = headline_tag["href"]
+            url = headline_tag["href"] if headline_tag.has_attr("href") else ""
+            snippet = ""
             snippet_tag = item.find("div", class_="snippet")
-            snippet = snippet_tag.text.strip() if snippet_tag else ""
+            if snippet_tag:
+                snippet = snippet_tag.text.strip()
+            source = "Bing News"
             source_tag = item.find("div", class_="source")
-            source = source_tag.text.strip() if source_tag else "Bing News"
+            if source_tag:
+                source = source_tag.text.strip()
+            published = ""
+            time_tag = item.find("span", class_="source")
+            if time_tag:
+                try:
+                    parts = time_tag.text.split("·")
+                    if len(parts) > 1:
+                        published = parts[1].strip()
+                except Exception:
+                    published = ""
             articles.append({
                 "title": title,
-                "publishedAt": "",
-                "source": source,
                 "url": url,
+                "publishedAt": published,
+                "source": source,
                 "description": snippet,
                 "search_keyword": query,
-                "api": "BingNews-Scrape"
+                "api": "BingNews-HTML"
             })
             if len(articles) >= max_articles:
                 break
     return articles
 
+def fetch_bing_news_combined(query, max_articles=10):
+    news = parse_bing_rss(query, max_articles)
+    if len(news) < max_articles:
+        html_news = scrape_bing_news_html(query, max_articles - len(news))
+        news.extend(html_news)
+    return news[:max_articles]
+
+# --- Dedupe function ---
 def dedupe_news(news: List[Dict], max_articles=12):
     seen = set()
     deduped = []
@@ -210,6 +266,16 @@ def dedupe_news(news: List[Dict], max_articles=12):
             break
     return deduped
 
+# --- LLM input/output defensive helper ---
+def enforce_json_double_quotes(text: str) -> str:
+    """Best effort: Ensure only double quotes for JSON."""
+    import re
+    text = re.sub(r"(?<!\\)'", '"', text)  # replace single quotes not preceded by a backslash
+    # Remove trailing commas before closing braces/brackets
+    text = re.sub(r',(\s*[\]}])', r'\1', text)
+    return text
+
+# --- MAIN AGENT PIPELINE ---
 def news_agent_stock(
     ticker: str,
     openai_api_key: str,
@@ -217,6 +283,7 @@ def news_agent_stock(
     serpapi_key: str = None,
     max_articles: int = 12
 ):
+    # LLM PROMPTS (unchanged but with JSON enforcement at output)
     meta_prompt = PromptTemplate.from_template(
         "Given the stock ticker {ticker}, return the corresponding company names (as a list), sector, industry, and region. "
         "If any value is not known, return an empty string or empty list. "
@@ -281,6 +348,7 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
 IMPORTANT: All JSON output **must** use double quotes (\"), not single quotes.
 """
     )
+
     llm = ChatOpenAI(
         model="gpt-3.5-turbo",
         temperature=0.2,
@@ -307,6 +375,9 @@ IMPORTANT: All JSON output **must** use double quotes (\"), not single quotes.
     # --- 1. Metadata LLM ---
     meta_result = meta_chain.invoke({"ticker": ticker})
     meta_text = get_unwrapped(meta_result)
+    # Defensive: enforce double quotes if needed
+    if isinstance(meta_text, str):
+        meta_text = enforce_json_double_quotes(meta_text)
 
     # --- 2. Keyword Expansion LLM ---
     kw_result = kw_chain.invoke({
@@ -319,15 +390,16 @@ IMPORTANT: All JSON output **must** use double quotes (\"), not single quotes.
     if not isinstance(keywords, list):
         keywords = []
 
-    # --- 3. News Fetch (All APIs & Scrapers) ---
+    # --- 3. News Fetch (All APIs & Scrapers, improved order) ---
     yf_news = fetch_yfinance_news(ticker, max_articles)
     newsapi_news = fetch_news_newsapi(keywords, newsapi_key, max_articles)
     serpapi_news = fetch_news_serpapi(keywords, serpapi_key, max_articles)
+
     google_news = []
     bing_news = []
     for kw in keywords[:2]:
-        google_news += scrape_google_news(kw, max_articles=4, sleep=1.5)
-        bing_news += scrape_bing_news(kw, max_articles=4, sleep=1.5)
+        google_news += fetch_google_news_combined(kw, max_articles=4)
+        bing_news += fetch_bing_news_combined(kw, max_articles=4)
     all_news = yf_news + newsapi_news + serpapi_news + google_news + bing_news
     deduped_news = dedupe_news(all_news, max_articles)
 
@@ -345,6 +417,8 @@ IMPORTANT: All JSON output **must** use double quotes (\"), not single quotes.
     }
     llm_summary = synth_chain.invoke(synth_input)
     llm_summary_unwrapped = get_unwrapped(llm_summary)
+    if isinstance(llm_summary_unwrapped, str):
+        llm_summary_unwrapped = enforce_json_double_quotes(llm_summary_unwrapped)
 
     return {
         "ticker": ticker,
@@ -362,11 +436,10 @@ IMPORTANT: All JSON output **must** use double quotes (\"), not single quotes.
             "google_scrape": len(google_news),
             "bing_scrape": len(bing_news),
         },
-        "google_news": google_news,   # <-- ADD THIS
-        "bing_news": bing_news,       # <-- ADD THIS
+        "google_news": google_news,
+        "bing_news": bing_news,
         "all_news": all_news,
     }
-
 
 
 
