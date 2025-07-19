@@ -31,28 +31,51 @@ if go and ticker:
             serpapi_key=serpapi_key,
             max_articles=max_articles
         )
-
-        llm_summary = result.get("llm_summary")
+        
+        llm_summary = result.get("llm_summary", {})
+        
+        # Handle possible 'text' field wrapping from OutputFixingParser
+        if isinstance(llm_summary, dict) and 'text' in llm_summary and isinstance(llm_summary['text'], dict):
+            llm_summary = llm_summary['text']
+        
         st.markdown("---")
         st.subheader("🧠 LLM Summary & Sentiment Analysis")
+        
+        def get_nested(d, *keys):
+            """Helper to get nested dict values without KeyError."""
+            for k in keys:
+                if isinstance(d, dict):
+                    d = d.get(k)
+                else:
+                    return None
+            return d
+        
         if llm_summary:
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.markdown("**📈 Stock Sentiment**")
-                st.markdown(f"**{llm_summary['stock_sentiment']['score']}**")
-                st.caption(llm_summary['stock_sentiment']['reason'])
+                score = get_nested(llm_summary, 'stock_sentiment', 'score')
+                reason = get_nested(llm_summary, 'stock_sentiment', 'reason')
+                st.markdown(f"**{score or 'N/A'}**")
+                st.caption(reason or "")
             with col2:
                 st.markdown("**🏦 Sector Sentiment**")
-                st.markdown(f"**{llm_summary['sector_sentiment']['score']}**")
-                st.caption(llm_summary['sector_sentiment']['reason'])
+                score = get_nested(llm_summary, 'sector_sentiment', 'score')
+                reason = get_nested(llm_summary, 'sector_sentiment', 'reason')
+                st.markdown(f"**{score or 'N/A'}**")
+                st.caption(reason or "")
             with col3:
                 st.markdown("**🌍 Region Sentiment**")
-                st.markdown(f"**{llm_summary['region_sentiment']['score']}**")
-                st.caption(llm_summary['region_sentiment']['reason'])
+                score = get_nested(llm_summary, 'region_sentiment', 'score')
+                reason = get_nested(llm_summary, 'region_sentiment', 'reason')
+                st.markdown(f"**{score or 'N/A'}**")
+                st.caption(reason or "")
             st.markdown("#### 🧾 Executive Summary")
             st.markdown(llm_summary.get("summary", ""))
         else:
             st.warning("No LLM summary returned.")
+            st.write("Raw LLM summary:", llm_summary)
+
 
         # --- Company info & keywords
         st.markdown(f"""
