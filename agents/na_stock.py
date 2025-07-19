@@ -9,33 +9,6 @@ from langchain_community.llms import OpenAI
 from langchain.chains import LLMChain
 from langchain_core.output_parsers import JsonOutputParser
 
-# ===== LLM Chains =====
-
-meta_prompt = PromptTemplate.from_template(
-    "Given the stock ticker {ticker}, what are the company names (list), sector, industry, and region? "
-    "Respond as JSON: {\"company_names\": [...], \"sector\": \"...\", \"industry\": \"...\", \"region\": \"...\"}"
-)
-llm = OpenAI(
-    model_name="gpt-3.5-turbo",
-    temperature=0.2,
-    openai_api_key=openai_api_key   # (from your function param or secrets)
-)
-meta_chain = LLMChain(
-    llm=llm,
-    prompt=meta_prompt,
-    output_parser=JsonOutputParser()
-)
-
-kw_prompt = PromptTemplate.from_template(
-    "Generate the 6 most relevant news search keywords for {company_names}, sector: {sector}, industry: {industry}, region: {region}. "
-    "Include synonyms and sector/region phrases. Respond as JSON: {\"keywords\": [...]}"
-)
-kw_chain = LLMChain(
-    llm=OpenAI(model="gpt-3.5-turbo", temperature=0.2),
-    prompt=kw_prompt,
-    output_parser=JsonOutputParser()
-)
-
 # ===== News Fetch Functions =====
 
 def fetch_yfinance_news(ticker: str, max_articles: int = 12) -> List[Dict]:
@@ -213,10 +186,26 @@ def dedupe_news(news: List[Dict], max_articles=12):
             break
     return deduped
 
-# ===== LLM News Summary Chain =====
+# ===== Top-level Pipeline Function =====
 
-synth_prompt = PromptTemplate.from_template(
-    """
+def news_agent_stock(
+    ticker: str,
+    openai_api_key: str,
+    newsapi_key: str = None,
+    serpapi_key: str = None,
+    max_articles: int = 12
+):
+    # ---- LLM Chains: Now defined inside function with API key ----
+    meta_prompt = PromptTemplate.from_template(
+        "Given the stock ticker {ticker}, what are the company names (list), sector, industry, and region? "
+        "Respond as JSON: {\"company_names\": [...], \"sector\": \"...\", \"industry\": \"...\", \"region\": \"...\"}"
+    )
+    kw_prompt = PromptTemplate.from_template(
+        "Generate the 6 most relevant news search keywords for {company_names}, sector: {sector}, industry: {industry}, region: {region}. "
+        "Include synonyms and sector/region phrases. Respond as JSON: {\"keywords\": [...]}"
+    )
+    synth_prompt = PromptTemplate.from_template(
+        """
 You are an expert financial news analyst with deep knowledge of companies, sectors, global markets, and macro trends.
 
 YOUR TASK:
@@ -257,27 +246,33 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
   "summary": "Provide a 4–5 sentence investor-focused executive summary, referencing your own expertise, and clearly stating if news evidence was or was not available."
 }
 """
-)
-synth_chain = LLMChain(
-    llm=OpenAI(model="gpt-3.5-turbo", temperature=0.2),
-    prompt=synth_prompt,
-    output_parser=JsonOutputParser()
-)
+    )
+    llm = OpenAI(
+        model_name="gpt-3.5-turbo",
+        temperature=0.2,
+        openai_api_key=openai_api_key
+    )
+    meta_chain = LLMChain(
+        llm=llm,
+        prompt=meta_prompt,
+        output_parser=JsonOutputParser()
+    )
+    kw_chain = LLMChain(
+        llm=llm,
+        prompt=kw_prompt,
+        output_parser=JsonOutputParser()
+    )
+    synth_chain = LLMChain(
+        llm=llm,
+        prompt=synth_prompt,
+        output_parser=JsonOutputParser()
+    )
 
-# ===== Top-level Pipeline Function =====
-
-def news_agent_stock(
-    ticker: str,
-    openai_api_key: str,
-    newsapi_key: str = None,
-    serpapi_key: str = None,
-    max_articles: int = 12
-):
     # -- 1. Metadata LLM --
-    meta_result = meta_chain.run({"ticker": ticker}, llm_api_key=openai_api_key)
+    meta_result = meta_chain.run({"ticker": ticker})
     meta = meta_result
     # -- 2. Keyword Expansion LLM --
-    kw_result = kw_chain.run(meta, llm_api_key=openai_api_key)
+    kw_result = kw_chain.run(meta)
     keywords = kw_result["keywords"]
     # -- 3. News Fetch (All APIs & Scrapers) --
     yf_news = fetch_yfinance_news(ticker, max_articles)
@@ -302,7 +297,7 @@ def news_agent_stock(
         keywords=keywords,
         news_text=news_text
     )
-    llm_summary = synth_chain.run(synth_input, llm_api_key=openai_api_key)
+    llm_summary = synth_chain.run(synth_input)
     # -- 5. Output --
     return {
         "ticker": ticker,
@@ -321,6 +316,9 @@ def news_agent_stock(
             "bing_scrape": len(bing_news),
         }
     }
+
+
+
 
 
 
