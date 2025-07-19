@@ -5,9 +5,9 @@ numpy
 plotly
 openai>=1.0.0,<2.0.0
 requests
-google-search-results
-matplotlib
-langchain>=0.3.26,<0.4.0
-langchain-community
-langchain-openai
 beautifulsoup4
+google-search-results   # For SerpAPI
+langchain>=0.1.17
+langchain-community
+langchain-core
+langchain-openai
