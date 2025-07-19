@@ -280,6 +280,7 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
         "industry": meta_result.get("industry"),
         "region": meta_result.get("region"),
     })
+    print("kw_result:", kw_result)
     keywords = kw_result["keywords"]
     # -- 3. News Fetch (All APIs & Scrapers) --
     yf_news = fetch_yfinance_news(ticker, max_articles)
