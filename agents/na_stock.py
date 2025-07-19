@@ -274,6 +274,7 @@ IMPORTANT: All JSON output **must** use double quotes (\"), not single quotes.
 
     # -- 1. Metadata LLM --
     meta_result = meta_chain.invoke({"ticker": ticker})
+    print("DEBUG meta_result:", meta_result)
     # -- 2. Keyword Expansion LLM --
     kw_result = kw_chain.invoke({
         "company_names": meta_result.get("company_names"),
