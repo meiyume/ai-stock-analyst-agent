@@ -118,9 +118,24 @@ st.write(google_news)
 
 
 all_news = result.get("all_news", [])
-# Defensive: filter only dicts
+
+# Diagnose and log anything weird before using it
+bad_items = []
+for i, n in enumerate(all_news):
+    if not isinstance(n, dict):
+        bad_items.append((i, n, type(n)))
+if bad_items:
+    st.warning("Non-dict news items detected in all_news! (See below)")
+    for idx, item, t in bad_items:
+        st.write(f"Index {idx}: {item} (type: {t})")
+
+# Filter: Only keep dictionaries for processing
 all_news = [n for n in all_news if isinstance(n, dict)]
 
+st.markdown("---")
+st.subheader("🔎 Raw Scraper Diagnostics (Bing/Google/All News)")
+
+# Bing News
 bing_news = [n for n in all_news if n.get('api', '').lower().startswith('bing')]
 st.markdown("#### Bing News (Raw, Before Deduplication)")
 if bing_news:
@@ -133,6 +148,7 @@ if bing_news:
 else:
     st.write("No Bing news found.")
 
+# Google News
 google_news = [n for n in all_news if n.get('api', '').lower().startswith('google')]
 st.markdown("#### Google News (Raw, Before Deduplication)")
 if google_news:
@@ -144,6 +160,10 @@ if google_news:
         st.markdown("---")
 else:
     st.write("No Google news found.")
+
+# All News (optional, raw printout)
+st.markdown("#### All News (Combined Raw List, Before Deduplication)")
+st.write(all_news)
 
 
 
