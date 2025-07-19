@@ -199,12 +199,12 @@ def news_agent_stock(
     meta_prompt = PromptTemplate.from_template(
         "Given the stock ticker {ticker}, what are the company names (list), sector, industry, and region? "
         "Respond as JSON like this: "
-        '{"company_names": [...], "sector": "...", "industry": "...", "region": "..."}'
+        '{{"company_names": [...], "sector": "...", "industry": "...", "region": "..."}}'
     )
     kw_prompt = PromptTemplate.from_template(
         "Generate the 6 most relevant news search keywords for {company_names}, sector: {sector}, industry: {industry}, region: {region}. "
         "Include synonyms and sector/region phrases. Respond as JSON like this: "
-        '{"keywords": [...]}'
+        '{{"keywords": [...]}}'
     )
     synth_prompt = PromptTemplate.from_template(
         """
