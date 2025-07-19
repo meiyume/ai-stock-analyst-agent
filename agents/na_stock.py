@@ -8,6 +8,7 @@ from langchain.prompts import PromptTemplate
 from langchain_community.chat_models import ChatOpenAI
 from langchain.chains import LLMChain
 from langchain_core.output_parsers import JsonOutputParser
+from langchain.output_parsers import OutputFixingParser
 
 def fetch_yfinance_news(ticker: str, max_articles: int = 12) -> List[Dict]:
     stock = yf.Ticker(ticker)
@@ -195,76 +196,80 @@ def news_agent_stock(
         "Given the stock ticker {ticker}, what are the company names (list), sector, industry, and region? "
         "Respond as JSON like this: "
         '{{"company_names": [...], "sector": "...", "industry": "...", "region": "..."}}'
+        "\nIMPORTANT: All JSON keys and values must use double quotes (\")."
     )
     kw_prompt = PromptTemplate.from_template(
         "Generate the 6 most relevant news search keywords for {company_names}, sector: {sector}, industry: {industry}, region: {region}. "
         "Include synonyms and sector/region phrases. Respond as JSON like this: "
         '{{"keywords": ["...","...","...","...","...","..."]}}'
+        "\nIMPORTANT: All JSON keys and values must use double quotes (\")."
     )
     synth_prompt = PromptTemplate.from_template(
         """
-    You are an expert financial news analyst with deep knowledge of companies, sectors, global markets, and macro trends.
-    
-    YOUR TASK:
-    1. Begin with your own financial intelligence, reasoning, and market context for the specified stock, sector, industry, and region. 
-    2. Next, review and cross-check the following recent headlines and descriptions:
-    {news_text}
-    
-    GUIDELINES:
-    - Combine your internal financial expertise with the evidence from the headlines.
-    - If the news supports your prior reasoning, reaffirm your outlook.
-    - If the news contradicts or updates your prior reasoning, revise your opinion accordingly.
-    - If no headlines are available, provide an outlook based on your own expertise and clearly state that there is no recent news evidence.
-    - Avoid speculation not grounded in your knowledge or the supplied news.
-    
-    OUTPUT (respond ONLY with valid JSON and no extra text):
-    
-    {{
-      "company_names": {company_names},
-      "keywords": {keywords},
-      "stock_sentiment": {{
-        "score": "Bullish/Bearish/Neutral",
-        "reason": "Explain in 1-2 sentences, mentioning if it is based on your expertise, news evidence, or both.",
-        "confidence": "High/Medium/Low"
-      }},
-      "sector_sentiment": ...,
-      "region_sentiment": ...,
-      "risks": [
-        {{ "label": "...", "details": "..." }}
-      ],
-      "opportunities": [
-        {{ "label": "...", "details": "..." }}
-      ],
-      "major_events": [
-        {{ "date": "...", "event": "..." }}
-      ],
-      "headline_sentiment": [
-        {{ "title": "...", "sentiment": "Positive/Negative/Neutral" }}
-      ],
-      "summary": "Provide a 4–5 sentence investor-focused executive summary, referencing your own expertise, and clearly stating if news evidence was or was not available."
-    }}
-    """
-    )
+You are an expert financial news analyst with deep knowledge of companies, sectors, global markets, and macro trends.
 
+YOUR TASK:
+1. Begin with your own financial intelligence, reasoning, and market context for the specified stock, sector, industry, and region. 
+2. Next, review and cross-check the following recent headlines and descriptions:
+{news_text}
+
+GUIDELINES:
+- Combine your internal financial expertise with the evidence from the headlines.
+- If the news supports your prior reasoning, reaffirm your outlook.
+- If the news contradicts or updates your prior reasoning, revise your opinion accordingly.
+- If no headlines are available, provide an outlook based on your own expertise and clearly state that there is no recent news evidence.
+- Avoid speculation not grounded in your knowledge or the supplied news.
+
+OUTPUT (respond ONLY with valid JSON and no extra text):
+
+{{
+  "company_names": {company_names},
+  "keywords": {keywords},
+  "stock_sentiment": {{
+    "score": "Bullish/Bearish/Neutral",
+    "reason": "Explain in 1-2 sentences, mentioning if it is based on your expertise, news evidence, or both.",
+    "confidence": "High/Medium/Low"
+  }},
+  "sector_sentiment": ...,
+  "region_sentiment": ...,
+  "risks": [
+    {{ "label": "...", "details": "..." }}
+  ],
+  "opportunities": [
+    {{ "label": "...", "details": "..." }}
+  ],
+  "major_events": [
+    {{ "date": "...", "event": "..." }}
+  ],
+  "headline_sentiment": [
+    {{ "title": "...", "sentiment": "Positive/Negative/Neutral" }}
+  ],
+  "summary": "Provide a 4–5 sentence investor-focused executive summary, referencing your own expertise, and clearly stating if news evidence was or was not available."
+}}
+IMPORTANT: All JSON output **must** use double quotes (\"), not single quotes.
+"""
+    )
     llm = ChatOpenAI(
         model="gpt-3.5-turbo",
         temperature=0.2,
         openai_api_key=openai_api_key
     )
+    json_parser = JsonOutputParser()
+    fixing_parser = OutputFixingParser.from_llm(parser=json_parser, llm=llm)
     meta_chain = LLMChain(
         llm=llm,
         prompt=meta_prompt,
-        output_parser=JsonOutputParser()
+        output_parser=fixing_parser
     )
     kw_chain = LLMChain(
         llm=llm,
         prompt=kw_prompt,
-        output_parser=JsonOutputParser()
+        output_parser=fixing_parser
     )
     synth_chain = LLMChain(
         llm=llm,
         prompt=synth_prompt,
-        output_parser=JsonOutputParser()
+        output_parser=fixing_parser
     )
 
     # -- 1. Metadata LLM --
