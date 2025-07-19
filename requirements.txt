@@ -8,4 +8,5 @@ requests
 google-search-results       # (for SerpAPI)
 matplotlib
 langchain
+langchain-community
 beautifulsoup4
