@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 from langchain.prompts import PromptTemplate
 from langchain.llms import OpenAI
 from langchain.chains import LLMChain
-from langchain.output_parsers import JsonOutputParser
+from langchain.output_parsers.json import JsonOutputParser
 
 # ===== LLM Chains =====
 
