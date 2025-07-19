@@ -361,7 +361,10 @@ IMPORTANT: All JSON output **must** use double quotes (\"), not single quotes.
             "serpapi": len(serpapi_news),
             "google_scrape": len(google_news),
             "bing_scrape": len(bing_news),
-        }
+        },
+        "google_news": google_news,   # <-- ADD THIS
+        "bing_news": bing_news,       # <-- ADD THIS
+        "all_news": all_news,
     }
 
 
