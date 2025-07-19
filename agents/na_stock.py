@@ -5,7 +5,7 @@ import time
 from bs4 import BeautifulSoup
 
 from langchain.prompts import PromptTemplate
-from langchain_community.llms import OpenAI
+from langchain_community.chat_models import ChatOpenAI
 from langchain.chains import LLMChain
 from langchain_core.output_parsers import JsonOutputParser
 
@@ -250,7 +250,7 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
 }
 """
     )
-    llm = OpenAI(
+    llm = ChatOpenAI(
         model_name="gpt-3.5-turbo",
         temperature=0.2,
         openai_api_key=openai_api_key
