@@ -88,7 +88,7 @@ if run_button and ticker:
         news_by_source.setdefault(src, []).append(n)
 
     for src, articles in news_by_source.items():
-        with st.expander(f"{src} ({len(articles)})", expanded=(src == "Yahoo Finance")):
+        with st.expander(f"{src} ({len(articles)})", expanded=False):
             for a in articles:
                 st.markdown(f"**{a.get('title','(No Title)')}**")
                 st.caption(a.get("publishedAt", ""))
