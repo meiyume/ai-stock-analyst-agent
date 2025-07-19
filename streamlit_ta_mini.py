@@ -122,31 +122,32 @@ all_news = result.get('all_news', [])
 st.markdown("---")
 st.subheader("🔎 Raw Scraper Diagnostics (Bing/Google/All News)")
 
-
+# Bing News
 bing_news = [n for n in all_news if n.get('api', '').lower().startswith('bing')]
 st.markdown("#### Bing News (Raw, Before Deduplication)")
 if bing_news:
-for n in bing_news:
-st.markdown(f"{n.get('title', '(No Title)')}")
-if n.get("url"):
-st.markdown(f"Read", unsafe_allow_html=True)
-st.caption(n.get("description", ""))
-st.markdown("---")
+    for n in bing_news:
+        st.markdown(f"**{n.get('title', '(No Title)')}**")
+        if n.get("url"):
+            st.markdown(f"[Read]({n['url']})", unsafe_allow_html=True)
+        st.caption(n.get("description", ""))
+        st.markdown("---")
 else:
-st.write("No Bing news found.")
+    st.write("No Bing news found.")
 
-
+# Google News
 google_news = [n for n in all_news if n.get('api', '').lower().startswith('google')]
 st.markdown("#### Google News (Raw, Before Deduplication)")
 if google_news:
-for n in google_news:
-st.markdown(f"{n.get('title', '(No Title)')}")
-if n.get("url"):
-st.markdown(f"Read", unsafe_allow_html=True)
-st.caption(n.get("description", ""))
-st.markdown("---")
+    for n in google_news:
+        st.markdown(f"**{n.get('title', '(No Title)')}**")
+        if n.get("url"):
+            st.markdown(f"[Read]({n['url']})", unsafe_allow_html=True)
+        st.caption(n.get("description", ""))
+        st.markdown("---")
 else:
-st.write("No Google news found.")
+    st.write("No Google news found.")
+
 
 
 
