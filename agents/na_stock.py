@@ -9,8 +9,6 @@ from langchain_community.chat_models import ChatOpenAI
 from langchain.chains import LLMChain
 from langchain_core.output_parsers import JsonOutputParser
 
-# ===== News Fetch Functions =====
-
 def fetch_yfinance_news(ticker: str, max_articles: int = 12) -> List[Dict]:
     stock = yf.Ticker(ticker)
     news = []
@@ -186,8 +184,6 @@ def dedupe_news(news: List[Dict], max_articles=12):
             break
     return deduped
 
-# ===== Top-level Pipeline Function =====
-
 def news_agent_stock(
     ticker: str,
     openai_api_key: str,
@@ -195,7 +191,6 @@ def news_agent_stock(
     serpapi_key: str = None,
     max_articles: int = 12
 ):
-    # ---- LLM Chains: Now defined inside function with API key ----
     meta_prompt = PromptTemplate.from_template(
         "Given the stock ticker {ticker}, what are the company names (list), sector, industry, and region? "
         "Respond as JSON like this: "
@@ -204,7 +199,7 @@ def news_agent_stock(
     kw_prompt = PromptTemplate.from_template(
         "Generate the 6 most relevant news search keywords for {company_names}, sector: {sector}, industry: {industry}, region: {region}. "
         "Include synonyms and sector/region phrases. Respond as JSON like this: "
-        '{{"keywords": [...]}}'
+        '{{"keywords": ["...","...","...","...","...","..."]}}'
     )
     synth_prompt = PromptTemplate.from_template(
         """
@@ -251,7 +246,7 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
 """
     )
     llm = ChatOpenAI(
-        model_name="gpt-3.5-turbo",
+        model="gpt-3.5-turbo",
         temperature=0.2,
         openai_api_key=openai_api_key
     )
@@ -280,8 +275,18 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
         "industry": meta_result.get("industry"),
         "region": meta_result.get("region"),
     })
-    print("kw_result:", kw_result)
-    keywords = kw_result["keywords"]
+
+    # Defensive keyword extraction
+    keywords = []
+    if isinstance(kw_result, dict):
+        if "keywords" in kw_result and kw_result["keywords"]:
+            keywords = kw_result["keywords"]
+        elif "text" in kw_result and isinstance(kw_result["text"], dict) and "keywords" in kw_result["text"]:
+            keywords = kw_result["text"]["keywords"]
+    if not keywords:
+        keywords = []
+        print(f"[WARNING] No keywords returned by LLM. kw_result: {kw_result}")
+
     # -- 3. News Fetch (All APIs & Scrapers) --
     yf_news = fetch_yfinance_news(ticker, max_articles)
     newsapi_news = fetch_news_newsapi(keywords, newsapi_key, max_articles)
@@ -324,6 +329,7 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
             "bing_scrape": len(bing_news),
         }
     }
+
 
 
 
