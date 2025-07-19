@@ -9,4 +9,5 @@ google-search-results       # (for SerpAPI)
 matplotlib
 langchain
 langchain-community
+langchain-openai
 beautifulsoup4
