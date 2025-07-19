@@ -272,7 +272,12 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
     meta_result = meta_chain.invoke({"ticker": ticker})
     meta = meta_result
     # -- 2. Keyword Expansion LLM --
-    kw_result = kw_chain.invoke(meta)
+    kw_result = kw_chain.invoke({
+        "company_names": meta_result.get("company_names"),
+        "sector": meta_result.get("sector"),
+        "industry": meta_result.get("industry"),
+        "region": meta_result.get("region"),
+    })
     keywords = kw_result["keywords"]
     # -- 3. News Fetch (All APIs & Scrapers) --
     yf_news = fetch_yfinance_news(ticker, max_articles)
@@ -289,14 +294,14 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
     news_text = "\n".join([
         f"- {n['title']}: {n.get('description','')}" for n in deduped_news[:12]
     ]) or "No articles available."
-    synth_input = dict(
-        company=meta.get("company_names"),
-        sector=meta.get("sector"),
-        industry=meta.get("industry"),
-        region=meta.get("region"),
-        keywords=keywords,
-        news_text=news_text
-    )
+    synth_input = {
+        "company": meta_result.get("company_names"),
+        "sector": meta_result.get("sector"),
+        "industry": meta_result.get("industry"),
+        "region": meta_result.get("region"),
+        "keywords": kw_result.get("keywords"),
+        "news_text": news_text,
+    }
     llm_summary = synth_chain.invoke(synth_input)
     # -- 5. Output --
     return {
