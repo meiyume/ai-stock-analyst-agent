@@ -118,21 +118,43 @@ def fetch_news_serpapi(keywords: List[str], api_key: Optional[str], max_articles
     return news[:max_articles]
 
 # === ENHANCED GOOGLE NEWS SCRAPER (RSS + HTML fallback) ===
+
+GOOGLE_NAV_TITLES = {"news", "home", "for you", "following", "latest"}
+
 def parse_google_rss(query, max_articles=10):
     url = f"https://news.google.com/rss/search?q={query.replace(' ', '+')}&hl=en-US&gl=US&ceid=US:en"
     feed = feedparser.parse(url)
     news = []
-    for entry in feed.entries[:max_articles]:
+    for entry in feed.entries:
+        title = entry.get("title", "").strip()
+        if not title or title.lower() in GOOGLE_NAV_TITLES:
+            continue
+        url_ = entry.get("link", "")
+        # Only allow article URLs (ignore news.google.com home/section)
+        if url_.startswith("https://news.google.com") and "/articles/" not in url_:
+            continue
         news.append({
-            "title": entry.get("title"),
-            "url": entry.get("link"),
+            "title": title,
+            "url": url_,
             "publishedAt": entry.get("published"),
             "source": (entry.get("source", {}) or {}).get("title") or "Google News",
             "description": BeautifulSoup(entry.get("summary", ""), "html.parser").text,
             "search_keyword": query,
             "api": "GoogleNews-RSS"
         })
+        if len(news) >= max_articles:
+            break
     return news
+
+def is_google_news_junk(title, url_):
+    if not title or title.strip().lower() in GOOGLE_NAV_TITLES:
+        return True
+    if not url_:
+        return True
+    # Only allow URLs that look like actual articles or go offsite
+    if url_.startswith("https://news.google.com") and "/articles/" not in url_:
+        return True
+    return False
 
 def scrape_google_news_html(query, max_articles=10, sleep=1.5):
     headers = {
@@ -150,7 +172,9 @@ def scrape_google_news_html(query, max_articles=10, sleep=1.5):
                 continue
             title = headline_tag.text.strip()
             link_tag = headline_tag.find("a")
-            url = ("https://news.google.com" + link_tag["href"][1:]) if link_tag and link_tag.has_attr("href") and link_tag["href"].startswith(".") else ""
+            url_ = ("https://news.google.com" + link_tag["href"][1:]) if link_tag and link_tag.has_attr("href") and link_tag["href"].startswith(".") else ""
+            if is_google_news_junk(title, url_):
+                continue
             snippet = ""
             snippet_tag = item.find("span", attrs={"class": "xBbh9"})
             if snippet_tag:
@@ -165,7 +189,7 @@ def scrape_google_news_html(query, max_articles=10, sleep=1.5):
                 source = source_tag.text.strip()
             articles.append({
                 "title": title,
-                "url": url,
+                "url": url_,
                 "publishedAt": published,
                 "source": source or "Google News",
                 "description": snippet,
