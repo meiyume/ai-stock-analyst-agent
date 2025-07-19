@@ -198,11 +198,11 @@ def news_agent_stock(
     # ---- LLM Chains: Now defined inside function with API key ----
     meta_prompt = PromptTemplate.from_template(
         "Given the stock ticker {ticker}, what are the company names (list), sector, industry, and region? "
-        "Respond as JSON: {\"company_names\": [...], \"sector\": \"...\", \"industry\": \"...\", \"region\": \"...\"}"
+        "Respond as JSON: {'company_names': ..., 'sector': ..., 'industry': ..., 'region': ...}"
     )
     kw_prompt = PromptTemplate.from_template(
         "Generate the 6 most relevant news search keywords for {company_names}, sector: {sector}, industry: {industry}, region: {region}. "
-        "Include synonyms and sector/region phrases. Respond as JSON: {\"keywords\": [...]}"
+        "Include synonyms and sector/region phrases. Respond as JSON: {'keywords': ...}"
     )
     synth_prompt = PromptTemplate.from_template(
         """
@@ -223,28 +223,28 @@ GUIDELINES:
 OUTPUT (respond ONLY with valid JSON and no extra text):
 
 {
-  "company_names": {company_names},
-  "keywords": {keywords},
-  "stock_sentiment": {
-    "score": "Bullish/Bearish/Neutral",
-    "reason": "Explain in 1-2 sentences, mentioning if it is based on your expertise, news evidence, or both.",
-    "confidence": "High/Medium/Low"
+  'company_names': {company_names},
+  'keywords': {keywords},
+  'stock_sentiment': {
+    'score': 'Bullish/Bearish/Neutral',
+    'reason': 'Explain in 1-2 sentences, mentioning if it is based on your expertise, news evidence, or both.',
+    'confidence': 'High/Medium/Low'
   },
-  "sector_sentiment": { ... same structure ... },
-  "region_sentiment": { ... same structure ... },
-  "risks": [
-    { "label": "...", "details": "..." }
+  'sector_sentiment': ...,
+  'region_sentiment': ...,
+  'risks': [
+    { 'label': '...', 'details': '...' }
   ],
-  "opportunities": [
-    { "label": "...", "details": "..." }
+  'opportunities': [
+    { 'label': '...', 'details': '...' }
   ],
-  "major_events": [
-    { "date": "...", "event": "..." }
+  'major_events': [
+    { 'date': '...', 'event': '...' }
   ],
-  "headline_sentiment": [
-    { "title": "...", "sentiment": "Positive/Negative/Neutral" }
+  'headline_sentiment': [
+    { 'title': '...', 'sentiment': 'Positive/Negative/Neutral' }
   ],
-  "summary": "Provide a 4–5 sentence investor-focused executive summary, referencing your own expertise, and clearly stating if news evidence was or was not available."
+  'summary': 'Provide a 4–5 sentence investor-focused executive summary, referencing your own expertise, and clearly stating if news evidence was or was not available.'
 }
 """
     )
@@ -321,6 +321,7 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
             "bing_scrape": len(bing_news),
         }
     }
+
 
 
 
