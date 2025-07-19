@@ -131,16 +131,17 @@ def scrape_google_news(query, max_articles=10, sleep=1.5):
     if resp.status_code == 200:
         soup = BeautifulSoup(resp.text, "html.parser")
         seen_titles = set()
-        for item in soup.select("article"):
-            headline_tag = item.select_one("h3, h4")
-            if not headline_tag:
+        for item in soup.find_all(["article", "div"]):  # broaden search
+            # Try h3, h4, a for title
+            headline_tag = item.find("h3") or item.find("h4") or item.find("a")
+            if not headline_tag or not headline_tag.text.strip():
                 continue
             title = headline_tag.text.strip()
             if title in seen_titles or not title:
                 continue
             seen_titles.add(title)
-            link_tag = headline_tag.find("a")
-            url = "https://news.google.com" + link_tag["href"][1:] if link_tag else ""
+            link_tag = headline_tag.find("a") or headline_tag if headline_tag.name == "a" else None
+            url = ("https://news.google.com" + link_tag["href"][1:]) if link_tag and link_tag.has_attr("href") and link_tag["href"].startswith(".") else ""
             snippet_tag = item.find("span")
             snippet = snippet_tag.text.strip() if snippet_tag else ""
             articles.append({
@@ -154,7 +155,11 @@ def scrape_google_news(query, max_articles=10, sleep=1.5):
             })
             if len(articles) >= max_articles:
                 break
+    else:
+        print("Google News HTTP error:", resp.status_code)
+    print("Scraped Google articles:", len(articles))
     return articles
+
 
 def scrape_bing_news(query, max_articles=10, sleep=1.5):
     headers = {
