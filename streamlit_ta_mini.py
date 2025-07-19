@@ -117,7 +117,10 @@ st.write(google_news)
 
 
 
-all_news = result.get('all_news', [])
+all_news = result.get("all_news", [])
+if not isinstance(all_news, list):
+    all_news = []
+all_news = [n for n in all_news if isinstance(n, dict)]
 
 st.markdown("---")
 st.subheader("🔎 Raw Scraper Diagnostics (Bing/Google/All News)")
