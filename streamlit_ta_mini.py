@@ -107,6 +107,14 @@ if run_button and ticker:
 else:
     st.info("Enter a ticker and press 'Run News Agent' to start.")
 
+st.markdown("### Bing News (raw, before deduplication)")
+bing_news = [n for n in all_news if n.get('api', '').lower().startswith('bing')]
+st.write(bing_news)
+
+st.markdown("### Google News (raw, before deduplication)")
+google_news = [n for n in all_news if n.get('api', '').lower().startswith('google')]
+st.write(google_news)
+
 
 
 
