@@ -4,6 +4,7 @@ from typing import List, Dict, Optional
 import time
 from bs4 import BeautifulSoup
 import feedparser
+from urllib.parse import urlparse, parse_qs, unquote
 
 from langchain.prompts import PromptTemplate
 from langchain_community.chat_models import ChatOpenAI
@@ -11,7 +12,6 @@ from langchain.chains import LLMChain
 from langchain_core.output_parsers import JsonOutputParser
 from langchain.output_parsers import OutputFixingParser
 
-# --- Universal extraction helper (unchanged) ---
 def get_unwrapped(obj, *keys):
     while isinstance(obj, dict) and 'text' in obj and isinstance(obj['text'], dict):
         obj = obj['text']
@@ -24,7 +24,6 @@ def get_unwrapped(obj, *keys):
             return None
     return obj
 
-# --- Yahoo Finance API News (unchanged) ---
 def fetch_yfinance_news(ticker: str, max_articles: int = 12) -> List[Dict]:
     stock = yf.Ticker(ticker)
     news = []
@@ -53,7 +52,6 @@ def fetch_yfinance_news(ticker: str, max_articles: int = 12) -> List[Dict]:
         })
     return news
 
-# --- NewsAPI (unchanged) ---
 def fetch_news_newsapi(keywords: List[str], api_key: Optional[str], max_articles=10) -> List[Dict]:
     if not api_key:
         return []
@@ -84,7 +82,6 @@ def fetch_news_newsapi(keywords: List[str], api_key: Optional[str], max_articles
             break
     return news[:max_articles]
 
-# --- SerpAPI (unchanged) ---
 def fetch_news_serpapi(keywords: List[str], api_key: Optional[str], max_articles=10) -> List[Dict]:
     if not api_key:
         return []
@@ -117,9 +114,14 @@ def fetch_news_serpapi(keywords: List[str], api_key: Optional[str], max_articles
             break
     return news[:max_articles]
 
-# === ENHANCED GOOGLE NEWS SCRAPER (RSS + HTML fallback) ===
-
 GOOGLE_NAV_TITLES = {"news", "home", "for you", "following", "latest"}
+
+def extract_original_url(google_news_url):
+    parsed = urlparse(google_news_url)
+    qs = parse_qs(parsed.query)
+    if 'url' in qs:
+        return unquote(qs['url'][0])
+    return google_news_url
 
 def parse_google_rss(query, max_articles=10):
     url = f"https://news.google.com/rss/search?q={query.replace(' ', '+')}&hl=en-US&gl=US&ceid=US:en"
@@ -130,12 +132,12 @@ def parse_google_rss(query, max_articles=10):
         if not title or title.lower() in GOOGLE_NAV_TITLES:
             continue
         url_ = entry.get("link", "")
-        # Only allow article URLs (ignore news.google.com home/section)
         if url_.startswith("https://news.google.com") and "/articles/" not in url_:
             continue
+        real_url = extract_original_url(url_)
         news.append({
             "title": title,
-            "url": url_,
+            "url": real_url,
             "publishedAt": entry.get("published"),
             "source": (entry.get("source", {}) or {}).get("title") or "Google News",
             "description": BeautifulSoup(entry.get("summary", ""), "html.parser").text,
@@ -151,7 +153,6 @@ def is_google_news_junk(title, url_):
         return True
     if not url_:
         return True
-    # Only allow URLs that look like actual articles or go offsite
     if url_.startswith("https://news.google.com") and "/articles/" not in url_:
         return True
     return False
@@ -175,6 +176,7 @@ def scrape_google_news_html(query, max_articles=10, sleep=1.5):
             url_ = ("https://news.google.com" + link_tag["href"][1:]) if link_tag and link_tag.has_attr("href") and link_tag["href"].startswith(".") else ""
             if is_google_news_junk(title, url_):
                 continue
+            real_url = extract_original_url(url_)
             snippet = ""
             snippet_tag = item.find("span", attrs={"class": "xBbh9"})
             if snippet_tag:
@@ -189,7 +191,7 @@ def scrape_google_news_html(query, max_articles=10, sleep=1.5):
                 source = source_tag.text.strip()
             articles.append({
                 "title": title,
-                "url": url_,
+                "url": real_url,
                 "publishedAt": published,
                 "source": source or "Google News",
                 "description": snippet,
@@ -207,7 +209,6 @@ def fetch_google_news_combined(query, max_articles=10):
         news.extend(html_news)
     return news[:max_articles]
 
-# === ENHANCED BING NEWS SCRAPER (RSS + HTML fallback) ===
 def parse_bing_rss(query, max_articles=10):
     url = f"https://www.bing.com/news/search?q={query.replace(' ', '+')}&format=rss"
     feed = feedparser.parse(url)
@@ -277,7 +278,6 @@ def fetch_bing_news_combined(query, max_articles=10):
         news.extend(html_news)
     return news[:max_articles]
 
-# --- Dedupe function ---
 def dedupe_news(news: List[Dict], max_articles=12):
     seen = set()
     deduped = []
@@ -290,24 +290,25 @@ def dedupe_news(news: List[Dict], max_articles=12):
             break
     return deduped
 
-# --- LLM input/output defensive helper ---
 def enforce_json_double_quotes(text: str) -> str:
-    """Best effort: Ensure only double quotes for JSON."""
     import re
-    text = re.sub(r"(?<!\\)'", '"', text)  # replace single quotes not preceded by a backslash
-    # Remove trailing commas before closing braces/brackets
+    text = re.sub(r"(?<!\\)'", '"', text)
     text = re.sub(r',(\s*[\]}])', r'\1', text)
     return text
 
-# --- MAIN AGENT PIPELINE ---
-def news_agent_stock(
+# -- ASEAN/Asia country codes for default macro fetch --
+ASEAN_CODES = ["SGP", "MYS", "IDN", "THA", "PHL", "VNM", "BRN", "KHM", "LAO", "MMR"]
+ASIA_CODES = ["SGP", "MYS", "IDN", "THA", "PHL", "VNM", "CHN", "IND", "KOR", "JPN", "HKG", "TWN"]
+
+def news_agent_micro(
     ticker: str,
     openai_api_key: str,
     newsapi_key: str = None,
     serpapi_key: str = None,
+    macro_data: Optional[dict] = None,
+    macro_countries: Optional[list] = None,  # NEW
     max_articles: int = 12
 ):
-    # LLM PROMPTS (unchanged but with JSON enforcement at output)
     meta_prompt = PromptTemplate.from_template(
         "Given the stock ticker {ticker}, return the corresponding company names (as a list), sector, industry, and region. "
         "If any value is not known, return an empty string or empty list. "
@@ -323,19 +324,21 @@ def news_agent_stock(
     )
     synth_prompt = PromptTemplate.from_template(
         """
-You are an expert financial news analyst with deep knowledge of companies, sectors, global markets, and macro trends.
+You are an expert financial news and macro analyst with deep knowledge of companies, sectors, global markets, and economic trends.
 
 YOUR TASK:
-1. Begin with your own financial intelligence, reasoning, and market context for the specified stock, sector, industry, and region. 
-2. Next, review and cross-check the following recent headlines and descriptions:
+1. Begin with your own financial and economic expertise, reasoning, and market context for the specified stock, sector, industry, and region. 
+2. Consider the following RECENT MACRO DATA (if available):
+{macro_data}
+3. Next, review and cross-check the following recent headlines and descriptions:
 {news_text}
 
 GUIDELINES:
-- Combine your internal financial expertise with the evidence from the headlines.
-- If the news supports your prior reasoning, reaffirm your outlook.
-- If the news contradicts or updates your prior reasoning, revise your opinion accordingly.
-- If no headlines are available, provide an outlook based on your own expertise and clearly state that there is no recent news evidence.
-- Avoid speculation not grounded in your knowledge or the supplied news.
+- Combine your internal expertise, macro data, and the evidence from news headlines.
+- If macro data and news sentiment diverge, clearly explain which you weigh more and why.
+- When scoring sentiment, ALWAYS use only the labels: "Bullish", "Bearish", or "Neutral".
+- Unless otherwise stated, all sentiment scores and summaries refer to the expected outlook over the next 1 month (30 days).
+- If no headlines are available, provide an outlook based on your own expertise and macro data, and state that there is no recent news evidence.
 
 OUTPUT (respond ONLY with valid JSON and no extra text):
 
@@ -344,7 +347,7 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
   "keywords": {keywords},
   "stock_sentiment": {{
     "score": "Bullish/Bearish/Neutral",
-    "reason": "Explain in 1-2 sentences, mentioning if it is based on your expertise, news evidence, or both.",
+    "reason": "Explain in 1-2 sentences, mentioning if it is based on macro data, news evidence, or both.",
     "confidence": "High/Medium/Low"
   }},
   "sector_sentiment": {{
@@ -352,8 +355,11 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
     "reason": "Explain briefly."
   }},
   "region_sentiment": {{
-    "score": "Bullish/Bearish/Neutral",
-    "reason": "Explain briefly."
+    "singapore_score": "Bullish/Bearish/Neutral",
+    "singapore_reason": "Briefly explain Singapore’s market/economic sentiment, citing macro data and news.",
+    "regional_score": "Bullish/Bearish/Neutral",
+    "regional_reason": "Briefly explain the sentiment for Southeast Asia or Asia as a whole. Highlight if and why the regional outlook differs from Singapore, citing macro data or news. If there is divergence (e.g. Singapore positive but SE Asia negative), explain why.",
+    "divergence": "Yes/No — Is there a meaningful difference in outlook between Singapore and the regional market? If yes, briefly summarize the main reason."
   }},
   "risks": [
     {{ "label": "...", "details": "..." }}
@@ -365,9 +371,9 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
     {{ "date": "...", "event": "..." }}
   ],
   "headline_sentiment": [
-    {{ "title": "...", "sentiment": "Positive/Negative/Neutral" }}
+    {{ "title": "...", "sentiment": "Bullish/Bearish/Neutral" }}
   ],
-  "summary": "Provide a 4–5 sentence investor-focused executive summary, referencing your own expertise, and clearly stating if news evidence was or was not available."
+  "summary": "Provide a 4–5 sentence investor-focused executive summary, referencing your own expertise, macro data, and recent news evidence. Clearly state if news or macro data was not available."
 }}
 IMPORTANT: All JSON output **must** use double quotes (\"), not single quotes.
 """
@@ -399,7 +405,6 @@ IMPORTANT: All JSON output **must** use double quotes (\"), not single quotes.
     # --- 1. Metadata LLM ---
     meta_result = meta_chain.invoke({"ticker": ticker})
     meta_text = get_unwrapped(meta_result)
-    # Defensive: enforce double quotes if needed
     if isinstance(meta_text, str):
         meta_text = enforce_json_double_quotes(meta_text)
 
@@ -420,50 +425,53 @@ IMPORTANT: All JSON output **must** use double quotes (\"), not single quotes.
     serpapi_news = fetch_news_serpapi(keywords, serpapi_key, max_articles)
 
     google_news = []
+    for kw in keywords:
+        google_news.extend(fetch_google_news_combined(kw, max_articles=4))
     bing_news = []
-    for kw in keywords[:2]:
-        google_news += fetch_google_news_combined(kw, max_articles=4)
-        bing_news += fetch_bing_news_combined(kw, max_articles=4)
+    for kw in keywords:
+        bing_news.extend(fetch_bing_news_combined(kw, max_articles=4))
+
+    # Combine & dedupe
     all_news = yf_news + newsapi_news + serpapi_news + google_news + bing_news
     deduped_news = dedupe_news(all_news, max_articles)
 
-    # --- 4. Synthesis LLM ---
+    # --- 4. Macro Data (auto-load if not supplied) ---
+    macro_data_fmt = macro_data
+    if macro_data_fmt is None:
+        try:
+            from macro_loader import get_macro_data
+            # If macro_countries not specified, default to Singapore and ASEAN
+            macro_data_fmt = get_macro_data(macro_countries or ["SGP"] + ASEAN_CODES)
+        except Exception:
+            macro_data_fmt = {}
+
+    # --- 5. Synthesis LLM Call ---
     news_text = "\n".join([
         f"- {n['title']}: {n.get('description','')}" for n in deduped_news[:12]
     ]) or "No articles available."
-    synth_input = {
-        "company_names": meta_text.get("company_names"),
-        "sector": meta_text.get("sector"),
-        "industry": meta_text.get("industry"),
-        "region": meta_text.get("region"),
+
+    synth_result = synth_chain.invoke({
+        "ticker": ticker,
+        "company_names": meta_text.get("company_names", []),
+        "sector": meta_text.get("sector", ""),
+        "industry": meta_text.get("industry", ""),
+        "region": meta_text.get("region", ""),
         "keywords": keywords,
-        "news_text": news_text,
-    }
-    llm_summary = synth_chain.invoke(synth_input)
-    llm_summary_unwrapped = get_unwrapped(llm_summary)
-    if isinstance(llm_summary_unwrapped, str):
-        llm_summary_unwrapped = enforce_json_double_quotes(llm_summary_unwrapped)
+        "macro_data": macro_data_fmt,
+        "news_text": news_text
+    })
+    output = get_unwrapped(synth_result)
+    if isinstance(output, str):
+        output = enforce_json_double_quotes(output)
 
     return {
-        "ticker": ticker,
-        "company_names": meta_text.get("company_names") or [],
-        "sector": meta_text.get("sector") or "",
-        "industry": meta_text.get("industry") or "",
-        "region": meta_text.get("region") or "",
+        "meta": meta_text,
         "keywords": keywords,
-        "news": deduped_news,
-        "llm_summary": llm_summary_unwrapped or {},
-        "news_counts": {
-            "yfinance": len(yf_news),
-            "newsapi": len(newsapi_news),
-            "serpapi": len(serpapi_news),
-            "google_scrape": len(google_news),
-            "bing_scrape": len(bing_news),
-        },
-        "google_news": google_news,
-        "bing_news": bing_news,
-        "all_news": all_news,
+        "deduped_news": deduped_news,
+        "llm_output": output,
+        "macro_data": macro_data_fmt
     }
+
 
 
 
