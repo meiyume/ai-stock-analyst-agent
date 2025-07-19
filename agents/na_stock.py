@@ -269,10 +269,10 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
     )
 
     # -- 1. Metadata LLM --
-    meta_result = meta_chain.run({"ticker": ticker})
+    meta_result = meta_chain.invoke({"ticker": ticker})
     meta = meta_result
     # -- 2. Keyword Expansion LLM --
-    kw_result = kw_chain.run(meta)
+    kw_result = kw_chain.invoke(meta)
     keywords = kw_result["keywords"]
     # -- 3. News Fetch (All APIs & Scrapers) --
     yf_news = fetch_yfinance_news(ticker, max_articles)
@@ -297,7 +297,7 @@ OUTPUT (respond ONLY with valid JSON and no extra text):
         keywords=keywords,
         news_text=news_text
     )
-    llm_summary = synth_chain.run(synth_input)
+    llm_summary = synth_chain.invoke(synth_input)
     # -- 5. Output --
     return {
         "ticker": ticker,
