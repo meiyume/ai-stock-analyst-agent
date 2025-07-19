@@ -203,48 +203,49 @@ def news_agent_stock(
     )
     synth_prompt = PromptTemplate.from_template(
         """
-You are an expert financial news analyst with deep knowledge of companies, sectors, global markets, and macro trends.
-
-YOUR TASK:
-1. Begin with your own financial intelligence, reasoning, and market context for the specified stock, sector, industry, and region. 
-2. Next, review and cross-check the following recent headlines and descriptions:
-{news_text}
-
-GUIDELINES:
-- Combine your internal financial expertise with the evidence from the headlines.
-- If the news supports your prior reasoning, reaffirm your outlook.
-- If the news contradicts or updates your prior reasoning, revise your opinion accordingly.
-- If no headlines are available, provide an outlook based on your own expertise and clearly state that there is no recent news evidence.
-- Avoid speculation not grounded in your knowledge or the supplied news.
-
-OUTPUT (respond ONLY with valid JSON and no extra text):
-
-{
-  "company_names": {company_names},
-  "keywords": {keywords},
-  "stock_sentiment": {
-    "score": "Bullish/Bearish/Neutral",
-    "reason": "Explain in 1-2 sentences, mentioning if it is based on your expertise, news evidence, or both.",
-    "confidence": "High/Medium/Low"
-  },
-  "sector_sentiment": ...,
-  "region_sentiment": ...,
-  "risks": [
-    { "label": "...", "details": "..." }
-  ],
-  "opportunities": [
-    { "label": "...", "details": "..." }
-  ],
-  "major_events": [
-    { "date": "...", "event": "..." }
-  ],
-  "headline_sentiment": [
-    { "title": "...", "sentiment": "Positive/Negative/Neutral" }
-  ],
-  "summary": "Provide a 4–5 sentence investor-focused executive summary, referencing your own expertise, and clearly stating if news evidence was or was not available."
-}
-"""
+    You are an expert financial news analyst with deep knowledge of companies, sectors, global markets, and macro trends.
+    
+    YOUR TASK:
+    1. Begin with your own financial intelligence, reasoning, and market context for the specified stock, sector, industry, and region. 
+    2. Next, review and cross-check the following recent headlines and descriptions:
+    {news_text}
+    
+    GUIDELINES:
+    - Combine your internal financial expertise with the evidence from the headlines.
+    - If the news supports your prior reasoning, reaffirm your outlook.
+    - If the news contradicts or updates your prior reasoning, revise your opinion accordingly.
+    - If no headlines are available, provide an outlook based on your own expertise and clearly state that there is no recent news evidence.
+    - Avoid speculation not grounded in your knowledge or the supplied news.
+    
+    OUTPUT (respond ONLY with valid JSON and no extra text):
+    
+    {{
+      "company_names": {company_names},
+      "keywords": {keywords},
+      "stock_sentiment": {{
+        "score": "Bullish/Bearish/Neutral",
+        "reason": "Explain in 1-2 sentences, mentioning if it is based on your expertise, news evidence, or both.",
+        "confidence": "High/Medium/Low"
+      }},
+      "sector_sentiment": ...,
+      "region_sentiment": ...,
+      "risks": [
+        {{ "label": "...", "details": "..." }}
+      ],
+      "opportunities": [
+        {{ "label": "...", "details": "..." }}
+      ],
+      "major_events": [
+        {{ "date": "...", "event": "..." }}
+      ],
+      "headline_sentiment": [
+        {{ "title": "...", "sentiment": "Positive/Negative/Neutral" }}
+      ],
+      "summary": "Provide a 4–5 sentence investor-focused executive summary, referencing your own expertise, and clearly stating if news evidence was or was not available."
+    }}
+    """
     )
+
     llm = ChatOpenAI(
         model="gpt-3.5-turbo",
         temperature=0.2,
